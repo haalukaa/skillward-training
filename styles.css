@@ -412,7 +412,14 @@ textarea:focus-visible {
   transform: translateZ(1px);
 }
 
-.login-card-back { transform: rotateY(180deg) translateZ(1px); }
+.login-card-front { pointer-events: auto; }
+.login-card-back {
+  transform: rotateY(180deg) translateZ(1px);
+  pointer-events: none;
+}
+
+.login-flip.is-flipped .login-card-front { pointer-events: none; }
+.login-flip.is-flipped .login-card-back { pointer-events: auto; }
 
 .login-card-front {
   align-self: stretch;

@@ -302,8 +302,10 @@ function renderLogin() {
   document.getElementById("getStartedBtn").addEventListener("click", () => {
     loginFlip.classList.add("is-flipped");
     welcomeCard.setAttribute("aria-hidden", "true");
+    welcomeCard.setAttribute("inert", "");
     welcomeCard.inert = true;
     workspaceCard.removeAttribute("aria-hidden");
+    workspaceCard.removeAttribute("inert");
     workspaceCard.inert = false;
     window.setTimeout(() => document.getElementById("nameInput").focus(), 480);
   });
