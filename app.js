@@ -233,9 +233,17 @@ function renderLogin() {
   renderShell(`
     <div class="login-layout">
       <section class="login-intro">
-        <div class="login-label"><span></span> Healthcare workforce enablement</div>
-        <h2>Build confidence before the first shift.</h2>
-        <p>Structured, role-based learning that turns approved procedures into confident workplace practice.</p>
+        <div class="hero-motion" aria-hidden="true">
+          <span class="motion-orb motion-orb-one"></span>
+          <span class="motion-orb motion-orb-two"></span>
+          <span class="motion-grid"></span>
+        </div>
+        <div class="login-label hero-reveal hero-reveal-1"><span></span> Healthcare workforce enablement</div>
+        <h2 class="hero-title" aria-label="Build your confidence before your first shift">
+          <span class="hero-line hero-reveal hero-reveal-2">Build Your Confidence</span>
+          <span class="hero-line hero-accent hero-reveal hero-reveal-3">Before Your First Shift<span class="typing-cursor" aria-hidden="true"></span></span>
+        </h2>
+        <p class="hero-reveal hero-reveal-4">Structured, role-based learning that turns approved procedures into confident workplace practice.</p>
         <div class="learning-flow" aria-label="SkillWard learning process">
           <div><span>01</span><strong>Learn</strong><small>Role-based pathways</small></div>
           <i aria-hidden="true"></i>
@@ -243,7 +251,7 @@ function renderLogin() {
           <i aria-hidden="true"></i>
           <div><span>03</span><strong>Sign off</strong><small>Observed competency</small></div>
         </div>
-        <p class="login-platform-note">Designed for hospital teams, trainers and frontline staff.</p>
+        <p class="login-platform-note hero-reveal hero-reveal-5">Designed for hospital teams, trainers and frontline staff.</p>
       </section>
       <section class="card login-card">
         <div class="access-label"><span></span> SKILLWARD ACCESS</div>
