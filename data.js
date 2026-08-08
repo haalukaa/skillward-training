@@ -1,183 +1,232 @@
+window.TRAINING_AREAS = [
+  {
+    id: "pra",
+    code: "PRA",
+    name: "PRA",
+    fullName: "Patient Reception Area",
+    summary: "Patient collection, arrival at reception and safe transport into the operating-theatre pathway.",
+    modules: ["pra-workflow", "transport-safety"]
+  },
+  {
+    id: "recovery",
+    code: "REC",
+    name: "Recovery Area",
+    fullName: "PCA Recovery · PCA East and PCA West",
+    summary: "Post-procedure support and safe assistance when patients return to their ward.",
+    modules: ["recovery-workflow", "ward-return"]
+  },
+  {
+    id: "prep",
+    code: "PREP",
+    name: "Prep Area",
+    fullName: "East and West Prep",
+    summary: "Patient transfers, theatre support, room turnover, cleaning and infection prevention.",
+    modules: ["prep-support", "infection"]
+  }
+];
+
 window.TRAINING_MODULES = [
   {
-    id: "orientation",
-    title: "Department Orientation",
-    summary: "Understand the theatre environment, PCA responsibilities, team roles and daily workflow.",
-    duration: "15 min",
+    id: "pra-workflow",
+    area: "pra",
+    number: 1,
+    title: "Patient Pickup and PRA Workflow",
+    summary: "Follow the patient journey from the ward pickup slip to arrival in the Patient Reception Area.",
+    duration: "20 min",
     lesson: {
-      objective: "Identify key theatre areas, understand the PCA role and know when to escalate concerns.",
-      why: "Clear role understanding improves teamwork, reduces confusion and supports safe patient care.",
+      objective: "Describe the PCA role when collecting a patient and bringing them safely to PRA.",
+      why: "A clear pickup and handover process reduces delays, wrong destinations and avoidable transport risks.",
       steps: [
-        "Review the department layout and identify restricted, semi-restricted and unrestricted areas.",
-        "Learn the role of the PCA, nurses, technicians, orderlies and medical staff.",
-        "Review the daily workflow from morning setup through end-of-day duties.",
-        "Identify who to contact for operational, patient-safety and equipment concerns.",
-        "Understand local communication expectations and escalation pathways."
+        "Receive the assigned patient pickup slip from the supervisor and review the pickup location.",
+        "Locate the correct ward or department, which may include areas such as 4G, 5H, Dialysis or ED.",
+        "Follow the hospital-approved patient identification and collection process before moving the patient.",
+        "Prepare the bed and transport route according to the approved procedure.",
+        "Transport the patient directly to PRA and position the bed in the designated reception location.",
+        "Notify the appropriate PRA staff that the patient has arrived and complete the approved handover process.",
+        "Allow nursing staff to complete their clinical identity, procedure and documentation checks. These checks are outside the PCA role unless local policy states otherwise."
       ],
       mistakes: [
-        "Entering restricted areas without following local requirements.",
-        "Not knowing who to escalate a concern to.",
-        "Assuming every theatre follows the same local workflow."
+        "Leaving without confirming the assigned pickup location and destination.",
+        "Using an unapproved shortcut or leaving the patient unattended.",
+        "Performing nursing or clinical checks that are outside the PCA role.",
+        "Failing to report a delay, discrepancy or safety concern."
       ]
     },
     quiz: [
-      { q: "Why is department orientation important?", options: ["It replaces all practical training", "It helps staff understand roles, areas and escalation pathways", "It is only needed for managers"], answer: 1 },
-      { q: "What should a new PCA do when unsure about a local procedure?", options: ["Guess", "Ask the trainer or relevant supervisor", "Wait until the end of the week"], answer: 1 },
-      { q: "Who should approve the final content for this module?", options: ["The software creator alone", "Hospital-approved trainers and relevant departments", "Any learner"], answer: 1 }
+      { q: "Where is the patient taken after collection for the operating-theatre pathway?", options: ["PRA", "Any available theatre", "The staff room"], answer: 0 },
+      { q: "Who completes the clinical identity and procedure checks in PRA?", options: ["The assigned nursing staff", "The PCA independently", "The patient's visitor"], answer: 0 },
+      { q: "What should a PCA do if the pickup information does not match?", options: ["Guess the correct destination", "Follow the approved escalation process before transport", "Ignore the difference"], answer: 1 }
+    ]
+  },
+  {
+    id: "transport-safety",
+    area: "pra",
+    number: 2,
+    title: "Patient Transport and Bed Safety",
+    summary: "Inspect, steer and manoeuvre beds safely while transporting patients to PRA.",
+    duration: "25 min",
+    lesson: {
+      objective: "Prepare and manoeuvre a patient bed safely using the hospital-approved transport process.",
+      why: "Beds are large, routes can be busy and poor manoeuvring can injure patients, staff or other people.",
+      steps: [
+        "Inspect the bed, brakes, wheels, rails and attachments before transport.",
+        "Confirm the patient and equipment are ready according to the approved local process.",
+        "Plan the route and identify lifts, narrow turns, doors, slopes and busy areas.",
+        "Use the approved number of staff and request assistance when the route, bed or patient requires it.",
+        "Maintain control of the bed, communicate before turns and keep hands and feet clear of pinch points.",
+        "Move at a safe pace and maintain awareness of the patient, staff, visitors and surrounding equipment.",
+        "Apply brakes when stationary and report any incident, near miss, damage or equipment fault."
+      ],
+      mistakes: [
+        "Moving before checking the bed and route.",
+        "Trying to manage a difficult turn or heavy bed without assistance.",
+        "Moving too quickly through doors, corners or lifts.",
+        "Failing to apply brakes when the bed is stationary."
+      ]
+    },
+    quiz: [
+      { q: "What should be checked before transporting a patient bed?", options: ["Only the linen", "Brakes, wheels, rails, attachments and route", "Only the destination"], answer: 1 },
+      { q: "What should you do when safe manoeuvring requires more help?", options: ["Continue alone", "Request the approved assistance", "Ask the patient to steer"], answer: 1 },
+      { q: "What should happen after a transport near miss?", options: ["Follow the approved reporting process", "Ignore it because nobody was injured", "Wait until the next roster"], answer: 0 }
+    ]
+  },
+  {
+    id: "recovery-workflow",
+    area: "recovery",
+    number: 3,
+    title: "Recovery Area Workflow",
+    summary: "Understand PCA responsibilities in Recovery after a patient’s procedure.",
+    duration: "20 min",
+    lesson: {
+      objective: "Describe the PCA role in Recovery and work safely within role boundaries.",
+      why: "Clear responsibilities support the clinical team while protecting patients during post-anaesthetic care.",
+      steps: [
+        "Identify the PCA Recovery layout, including PCA East, PCA West, designated bed positions, access routes and local communication points.",
+        "Follow directions from the responsible clinical staff and remain within the PCA scope of practice.",
+        "Keep transport routes and required equipment ready without interrupting clinical care.",
+        "Respond to requests for transport assistance using the approved communication process.",
+        "Recognise that monitoring, assessment and decisions about readiness to leave Recovery are clinical responsibilities.",
+        "Escalate hazards, patient concerns or uncertainty immediately to the appropriate nurse or supervisor."
+      ],
+      mistakes: [
+        "Acting outside the PCA role.",
+        "Moving a patient before clinical staff confirm readiness.",
+        "Blocking access routes or emergency equipment.",
+        "Failing to communicate a concern promptly."
+      ]
+    },
+    quiz: [
+      { q: "Who determines when a patient is clinically ready to leave Recovery?", options: ["The responsible clinical staff", "The PCA", "The transporter waiting outside"], answer: 0 },
+      { q: "What is a PCA expected to do when unsure about a Recovery request?", options: ["Guess", "Clarify with the appropriate nurse or supervisor", "Leave the area"], answer: 1 },
+      { q: "Why must access routes remain clear?", options: ["For appearance only", "For safe movement and emergency access", "Only during inspections"], answer: 1 }
+    ]
+  },
+  {
+    id: "ward-return",
+    area: "recovery",
+    number: 4,
+    title: "Return-to-Ward Transport",
+    summary: "Assist the ward nurse and safely transport the patient from Recovery back to the ward.",
+    duration: "25 min",
+    lesson: {
+      objective: "Support safe return-to-ward transport after the clinical team authorises the patient to leave Recovery.",
+      why: "Good communication and controlled bed movement reduce transport incidents during the return journey.",
+      steps: [
+        "Wait for the responsible Recovery staff to confirm that transport may proceed.",
+        "Coordinate with the collecting ward nurse and clarify the destination and transport plan.",
+        "Complete the approved bed, equipment and route safety checks.",
+        "Assist the ward nurse while maintaining control of the bed and communicating at doors, corners and lifts.",
+        "Use approved manual-handling techniques and request additional assistance when required.",
+        "Deliver the patient to the correct ward location and complete the local handover process.",
+        "Report incidents, near misses, delays or equipment problems according to hospital procedure."
+      ],
+      mistakes: [
+        "Beginning transport without confirmation from Recovery staff.",
+        "Assuming the destination without checking.",
+        "Poor communication while manoeuvring the bed.",
+        "Not requesting help when the transport cannot be completed safely."
+      ]
+    },
+    quiz: [
+      { q: "When should return-to-ward transport begin?", options: ["When the PCA is ready", "After the responsible Recovery staff authorise it", "Immediately after surgery"], answer: 1 },
+      { q: "Who does the Recovery PCA assist during collection?", options: ["The collecting ward nurse", "A visitor", "Nobody"], answer: 0 },
+      { q: "What should happen if the bed cannot be manoeuvred safely?", options: ["Force it through", "Stop and request appropriate assistance", "Leave the patient alone"], answer: 1 }
+    ]
+  },
+  {
+    id: "prep-support",
+    area: "prep",
+    number: 5,
+    title: "Prep Area and Theatre Support",
+    summary: "Work safely across East and West Prep while supporting patient transfers and theatre activity.",
+    duration: "30 min",
+    lesson: {
+      objective: "Describe the PCA role in East and West Prep, including patient transfers and theatre support.",
+      why: "Coordinated support helps clinical teams prepare patients, rooms and equipment safely and efficiently.",
+      steps: [
+        "Confirm the assigned East or West Prep area and theatre allocation at the start of the rotation.",
+        "Learn the local operating-theatre layout: there are 16 theatres in the department and no Theatre 13.",
+        "Follow direction from the responsible nurse or clinical team while remaining within PCA responsibilities.",
+        "Prepare the space and required non-clinical equipment using the approved local checklist.",
+        "Assist with patient movement from the bed to the operating table using the approved manual-handling plan and equipment.",
+        "Use the required number of trained staff and pause the transfer if conditions are unsafe.",
+        "Support room turnover and locate approved instruments, supplies or equipment when directed.",
+        "Report missing items, equipment faults, hazards or uncertainty to the appropriate staff member."
+      ],
+      mistakes: [
+        "Starting a patient transfer without the agreed plan and team.",
+        "Using equipment without checking that it is approved and ready.",
+        "Confusing East and West Prep allocations or theatre destinations.",
+        "Performing tasks outside the PCA role."
+      ]
+    },
+    quiz: [
+      { q: "What should happen before a patient transfer to the operating table?", options: ["The approved plan, staff and equipment should be confirmed", "The PCA should move the patient alone", "The bed should be left unlocked"], answer: 0 },
+      { q: "What should a PCA do when equipment is missing or faulty?", options: ["Improvise", "Report it through the local process", "Hide the equipment"], answer: 1 },
+      { q: "What are the two Prep areas?", options: ["North and South", "East and West", "Ward and Clinic"], answer: 1 }
     ]
   },
   {
     id: "infection",
+    area: "prep",
+    number: 6,
     title: "Infection Prevention and PPE",
-    summary: "Learn the structure for hand hygiene, PPE, contamination awareness and safe escalation.",
-    duration: "20 min",
+    summary: "Apply approved PPE, cleaning, waste and contamination controls during theatre turnover.",
+    duration: "30 min",
     lesson: {
-      objective: "Apply hospital-approved infection prevention principles during PCA duties.",
-      why: "Consistent infection-control practice helps protect patients, staff and the theatre environment.",
+      objective: "Follow hospital-approved infection-prevention and theatre-cleaning processes during PCA duties.",
+      why: "Consistent PPE and cleaning practice protects patients, staff and the theatre environment.",
       steps: [
-        "Follow the approved hand-hygiene moments and local procedure.",
-        "Select PPE according to the task, signage and local risk assessment.",
-        "Separate clean and contaminated items.",
-        "Avoid touching clean surfaces with contaminated gloves or equipment.",
-        "Report spills, exposure incidents or uncertainty immediately."
+        "Review the required cleaning level, precaution signage and approved local procedure before starting.",
+        "Perform hand hygiene and select PPE according to the task and local risk assessment.",
+        "Use only approved cleaning products, equipment, dilution and contact times.",
+        "Work through the approved theatre-turnover sequence, including the operating table, patient surfaces and high-touch points.",
+        "Keep clean and contaminated equipment separate and change PPE as required between tasks.",
+        "Handle linen, waste and sharps only through the approved hospital processes.",
+        "Mop using the approved direction and technique, then complete the final room inspection.",
+        "Report spills, exposure incidents, damaged equipment, shortages or unusual contamination immediately."
       ],
       mistakes: [
         "Using gloves as a substitute for hand hygiene.",
-        "Moving between clean and contaminated tasks without changing PPE.",
-        "Ignoring isolation or precaution signage."
+        "Using the wrong product or not allowing the approved contact time.",
+        "Moving contaminated items into a clean area.",
+        "Missing high-touch surfaces or skipping the final inspection."
       ]
     },
     quiz: [
       { q: "Do gloves replace hand hygiene?", options: ["Yes", "No", "Only during busy periods"], answer: 1 },
-      { q: "What should guide PPE selection?", options: ["Personal preference", "Task risk, signage and approved procedure", "What another person wore yesterday"], answer: 1 },
-      { q: "What should happen after a possible exposure incident?", options: ["Keep working and mention it later", "Follow the approved reporting and exposure process immediately", "Do nothing if no symptoms appear"], answer: 1 }
-    ]
-  },
-  {
-    id: "transport",
-    title: "Patient Transport and Trolley Safety",
-    summary: "Prepare, inspect and use a patient trolley safely before transport.",
-    duration: "20 min",
-    lesson: {
-      objective: "Inspect and prepare a patient trolley according to the approved department procedure.",
-      why: "Correct trolley preparation reduces delays and helps prevent injury, contamination and equipment failure.",
-      steps: [
-        "Perform hand hygiene according to the approved procedure.",
-        "Confirm the trolley is the correct type for the patient and task.",
-        "Inspect the trolley for damage, contamination or missing parts.",
-        "Apply the brakes and check that the trolley is stable.",
-        "Check wheels, rails, steering controls, mattress and attachments.",
-        "Prepare approved linen and remove unnecessary items.",
-        "Complete a final safety check before transport.",
-        "Remove unsafe equipment from use and report the fault."
-      ],
-      mistakes: [
-        "Not checking the brakes.",
-        "Using damaged or contaminated equipment.",
-        "Forgetting the final safety inspection.",
-        "Not reporting a fault."
-      ]
-    },
-    quiz: [
-      { q: "What should be checked before transport?", options: ["Only the linen", "Brakes, rails, wheels and general condition", "Only the mattress"], answer: 1 },
-      { q: "What should happen if the trolley is unsafe?", options: ["Use it carefully", "Remove it from use and report it", "Leave it for another shift"], answer: 1 },
-      { q: "Why complete a final safety check?", options: ["To identify missed hazards", "To replace practical training", "Only for long-distance transport"], answer: 0 }
-    ]
-  },
-  {
-    id: "theatre-prep",
-    title: "Theatre Preparation",
-    summary: "Use an approved checklist to prepare the room, equipment and supplies.",
-    duration: "20 min",
-    lesson: {
-      objective: "Support safe and consistent theatre preparation using the local checklist.",
-      why: "A structured preparation process reduces missing items, delays and repeated work.",
-      steps: [
-        "Review the theatre list and local preparation checklist.",
-        "Confirm required beds, trolleys and approved accessories are available.",
-        "Check visible equipment condition and report faults.",
-        "Restock only approved items to the correct location.",
-        "Keep walkways and emergency access points clear.",
-        "Complete the final room readiness check with the relevant staff member."
-      ],
-      mistakes: [
-        "Restocking items in the wrong location.",
-        "Blocking access routes.",
-        "Not reporting missing or damaged equipment."
-      ]
-    },
-    quiz: [
-      { q: "What should guide theatre preparation?", options: ["Memory only", "The approved local checklist and theatre requirements", "A checklist from another hospital"], answer: 1 },
-      { q: "What should happen when equipment is visibly damaged?", options: ["Ignore it", "Report it and follow the local process", "Hide it"], answer: 1 },
-      { q: "Why keep access routes clear?", options: ["For appearance only", "For safe movement and emergency access", "Only during inspections"], answer: 1 }
-    ]
-  },
-  {
-    id: "cleaning",
-    title: "Theatre Cleaning and Turnover",
-    summary: "Follow the approved sequence for surfaces, beds, tables, floors, waste and linen.",
-    duration: "30 min",
-    lesson: {
-      objective: "Follow a consistent, approved theatre turnover and cleaning sequence.",
-      why: "A clear sequence reduces missed surfaces, cross-contamination and complaints about incomplete cleaning.",
-      steps: [
-        "Confirm the required cleaning level and any additional precautions.",
-        "Use approved PPE, products, equipment and contact times.",
-        "Work from cleaner areas toward more contaminated areas as directed locally.",
-        "Clean the operating table, patient surfaces and approved high-touch points.",
-        "Handle waste and linen using the correct streams.",
-        "Mop according to the approved direction and method.",
-        "Inspect the room after cleaning and correct missed areas.",
-        "Report spills, damage, shortages or unusual contamination."
-      ],
-      mistakes: [
-        "Missing high-touch surfaces.",
-        "Using the wrong product or contact time.",
-        "Moving contaminated equipment into a clean area.",
-        "Skipping the final inspection."
-      ]
-    },
-    quiz: [
-      { q: "What must guide the cleaning sequence?", options: ["Personal preference", "Approved local procedure and required cleaning level", "The fastest method"], answer: 1 },
-      { q: "Why is contact time important?", options: ["It supports correct product use", "It is optional", "It only matters for floors"], answer: 0 },
-      { q: "What should happen after cleaning?", options: ["Leave immediately", "Complete a final inspection and correct missed areas", "Wait for a complaint"], answer: 1 }
-    ]
-  },
-  {
-    id: "safety",
-    title: "Waste, Sharps and Safety",
-    summary: "Recognise hazards and follow local reporting, disposal and emergency processes.",
-    duration: "20 min",
-    lesson: {
-      objective: "Identify common theatre hazards and follow approved safety processes.",
-      why: "Early hazard recognition and correct escalation help prevent injury and exposure.",
-      steps: [
-        "Use the correct waste and linen streams.",
-        "Never handle sharps outside the approved process.",
-        "Keep access routes clear and manage trip hazards promptly.",
-        "Follow the local spill and exposure procedure.",
-        "Report damaged equipment, near misses and incidents.",
-        "Know how to call for assistance during an emergency."
-      ],
-      mistakes: [
-        "Putting items into the wrong waste stream.",
-        "Trying to manage a sharps incident without following procedure.",
-        "Failing to report a near miss."
-      ]
-    },
-    quiz: [
-      { q: "What should happen after a sharps or exposure incident?", options: ["Follow the approved process immediately", "Finish the shift first", "Only report if symptoms occur"], answer: 0 },
-      { q: "Should near misses be reported?", options: ["No", "Yes, according to local procedure", "Only if management asks"], answer: 1 },
-      { q: "What should guide waste disposal?", options: ["Bin colour memory alone", "Approved local waste-stream procedure", "The nearest available bin"], answer: 1 }
+      { q: "What must guide PPE and cleaning product selection?", options: ["Personal preference", "The approved procedure, task risk and signage", "What was used on another shift"], answer: 1 },
+      { q: "What should happen after a possible exposure incident?", options: ["Follow the approved reporting and exposure process immediately", "Wait for symptoms", "Finish every other task first"], answer: 0 }
     ]
   }
 ];
 
 window.COMPETENCY_ITEMS = [
-  "Follows hand hygiene and PPE requirements",
-  "Checks equipment before use",
-  "Uses the correct sequence for the task",
-  "Maintains clean and contaminated separation",
-  "Communicates and escalates concerns appropriately",
-  "Completes the final safety or quality check"
+  "Follows the approved pickup, identification and handover process",
+  "Checks beds, equipment and routes before patient transport",
+  "Manoeuvres beds safely and requests assistance when required",
+  "Works within the PCA role and escalates concerns appropriately",
+  "Uses the approved patient-transfer and manual-handling process",
+  "Follows hand hygiene, PPE and theatre-cleaning requirements",
+  "Completes final safety and quality checks"
 ];

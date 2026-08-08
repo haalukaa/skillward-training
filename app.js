@@ -62,6 +62,7 @@ const DEPARTMENTS = [
 
 let state = loadState();
 let currentModuleId = null;
+let currentAreaId = null;
 
 function loadState() {
   try {
@@ -104,6 +105,53 @@ function overallProgress() {
 
 function passedModules() {
   return TRAINING_MODULES.filter(m => getModuleState(m.id).quizPassed).length;
+}
+
+function getArea(areaId) {
+  return TRAINING_AREAS.find(area => area.id === areaId);
+}
+
+function modulesForArea(areaId) {
+  return TRAINING_MODULES.filter(module => module.area === areaId);
+}
+
+function moduleCard(module) {
+  const m = getModuleState(module.id);
+  const status = m.quizPassed
+    ? ["Completed", "badge-complete"]
+    : m.lessonComplete
+      ? ["Quiz required", "badge-in-progress"]
+      : ["Not started", "badge-not-started"];
+
+  return `
+    <section class="card module-card">
+      <div class="module-card-head">
+        <span class="module-number">${String(module.number).padStart(2, "0")}</span>
+        <span class="module-duration">${module.duration}</span>
+      </div>
+      <div>
+        <div class="small">MODULE ${module.number}</div>
+        <h3>${module.title}</h3>
+      </div>
+      <p>${module.summary}</p>
+      <div class="module-meta">
+        <span class="badge ${status[1]}">${status[0]}</span>
+        <button class="btn open-module" data-id="${module.id}">
+          ${m.lessonComplete ? "Continue" : "Start"}
+        </button>
+      </div>
+    </section>
+  `;
+}
+
+function bindModuleButtons() {
+  document.querySelectorAll(".open-module").forEach(btn => {
+    btn.addEventListener("click", () => {
+      currentModuleId = btn.dataset.id;
+      currentAreaId = TRAINING_MODULES.find(module => module.id === currentModuleId)?.area || currentAreaId;
+      renderLesson(currentModuleId);
+    });
+  });
 }
 
 function renderShell(content) {
@@ -250,32 +298,27 @@ function renderLearnerDashboard() {
   const passed = passedModules();
   const remaining = TRAINING_MODULES.length - passed;
 
-  const moduleCards = TRAINING_MODULES.map((module, index) => {
-    const m = getModuleState(module.id);
-    const status = m.quizPassed
-      ? ["Completed", "badge-complete"]
-      : m.lessonComplete
-        ? ["Quiz required", "badge-in-progress"]
-        : ["Not started", "badge-not-started"];
-
+  const areaCards = TRAINING_AREAS.map((area, index) => {
+    const areaModules = modulesForArea(area.id);
+    const areaPassed = areaModules.filter(module => getModuleState(module.id).quizPassed).length;
+    const areaPercent = Math.round((areaPassed / areaModules.length) * 100);
     return `
-      <section class="card module-card">
-        <div class="module-card-head">
-          <span class="module-number">${String(index + 1).padStart(2, "0")}</span>
-          <span class="module-duration">${module.duration}</span>
+      <article class="card training-area-card">
+        <div class="training-area-top">
+          <span class="area-code">${area.code}</span>
+          <span class="small">AREA ${index + 1}</span>
         </div>
         <div>
-          <div class="small">MODULE ${index + 1}</div>
-          <h3>${module.title}</h3>
+          <h3>${area.name}</h3>
+          <span class="area-full-name">${area.fullName}</span>
+          <p>${area.summary}</p>
         </div>
-        <p>${module.summary}</p>
+        <div class="area-progress"><span style="width:${areaPercent}%"></span></div>
         <div class="module-meta">
-          <span class="badge ${status[1]}">${status[0]}</span>
-          <button class="btn open-module" data-id="${module.id}">
-            ${m.lessonComplete ? "Continue" : "Start"}
-          </button>
+          <span class="small">${areaPassed}/${areaModules.length} modules complete</span>
+          <button class="btn open-area" data-id="${area.id}">Open area</button>
         </div>
-      </section>
+      </article>
     `;
   }).join("");
 
@@ -284,7 +327,7 @@ function renderLearnerDashboard() {
       <div class="dashboard-welcome">
         <span class="eyebrow">MY LEARNING</span>
         <h2>Welcome, ${escapeHtml(state.learnerName)}</h2>
-        <p>Continue your theatre learning pathway and prepare for practical competency sign-off.</p>
+        <p>Choose your assigned work area and continue the Operating Theatre & Recovery learning pathway.</p>
       </div>
       <div class="progress-ring" style="--progress:${progress * 3.6}deg" aria-label="${progress}% overall progress">
         <div><strong>${progress}%</strong><span>complete</span></div>
@@ -298,10 +341,10 @@ function renderLearnerDashboard() {
     </div>
 
     <div class="section-heading">
-      <div><span class="eyebrow">REQUIRED TRAINING</span><h3>Your learning pathway</h3></div>
-      <span class="small">${TRAINING_MODULES.length} modules</span>
+      <div><span class="eyebrow">OPERATING THEATRE & RECOVERY</span><h3>Choose a training area</h3></div>
+      <span class="small">3 areas · ${TRAINING_MODULES.length} modules</span>
     </div>
-    <div class="grid grid-3">${moduleCards}</div>
+    <div class="grid grid-3">${areaCards}</div>
 
     <div class="section-title">
       <h3>Final practical competency</h3>
@@ -319,12 +362,54 @@ function renderLearnerDashboard() {
     <p class="footer-note">Training content must be reviewed and approved by the relevant hospital teams before workplace use.</p>
   `);
 
-  document.querySelectorAll(".open-module").forEach(btn => {
+  document.querySelectorAll(".open-area").forEach(btn => {
     btn.addEventListener("click", () => {
-      currentModuleId = btn.dataset.id;
-      renderLesson(currentModuleId);
+      currentAreaId = btn.dataset.id;
+      renderAreaDashboard(currentAreaId);
     });
   });
+}
+
+function renderAreaDashboard(areaId) {
+  const area = getArea(areaId);
+  if (!area) {
+    renderLearnerDashboard();
+    return;
+  }
+
+  currentAreaId = areaId;
+  const areaModules = modulesForArea(areaId);
+  const completed = areaModules.filter(module => getModuleState(module.id).quizPassed).length;
+
+  renderShell(`
+    <button class="btn btn-secondary" id="backBtn">← Back to training areas</button>
+
+    <section class="area-hero">
+      <div class="area-code area-code-large">${area.code}</div>
+      <div>
+        <span class="eyebrow">OPERATING THEATRE & RECOVERY</span>
+        <h2>${area.name}</h2>
+        <p>${area.fullName}</p>
+      </div>
+      <div class="area-completion"><strong>${completed}/${areaModules.length}</strong><span>complete</span></div>
+    </section>
+
+    <div class="area-workflow-note">
+      <strong>Your role in this area</strong>
+      <span>${area.summary}</span>
+    </div>
+
+    <div class="section-heading">
+      <div><span class="eyebrow">AREA TRAINING</span><h3>Lessons and knowledge checks</h3></div>
+      <span class="small">${areaModules.length} modules</span>
+    </div>
+    <div class="grid grid-2">${areaModules.map(moduleCard).join("")}</div>
+
+    <p class="footer-note">Draft training content must be reviewed and approved by the relevant hospital teams before workplace use.</p>
+  `);
+
+  document.getElementById("backBtn").addEventListener("click", renderLearnerDashboard);
+  bindModuleButtons();
 }
 
 function renderLesson(moduleId) {
@@ -332,7 +417,7 @@ function renderLesson(moduleId) {
   const m = getModuleState(moduleId);
 
   renderShell(`
-    <button class="btn btn-secondary" id="backBtn">← Back to dashboard</button>
+    <button class="btn btn-secondary" id="backBtn">← Back to ${getArea(module.area)?.name || "training area"}</button>
 
     <article class="card lesson" style="margin-top:16px;">
       <div class="small">${module.duration}</div>
@@ -368,7 +453,7 @@ function renderLesson(moduleId) {
     </article>
   `);
 
-  document.getElementById("backBtn").addEventListener("click", renderLearnerDashboard);
+  document.getElementById("backBtn").addEventListener("click", () => renderAreaDashboard(module.area));
   document.getElementById("completeLessonBtn").addEventListener("click", () => {
     setModuleState(moduleId, { lessonComplete: true });
     renderQuiz(moduleId);
@@ -432,10 +517,10 @@ function renderQuiz(moduleId) {
 
     result.className = `result ${passed ? "result-pass" : "result-fail"}`;
     result.innerHTML = passed
-      ? `Passed: ${score}%. <button type="button" class="btn" id="dashboardBtn" style="margin-left:10px;">Return to dashboard</button>`
+      ? `Passed: ${score}%. <button type="button" class="btn" id="dashboardBtn" style="margin-left:10px;">Return to ${getArea(module.area)?.name || "training area"}</button>`
       : `Score: ${score}%. Review the lesson and try again.`;
 
-    document.getElementById("dashboardBtn")?.addEventListener("click", renderLearnerDashboard);
+    document.getElementById("dashboardBtn")?.addEventListener("click", () => renderAreaDashboard(module.area));
   });
 }
 
@@ -447,6 +532,7 @@ function renderTrainerDashboard() {
     const m = getModuleState(module.id);
     return `
       <tr>
+        <td>${getArea(module.area)?.name || "—"}</td>
         <td>${module.title}</td>
         <td>${m.lessonComplete ? "Completed" : "Not completed"}</td>
         <td>${m.quizPassed ? `Passed (${m.quizScore}%)` : m.quizScore ? `Not passed (${m.quizScore}%)` : "Not attempted"}</td>
@@ -477,7 +563,7 @@ function renderTrainerDashboard() {
       <h3>Learner: ${escapeHtml(state.learnerName)}</h3>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Module</th><th>Lesson</th><th>Quiz</th></tr></thead>
+          <thead><tr><th>Area</th><th>Module</th><th>Lesson</th><th>Quiz</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>
