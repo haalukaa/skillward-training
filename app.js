@@ -253,29 +253,49 @@ function renderLogin() {
         </div>
         <p class="login-platform-note hero-reveal hero-reveal-5">Designed for hospital teams, trainers and frontline staff.</p>
       </section>
-      <section class="card login-card">
-        <div class="access-label"><span></span> SKILLWARD ACCESS</div>
-        <h2>Enter your workspace</h2>
-        <p class="login-card-intro">Choose your role to continue to the correct training environment.</p>
+      <div class="login-flip-shell">
+        <div class="login-flip" id="loginFlip">
+          <section class="card login-card login-card-front" id="welcomeCard">
+            <div class="get-started-mark" aria-hidden="true">SW</div>
+            <div class="access-label"><span></span> YOUR TRAINING STARTS HERE</div>
+            <h2>Ready to build your confidence?</h2>
+            <p class="login-card-intro">Access practical, role-based training designed for your department and your first shift.</p>
+            <button class="btn btn-wide get-started-btn" id="getStartedBtn">Get Started <span aria-hidden="true">→</span></button>
+            <div class="access-note"><span aria-hidden="true">✓</span> Learn at your pace. Validate your knowledge. Build confidence.</div>
+          </section>
 
-        <label>
-          <span>Full name</span>
-          <input id="nameInput" type="text" placeholder="e.g. Alex Smith" />
-        </label>
-
-        <label>
-          <span>Workspace role</span>
-          <select id="roleInput">
-            <option value="learner">Staff / Learner</option>
-            <option value="trainer">Trainer</option>
-          </select>
-        </label>
-
-        <button class="btn btn-wide login-submit" id="loginBtn">Continue to SkillWard <span aria-hidden="true">→</span></button>
-        <div class="access-note"><span aria-hidden="true">✓</span> Training access is organised by role and department.</div>
-      </section>
+          <section class="card login-card login-card-back" id="workspaceCard" aria-hidden="true" inert>
+            <div class="access-label"><span></span> SKILLWARD ACCESS</div>
+            <h2>Enter your workspace</h2>
+            <p class="login-card-intro">Choose your role to continue to the correct training environment.</p>
+            <label><span>Full name</span><input id="nameInput" type="text" placeholder="e.g. Alex Smith" /></label>
+            <label>
+              <span>Workspace role</span>
+              <select id="roleInput">
+                <option value="learner">Staff / Learner</option>
+                <option value="trainer">Trainer</option>
+              </select>
+            </label>
+            <button class="btn btn-wide login-submit" id="loginBtn">Continue to SkillWard <span aria-hidden="true">→</span></button>
+            <div class="access-note"><span aria-hidden="true">✓</span> Training access is organised by role and department.</div>
+          </section>
+        </div>
+      </div>
     </div>
   `);
+
+  const loginFlip = document.getElementById("loginFlip");
+  const welcomeCard = document.getElementById("welcomeCard");
+  const workspaceCard = document.getElementById("workspaceCard");
+
+  document.getElementById("getStartedBtn").addEventListener("click", () => {
+    loginFlip.classList.add("is-flipped");
+    welcomeCard.setAttribute("aria-hidden", "true");
+    welcomeCard.inert = true;
+    workspaceCard.removeAttribute("aria-hidden");
+    workspaceCard.inert = false;
+    window.setTimeout(() => document.getElementById("nameInput").focus(), 480);
+  });
 
   document.getElementById("loginBtn").addEventListener("click", () => {
     const name = document.getElementById("nameInput").value.trim();
