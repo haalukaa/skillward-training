@@ -60,6 +60,31 @@ const DEPARTMENTS = [
   }
 ];
 
+function departmentIcon(departmentId) {
+  const paths = {
+    "operating-theatre": `
+      <path d="M4 16h16M6 16v3m12-3v3M7 13h10l2 3H5l2-3Z" />
+      <path d="M12 4v3m-4.5-.5 2 2m7-2-2 2M8 11a4 4 0 0 1 8 0" />`,
+    "day-surgery": `
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2m0-14-2 2M7 17l-2 2" />`,
+    "acute-surgical-unit": `
+      <path d="M3 18V8m0 7h18v3M6 15v-4h5a3 3 0 0 1 3 3v1" />
+      <path d="M15 8h2m-1-1v2" />`,
+    "dialysis": `
+      <path d="M12 3S6.5 9.5 6.5 14a5.5 5.5 0 0 0 11 0C17.5 9.5 12 3 12 3Z" />
+      <path d="M10 17c1.8 1 4 .2 4.8-1.6" />`,
+    "gastro": `
+      <path d="M10 3v6c0 1.2-.8 2.2-2 2.6-2.2.8-3 3.3-2 5.3 1.2 2.4 4.3 3.4 6.6 2 2.8-1.7 3.2-4.8 2.4-7.4-.6-2 .2-3.9 2-4.8" />
+      <path d="M17 6.7c1.3 1 2 2.5 2 4.3" />`,
+    "emergency-department": `
+      <path d="M8 3h8v5h5v8h-5v5H8v-5H3V8h5V3Z" />
+      <path d="m6 12 3-1 2 3 2-5 2 3h3" />`
+  };
+
+  return `<svg viewBox="0 0 24 24" focusable="false" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths[departmentId] || ""}</svg>`;
+}
+
 let state = loadState();
 let currentModuleId = null;
 let currentAreaId = null;
@@ -266,7 +291,7 @@ function renderDepartmentSelection() {
   const departmentCards = DEPARTMENTS.map(department => `
     <article class="department-card ${department.active ? "department-active" : "department-planned"}">
       <div class="department-card-top">
-        <span class="department-icon" aria-hidden="true">${department.code}</span>
+        <span class="department-icon" aria-hidden="true">${departmentIcon(department.id)}</span>
         <span class="department-status ${department.active ? "status-active" : "status-planned"}">
           ${department.active ? "Available" : "Coming soon"}
         </span>
