@@ -381,6 +381,48 @@ function renderLearnerDashboard() {
       <div class="stat-card"><span>Modules remaining</span><strong>${remaining}</strong></div>
     </div>
 
+    <section class="patient-journey" aria-labelledby="patientJourneyTitle">
+      <div class="journey-heading">
+        <div>
+          <span class="eyebrow">PATIENT JOURNEY</span>
+          <h3 id="patientJourneyTitle">From ward pickup to safe return</h3>
+        </div>
+        <span class="journey-caption">Operating Theatre & Recovery pathway</span>
+      </div>
+      <ol class="journey-track">
+        <li>
+          <span class="journey-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M3 18V8m0 7h18v3M6 15v-4h5a3 3 0 0 1 3 3v1"/><circle cx="8" cy="8" r="2"/></svg>
+          </span>
+          <span class="journey-copy"><small>01</small><strong>Ward pickup</strong><span>Collect assigned patient</span></span>
+        </li>
+        <li>
+          <span class="journey-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M8 4h8v3H8zM6 6h12v15H6z"/><path d="M9 12h6m-3-3v6"/></svg>
+          </span>
+          <span class="journey-copy"><small>02</small><strong>PRA</strong><span>Patient Reception Area</span></span>
+        </li>
+        <li>
+          <span class="journey-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M4 17h16M6 17v3m12-3v3M7 14h10l2 3H5l2-3Z"/><path d="M12 3v3m-4-1 2 2m6-2-2 2M8 12a4 4 0 0 1 8 0"/></svg>
+          </span>
+          <span class="journey-copy"><small>03</small><strong>Theatre</strong><span>Prep-area support</span></span>
+        </li>
+        <li>
+          <span class="journey-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z"/><path d="m8 12 2-1 2 3 2-5 2 3"/></svg>
+          </span>
+          <span class="journey-copy"><small>04</small><strong>Recovery</strong><span>Post-procedure care</span></span>
+        </li>
+        <li>
+          <span class="journey-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M4 18V9l8-6 8 6v9H4Z"/><path d="M8 18v-5h8v5M3 21h18"/></svg>
+          </span>
+          <span class="journey-copy"><small>05</small><strong>Return to ward</strong><span>Assist safe transport</span></span>
+        </li>
+      </ol>
+    </section>
+
     <div class="section-heading">
       <div><span class="eyebrow">OPERATING THEATRE & RECOVERY</span><h3>Choose a training area</h3></div>
       <span class="small">3 areas · ${TRAINING_MODULES.length} modules</span>

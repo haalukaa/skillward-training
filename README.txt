@@ -1,4 +1,4 @@
-SkillWard — Healthcare Workforce Training Platform — Front-end MVP v2.7
+SkillWard — Healthcare Workforce Training Platform — Front-end MVP v2.8
 
 HOW TO OPEN
 1. Unzip the downloaded file.
@@ -31,6 +31,7 @@ WHAT IS INCLUDED
 - Professional co-founder credit for Haleluya Yilma and Abdulkader
 - Dedicated iPhone, Android and browser app icons using the SkillWard shield
 - Custom healthcare icon system for all six department cards
+- Responsive patient-journey visual from ward pickup through PRA, theatre, Recovery and return to ward
 
 IMPORTANT LIMITATIONS
 - This is a front-end preview.

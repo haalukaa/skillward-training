@@ -616,6 +616,84 @@ th {
   margin-top: auto;
 }
 
+.patient-journey {
+  margin: 0 0 34px;
+  padding: clamp(20px, 3vw, 28px);
+  border: 1px solid rgba(216,225,232,.9);
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: 0 16px 38px rgba(17,47,62,.07);
+}
+
+.journey-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 24px;
+}
+
+.journey-heading h3 { margin: 5px 0 0; color: var(--navy); font-size: 1.35rem; }
+.journey-caption { color: var(--muted); font-size: .78rem; font-weight: 800; }
+
+.journey-track {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.journey-track::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  left: 9%;
+  right: 9%;
+  top: 28px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--teal), #83c9bd);
+}
+
+.journey-track li {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.journey-icon {
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  border: 2px solid #b9e1d8;
+  border-radius: 50%;
+  color: var(--teal-dark);
+  background: var(--mint);
+  box-shadow: 0 0 0 7px var(--surface);
+}
+
+.journey-icon svg {
+  width: 27px;
+  height: 27px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.journey-copy { display: block; margin-top: 13px; min-width: 0; }
+.journey-copy small { display: block; color: var(--teal-dark); font-size: .66rem; font-weight: 900; letter-spacing: .1em; }
+.journey-copy strong { display: block; margin-top: 3px; color: var(--navy); font-size: .88rem; }
+.journey-copy > span { display: block; margin-top: 3px; color: var(--muted); font-size: .72rem; line-height: 1.35; }
+
 .training-area-card {
   display: flex;
   flex-direction: column;
@@ -888,6 +966,11 @@ th {
   .department-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .area-hero { grid-template-columns: auto 1fr; }
   .area-completion { grid-column: 1 / -1; }
+  .journey-track { grid-template-columns: 1fr; gap: 0; }
+  .journey-track::before { left: 27px; right: auto; top: 28px; bottom: 28px; width: 2px; height: auto; }
+  .journey-track li { min-height: 82px; flex-direction: row; align-items: flex-start; text-align: left; gap: 16px; }
+  .journey-icon { flex: 0 0 56px; }
+  .journey-copy { margin-top: 5px; }
   .top-actions { width: 100%; }
   .top-actions button { flex: 1; }
   .kpi { text-align: left; }
@@ -935,6 +1018,7 @@ th {
   .area-code-large { min-width: 64px; width: fit-content; height: 64px; }
   .area-completion { grid-column: auto; text-align: left; }
   .area-workflow-note { align-items: flex-start; flex-direction: column; }
+  .journey-heading { align-items: flex-start; flex-direction: column; gap: 6px; }
 
   .top-actions button,
   .module-meta .btn,
