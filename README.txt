@@ -1,4 +1,4 @@
-PCA Theatre Training Hub — Web Application MVP v1.1
+SkillWard — PCA Theatre Training Hub — Web Application MVP v2
 
 HOW TO OPEN
 1. Unzip the downloaded file.
@@ -7,7 +7,7 @@ HOW TO OPEN
 4. Use a modern browser such as Chrome, Edge, Safari or Firefox.
 
 WHAT IS INCLUDED
-- New PCA login
+- Staff / Learner login
 - Trainer login
 - Six training modules
 - Learner dashboard
@@ -18,22 +18,19 @@ WHAT IS INCLUDED
 - Trainer dashboard
 - Practical competency sign-off
 - Mobile-friendly layout
-- Responsive phone, tablet and laptop layout
-- Larger touch controls and improved small-screen readability
-- Accessible keyboard focus indicators
 
 IMPORTANT LIMITATIONS
-- This is a front-end prototype.
+- This is a front-end preview.
 - Data is saved only in the browser.
 - There is no real user authentication.
 - There is no secure database.
 - There are no hospital integrations.
-- Demonstration procedures must not be treated as final clinical or workplace instructions.
+- Preview procedures must not be treated as final clinical or workplace instructions.
 - All content must be reviewed and approved by the hospital, infection-control team, education team and relevant managers.
 
 NEXT DEVELOPMENT STAGE
 1. Confirm the complete module list with the trainer.
-2. Replace demonstration text with approved procedures.
+2. Replace preview text with approved procedures.
 3. Add approved photos and videos.
 4. Add real accounts and a secure database.
 5. Add trainer permissions and audit history.

@@ -60,12 +60,11 @@ function renderShell(content) {
     <div class="shell">
       <header class="topbar">
         <div class="brand">
-          <h1>PCA Theatre Training Hub</h1>
-          <p>Digital onboarding, knowledge checks and practical competency</p>
+          <h1>SkillWard</h1>
+          <p>PCA Theatre Training Hub · Learn. Practise. Work safely.</p>
         </div>
         <div class="top-actions">
           ${user ? `<button class="btn btn-secondary" id="switchRoleBtn">Switch role</button>` : ""}
-          ${user ? `<button class="btn btn-danger" id="resetBtn">Reset demo</button>` : ""}
         </div>
       </header>
       <main class="page">${content}</main>
@@ -78,21 +77,14 @@ function renderShell(content) {
     renderLogin();
   });
 
-  document.getElementById("resetBtn")?.addEventListener("click", () => {
-    if (confirm("Reset all demo progress?")) {
-      localStorage.removeItem("pcaTrainingWebAppV1");
-      state = { ...defaultState, moduleProgress: {} };
-      renderLogin();
-    }
-  });
 }
 
 function renderLogin() {
   renderShell(`
     <div class="login-wrap">
       <section class="card login-card">
-        <h2>Welcome</h2>
-        <p class="small">This prototype lets you test the learner and trainer experience.</p>
+        <h2>Welcome to SkillWard</h2>
+        <p class="small">Sign in to continue your assigned theatre training.</p>
 
         <label>
           Full name
@@ -102,7 +94,7 @@ function renderLogin() {
         <label>
           Role
           <select id="roleInput">
-            <option value="learner">New PCA</option>
+            <option value="learner">Staff / Learner</option>
             <option value="trainer">Trainer</option>
           </select>
         </label>
@@ -186,7 +178,7 @@ function renderLearnerDashboard() {
       </span>
     </section>
 
-    <p class="footer-note">Prototype only. Replace all lesson content with approved hospital procedures before use.</p>
+    <p class="footer-note">Training content must be reviewed and approved by the relevant hospital teams before workplace use.</p>
   `);
 
   document.querySelectorAll(".open-module").forEach(btn => {
@@ -215,14 +207,14 @@ function renderLesson(moduleId) {
       <p>${module.lesson.why}</p>
 
       <div class="notice">
-        This is demonstration content. Final wording, sequence, products, PPE and responsibilities must be approved locally.
+        Always follow your organisation's current approved procedures. Local requirements take priority if they differ from this module.
       </div>
 
       <h3>Training video</h3>
       <div class="video-placeholder">
         <div>
-          <strong>Video placeholder</strong>
-          <p class="small">An approved demonstration video can be added here.</p>
+          <strong>Training video</strong>
+          <p class="small">Approved video content will be available here.</p>
         </div>
       </div>
 
@@ -366,7 +358,7 @@ function renderTrainerDashboard() {
       <div id="signoffResult"></div>
     </section>
 
-    <p class="footer-note">This prototype stores progress only in this browser. A production version needs secure authentication, a database and hospital approval.</p>
+    <p class="footer-note">This preview stores progress only in this browser. Secure accounts and central reporting will be enabled before operational use.</p>
   `);
 
   document.getElementById("signoffBtn").addEventListener("click", () => {
