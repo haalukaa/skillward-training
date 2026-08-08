@@ -1,4 +1,4 @@
-SkillWard — PCA Theatre Training Hub — Web Application MVP v2
+SkillWard — PCA Theatre Training Hub — Front-end MVP v2.1
 
 HOW TO OPEN
 1. Unzip the downloaded file.
@@ -18,6 +18,10 @@ WHAT IS INCLUDED
 - Trainer dashboard
 - Practical competency sign-off
 - Mobile-friendly layout
+- SkillWard healthcare brand system
+- Two-panel staff and trainer sign-in experience
+- Redesigned learner progress dashboard
+- Enhanced module cards and trainer workspace
 
 IMPORTANT LIMITATIONS
 - This is a front-end preview.

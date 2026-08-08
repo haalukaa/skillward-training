@@ -60,10 +60,14 @@ function renderShell(content) {
     <div class="shell">
       <header class="topbar">
         <div class="brand">
-          <h1>SkillWard</h1>
-          <p>PCA Theatre Training Hub · Learn. Practise. Work safely.</p>
+          <div class="brand-mark" aria-hidden="true">S</div>
+          <div class="brand-copy">
+            <h1>SkillWard</h1>
+            <p>PCA Theatre Training Hub</p>
+          </div>
         </div>
         <div class="top-actions">
+          ${user ? `<span class="role-pill">${user.role === "trainer" ? "Trainer" : "Staff learner"}</span>` : ""}
           ${user ? `<button class="btn btn-secondary" id="switchRoleBtn">Switch role</button>` : ""}
         </div>
       </header>
@@ -81,10 +85,21 @@ function renderShell(content) {
 
 function renderLogin() {
   renderShell(`
-    <div class="login-wrap">
+    <div class="login-layout">
+      <section class="login-intro">
+        <span class="eyebrow">THEATRE WORKFORCE TRAINING</span>
+        <h2>Build confidence before the first shift.</h2>
+        <p>Clear learning pathways, knowledge checks and practical competency—all in one place.</p>
+        <div class="login-benefits">
+          <div><span>01</span><strong>Learn the approved workflow</strong></div>
+          <div><span>02</span><strong>Check your understanding</strong></div>
+          <div><span>03</span><strong>Complete practical sign-off</strong></div>
+        </div>
+      </section>
       <section class="card login-card">
-        <h2>Welcome to SkillWard</h2>
-        <p class="small">Sign in to continue your assigned theatre training.</p>
+        <span class="eyebrow">WELCOME BACK</span>
+        <h2>Continue your training</h2>
+        <p class="small">Enter your details to open the appropriate workspace.</p>
 
         <label>
           Full name
@@ -99,7 +114,7 @@ function renderLogin() {
           </select>
         </label>
 
-        <button class="btn" id="loginBtn">Continue</button>
+        <button class="btn btn-wide" id="loginBtn">Open SkillWard</button>
       </section>
     </div>
   `);
@@ -123,6 +138,9 @@ function renderLogin() {
 
 function renderLearnerDashboard() {
   const progress = overallProgress();
+  const completedLessons = TRAINING_MODULES.filter(module => getModuleState(module.id).lessonComplete).length;
+  const passed = passedModules();
+  const remaining = TRAINING_MODULES.length - passed;
 
   const moduleCards = TRAINING_MODULES.map((module, index) => {
     const m = getModuleState(module.id);
@@ -134,8 +152,14 @@ function renderLearnerDashboard() {
 
     return `
       <section class="card module-card">
-        <div class="small">Module ${index + 1} · ${module.duration}</div>
-        <h3>${module.title}</h3>
+        <div class="module-card-head">
+          <span class="module-number">${String(index + 1).padStart(2, "0")}</span>
+          <span class="module-duration">${module.duration}</span>
+        </div>
+        <div>
+          <div class="small">MODULE ${index + 1}</div>
+          <h3>${module.title}</h3>
+        </div>
         <p>${module.summary}</p>
         <div class="module-meta">
           <span class="badge ${status[1]}">${status[0]}</span>
@@ -148,21 +172,27 @@ function renderLearnerDashboard() {
   }).join("");
 
   renderShell(`
-    <section class="hero">
-      <div>
+    <section class="dashboard-hero">
+      <div class="dashboard-welcome">
+        <span class="eyebrow">MY LEARNING</span>
         <h2>Welcome, ${escapeHtml(state.learnerName)}</h2>
-        <p>Complete each lesson and quiz, then arrange practical competency sign-off.</p>
+        <p>Continue your theatre learning pathway and prepare for practical competency sign-off.</p>
       </div>
-      <div class="card kpi">
-        <strong>${progress}%</strong>
-        <span class="small">Overall progress</span>
+      <div class="progress-ring" style="--progress:${progress * 3.6}deg" aria-label="${progress}% overall progress">
+        <div><strong>${progress}%</strong><span>complete</span></div>
       </div>
     </section>
 
-    <div class="progress-track">
-      <div class="progress-bar" style="width:${progress}%"></div>
+    <div class="stats-grid">
+      <div class="stat-card"><span>Lessons viewed</span><strong>${completedLessons}/${TRAINING_MODULES.length}</strong></div>
+      <div class="stat-card"><span>Knowledge checks</span><strong>${passed}/${TRAINING_MODULES.length}</strong></div>
+      <div class="stat-card"><span>Modules remaining</span><strong>${remaining}</strong></div>
     </div>
 
+    <div class="section-heading">
+      <div><span class="eyebrow">REQUIRED TRAINING</span><h3>Your learning pathway</h3></div>
+      <span class="small">${TRAINING_MODULES.length} modules</span>
+    </div>
     <div class="grid grid-3">${moduleCards}</div>
 
     <div class="section-title">
@@ -317,18 +347,25 @@ function renderTrainerDashboard() {
   }).join("");
 
   renderShell(`
-    <section class="hero">
-      <div>
+    <section class="dashboard-hero trainer-hero">
+      <div class="dashboard-welcome">
+        <span class="eyebrow">TRAINER WORKSPACE</span>
         <h2>Trainer Dashboard</h2>
-        <p>Signed in as ${escapeHtml(state.currentUser.name)}</p>
+        <p>Monitor learning progress and record observed practical competency.</p>
       </div>
-      <div class="grid grid-2">
-        <div class="card kpi"><strong>${completedLessons}/${TRAINING_MODULES.length}</strong><span class="small">Lessons completed</span></div>
-        <div class="card kpi"><strong>${passed}/${TRAINING_MODULES.length}</strong><span class="small">Quizzes passed</span></div>
+      <div class="trainer-identity">
+        <span>Signed in as</span>
+        <strong>${escapeHtml(state.currentUser.name)}</strong>
       </div>
     </section>
 
-    <section class="card">
+    <div class="stats-grid trainer-stats">
+      <div class="stat-card"><span>Lessons completed</span><strong>${completedLessons}/${TRAINING_MODULES.length}</strong></div>
+      <div class="stat-card"><span>Quizzes passed</span><strong>${passed}/${TRAINING_MODULES.length}</strong></div>
+      <div class="stat-card"><span>Practical sign-off</span><strong class="status-word">${state.practicalSignoff ? "Complete" : "Pending"}</strong></div>
+    </div>
+
+    <section class="card dashboard-card">
       <h3>Learner: ${escapeHtml(state.learnerName)}</h3>
       <div class="table-wrap">
         <table>
@@ -338,7 +375,7 @@ function renderTrainerDashboard() {
       </div>
     </section>
 
-    <section class="card">
+    <section class="card dashboard-card">
       <h3>Practical competency sign-off</h3>
       <p class="small">The trainer should only sign off after directly observing the learner perform the approved practical tasks.</p>
 
