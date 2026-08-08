@@ -51,6 +51,8 @@ textarea:focus-visible {
 
 .shell {
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 .topbar {
@@ -131,7 +133,30 @@ textarea:focus-visible {
   width: min(100%, 1180px);
   margin: 0 auto;
   padding: clamp(18px, 3vw, 34px) clamp(14px, 3vw, 28px) 56px;
+  flex: 1;
 }
+
+.site-footer {
+  border-top: 1px solid var(--line);
+  background: rgba(255,255,255,.65);
+  color: var(--muted);
+}
+
+.footer-inner {
+  width: min(100%, 1180px);
+  margin: 0 auto;
+  padding: 18px clamp(14px, 3vw, 28px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-size: .78rem;
+  letter-spacing: .01em;
+}
+
+.footer-wordmark { color: var(--navy); font-weight: 900; letter-spacing: -.01em; }
+.footer-divider { width: 1px; height: 14px; background: var(--line); }
+.footer-inner strong { color: var(--navy); font-weight: 800; }
 
 .card {
   background: var(--surface);
@@ -903,6 +928,7 @@ th {
   .department-card-footer { align-items: stretch; flex-direction: column; }
   .department-card-footer .btn { width: 100%; }
   .platform-note { align-items: flex-start; flex-direction: column; }
+  .footer-inner { flex-wrap: wrap; gap: 6px 10px; text-align: center; }
   .area-hero { grid-template-columns: 1fr; text-align: left; }
   .area-code-large { min-width: 64px; width: fit-content; height: 64px; }
   .area-completion { grid-column: auto; text-align: left; }

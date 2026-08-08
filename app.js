@@ -179,6 +179,13 @@ function renderShell(content) {
         </div>
       </header>
       <main class="page">${content}</main>
+      <footer class="site-footer">
+        <div class="footer-inner">
+          <span class="footer-wordmark">SkillWard</span>
+          <span class="footer-divider" aria-hidden="true"></span>
+          <span>Co-founded by <strong>Haleluya Yilma</strong> and <strong>Abdulkader</strong></span>
+        </div>
+      </footer>
     </div>
   `;
 
