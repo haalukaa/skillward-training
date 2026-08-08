@@ -201,34 +201,38 @@ function renderLogin() {
   renderShell(`
     <div class="login-layout">
       <section class="login-intro">
-        <span class="eyebrow">HEALTHCARE WORKFORCE TRAINING</span>
+        <div class="login-label"><span></span> Healthcare workforce enablement</div>
         <h2>Build confidence before the first shift.</h2>
-        <p>Clear learning pathways, knowledge checks and practical competency—all in one place.</p>
-        <div class="login-benefits">
-          <div><span>01</span><strong>Learn the approved workflow</strong></div>
-          <div><span>02</span><strong>Check your understanding</strong></div>
-          <div><span>03</span><strong>Complete practical sign-off</strong></div>
+        <p>Structured, role-based learning that turns approved procedures into confident workplace practice.</p>
+        <div class="learning-flow" aria-label="SkillWard learning process">
+          <div><span>01</span><strong>Learn</strong><small>Role-based pathways</small></div>
+          <i aria-hidden="true"></i>
+          <div><span>02</span><strong>Validate</strong><small>Knowledge checks</small></div>
+          <i aria-hidden="true"></i>
+          <div><span>03</span><strong>Sign off</strong><small>Observed competency</small></div>
         </div>
+        <p class="login-platform-note">Designed for hospital teams, trainers and frontline staff.</p>
       </section>
       <section class="card login-card">
-        <span class="eyebrow">WELCOME BACK</span>
-        <h2>Continue your training</h2>
-        <p class="small">Enter your details to open the appropriate workspace.</p>
+        <div class="access-label"><span></span> SKILLWARD ACCESS</div>
+        <h2>Enter your workspace</h2>
+        <p class="login-card-intro">Choose your role to continue to the correct training environment.</p>
 
         <label>
-          Full name
+          <span>Full name</span>
           <input id="nameInput" type="text" placeholder="e.g. Alex Smith" />
         </label>
 
         <label>
-          Role
+          <span>Workspace role</span>
           <select id="roleInput">
             <option value="learner">Staff / Learner</option>
             <option value="trainer">Trainer</option>
           </select>
         </label>
 
-        <button class="btn btn-wide" id="loginBtn">Open SkillWard</button>
+        <button class="btn btn-wide login-submit" id="loginBtn">Continue to SkillWard <span aria-hidden="true">→</span></button>
+        <div class="access-note"><span aria-hidden="true">✓</span> Training access is organised by role and department.</div>
       </section>
     </div>
   `);
