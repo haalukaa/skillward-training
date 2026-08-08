@@ -2,11 +2,63 @@ const app = document.getElementById("app");
 
 const defaultState = {
   currentUser: null,
-  learnerName: "Demo Learner",
+  selectedDepartment: null,
+  learnerName: "Staff Learner",
   moduleProgress: {},
   practicalSignoff: false,
   trainerComments: ""
 };
+
+const DEPARTMENTS = [
+  {
+    id: "operating-theatre",
+    code: "OT",
+    name: "Operating Theatre",
+    summary: "PCA onboarding, theatre workflows, cleaning, safety and practical competency.",
+    detail: "6 modules",
+    active: true
+  },
+  {
+    id: "recovery-patient-flow",
+    code: "RF",
+    name: "Recovery & Patient Flow",
+    summary: "Patient movement, handover support, equipment readiness and safe workflows.",
+    detail: "Planned",
+    active: false
+  },
+  {
+    id: "sterile-services",
+    code: "SS",
+    name: "Sterile Services",
+    summary: "Instrument handling, traceability, storage and sterile-service workflows.",
+    detail: "Planned",
+    active: false
+  },
+  {
+    id: "environmental-services",
+    code: "ES",
+    name: "Environmental Services",
+    summary: "Healthcare cleaning standards, waste streams, infection prevention and safety.",
+    detail: "Planned",
+    active: false
+  },
+  {
+    id: "ward-support",
+    code: "WS",
+    name: "Ward Support Services",
+    summary: "Ward-based support duties, equipment checks, transport and daily readiness.",
+    detail: "Planned",
+    active: false
+  },
+  {
+    id: "emergency-support",
+    code: "ED",
+    name: "Emergency Support",
+    summary: "Department readiness, urgent transport support, safety and escalation pathways.",
+    detail: "Planned",
+    active: false
+  }
+];
 
 let state = loadState();
 let currentModuleId = null;
@@ -56,6 +108,7 @@ function passedModules() {
 
 function renderShell(content) {
   const user = state.currentUser;
+  const department = DEPARTMENTS.find(item => item.id === state.selectedDepartment);
   app.innerHTML = `
     <div class="shell">
       <header class="topbar">
@@ -63,11 +116,12 @@ function renderShell(content) {
           <div class="brand-mark" aria-hidden="true">S</div>
           <div class="brand-copy">
             <h1>SkillWard</h1>
-            <p>PCA Theatre Training Hub</p>
+            <p>${department ? `${department.name} Training Hub` : "Healthcare Workforce Training"}</p>
           </div>
         </div>
         <div class="top-actions">
           ${user ? `<span class="role-pill">${user.role === "trainer" ? "Trainer" : "Staff learner"}</span>` : ""}
+          ${user && department ? `<button class="btn btn-secondary" id="changeDepartmentBtn">Departments</button>` : ""}
           ${user ? `<button class="btn btn-secondary" id="switchRoleBtn">Switch role</button>` : ""}
         </div>
       </header>
@@ -77,8 +131,15 @@ function renderShell(content) {
 
   document.getElementById("switchRoleBtn")?.addEventListener("click", () => {
     state.currentUser = null;
+    state.selectedDepartment = null;
     saveState();
     renderLogin();
+  });
+
+  document.getElementById("changeDepartmentBtn")?.addEventListener("click", () => {
+    state.selectedDepartment = null;
+    saveState();
+    renderDepartmentSelection();
   });
 
 }
@@ -87,7 +148,7 @@ function renderLogin() {
   renderShell(`
     <div class="login-layout">
       <section class="login-intro">
-        <span class="eyebrow">THEATRE WORKFORCE TRAINING</span>
+        <span class="eyebrow">HEALTHCARE WORKFORCE TRAINING</span>
         <h2>Build confidence before the first shift.</h2>
         <p>Clear learning pathways, knowledge checks and practical competency—all in one place.</p>
         <div class="login-benefits">
@@ -129,10 +190,57 @@ function renderLogin() {
     }
 
     state.currentUser = { name, role };
+    state.selectedDepartment = null;
     if (role === "learner") state.learnerName = name;
     saveState();
 
-    role === "learner" ? renderLearnerDashboard() : renderTrainerDashboard();
+    renderDepartmentSelection();
+  });
+}
+
+function renderDepartmentSelection() {
+  const departmentCards = DEPARTMENTS.map(department => `
+    <article class="department-card ${department.active ? "department-active" : "department-planned"}">
+      <div class="department-card-top">
+        <span class="department-icon" aria-hidden="true">${department.code}</span>
+        <span class="department-status ${department.active ? "status-active" : "status-planned"}">
+          ${department.active ? "Available" : "Coming soon"}
+        </span>
+      </div>
+      <div>
+        <h3>${department.name}</h3>
+        <p>${department.summary}</p>
+      </div>
+      <div class="department-card-footer">
+        <span>${department.detail}</span>
+        ${department.active
+          ? `<button class="btn open-department" data-id="${department.id}">Open department</button>`
+          : `<button class="btn btn-disabled" disabled>In development</button>`}
+      </div>
+    </article>
+  `).join("");
+
+  renderShell(`
+    <section class="department-heading">
+      <span class="eyebrow">TRAINING DIRECTORY</span>
+      <h2>Choose your department</h2>
+      <p>Open the learning pathway assigned to your role. Additional departments will be introduced as their content is approved.</p>
+    </section>
+
+    <div class="department-grid">${departmentCards}</div>
+
+    <div class="platform-note">
+      <strong>One platform, multiple departments.</strong>
+      <span>SkillWard keeps role-based learning, competency and progress in one consistent experience.</span>
+    </div>
+  `);
+
+  document.querySelectorAll(".open-department").forEach(button => {
+    button.addEventListener("click", () => {
+      state.selectedDepartment = button.dataset.id;
+      saveState();
+      state.currentUser.role === "trainer" ? renderTrainerDashboard() : renderLearnerDashboard();
+    });
   });
 }
 
@@ -435,6 +543,8 @@ function escapeHtml(value) {
 
 if (!state.currentUser) {
   renderLogin();
+} else if (!state.selectedDepartment) {
+  renderDepartmentSelection();
 } else if (state.currentUser.role === "trainer") {
   renderTrainerDashboard();
 } else {

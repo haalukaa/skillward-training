@@ -1,4 +1,4 @@
-SkillWard — PCA Theatre Training Hub — Front-end MVP v2.1
+SkillWard — Healthcare Workforce Training Platform — Front-end MVP v2.2
 
 HOW TO OPEN
 1. Unzip the downloaded file.
@@ -22,6 +22,8 @@ WHAT IS INCLUDED
 - Two-panel staff and trainer sign-in experience
 - Redesigned learner progress dashboard
 - Enhanced module cards and trainer workspace
+- Department training directory
+- Operating Theatre active with future department roadmap
 
 IMPORTANT LIMITATIONS
 - This is a front-end preview.
