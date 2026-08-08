@@ -211,6 +211,7 @@ function renderShell(content) {
         </div>
         <div class="top-actions">
           ${user ? `<span class="role-pill">${workplaceRoleLabel(user.role)}</span>` : ""}
+          ${user && department ? `<button class="btn btn-secondary" id="changeDepartmentBtn">Departments</button>` : ""}
           ${user ? `<button class="btn btn-secondary" id="switchRoleBtn">Switch role</button>` : ""}
         </div>
       </header>
@@ -230,6 +231,12 @@ function renderShell(content) {
     state.selectedDepartment = null;
     saveState();
     renderLogin();
+  });
+
+  document.getElementById("changeDepartmentBtn")?.addEventListener("click", () => {
+    state.selectedDepartment = null;
+    saveState();
+    renderDepartmentSelection();
   });
 
 }
@@ -320,11 +327,11 @@ function renderLogin() {
     }
 
     state.currentUser = { name, role };
-    state.selectedDepartment = "operating-theatre";
+    state.selectedDepartment = null;
     if (role === "pca") state.learnerName = name;
     saveState();
 
-    routeCurrentUser();
+    renderDepartmentSelection();
   });
 }
 
@@ -799,7 +806,8 @@ function escapeHtml(value) {
 
 if (!state.currentUser) {
   renderLogin();
+} else if (!state.selectedDepartment) {
+  renderDepartmentSelection();
 } else {
-  if (!state.selectedDepartment) state.selectedDepartment = "operating-theatre";
   routeCurrentUser();
 }
