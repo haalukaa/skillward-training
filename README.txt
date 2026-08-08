@@ -23,7 +23,7 @@ WHAT IS INCLUDED
 - Redesigned learner progress dashboard
 - Enhanced module cards and trainer workspace
 - Department training directory
-- Operating Theatre active with future department roadmap
+- Operating Theatre & Recovery active with Day Surgery, ASU, Dialysis, Gastro and ED roadmap
 
 IMPORTANT LIMITATIONS
 - This is a front-end preview.

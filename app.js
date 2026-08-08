@@ -13,48 +13,48 @@ const DEPARTMENTS = [
   {
     id: "operating-theatre",
     code: "OT",
-    name: "Operating Theatre",
-    summary: "PCA onboarding, theatre workflows, cleaning, safety and practical competency.",
+    name: "Operating Theatre & Recovery",
+    summary: "PCA onboarding, theatre and recovery workflows, cleaning, safety and practical competency.",
     detail: "6 modules",
     active: true
   },
   {
-    id: "recovery-patient-flow",
-    code: "RF",
-    name: "Recovery & Patient Flow",
-    summary: "Patient movement, handover support, equipment readiness and safe workflows.",
+    id: "day-surgery",
+    code: "DS",
+    name: "Day Surgery",
+    summary: "Patient preparation, movement, daily readiness and day-surgery support workflows.",
     detail: "Planned",
     active: false
   },
   {
-    id: "sterile-services",
-    code: "SS",
-    name: "Sterile Services",
-    summary: "Instrument handling, traceability, storage and sterile-service workflows.",
+    id: "acute-surgical-unit",
+    code: "ASU",
+    name: "Acute Surgical Unit",
+    summary: "PCA support, patient flow, equipment readiness and Acute Surgical Unit workflows.",
     detail: "Planned",
     active: false
   },
   {
-    id: "environmental-services",
-    code: "ES",
-    name: "Environmental Services",
-    summary: "Healthcare cleaning standards, waste streams, infection prevention and safety.",
+    id: "dialysis",
+    code: "DI",
+    name: "Dialysis",
+    summary: "Patient support, treatment-area readiness, cleaning and dialysis workflows.",
     detail: "Planned",
     active: false
   },
   {
-    id: "ward-support",
-    code: "WS",
-    name: "Ward Support Services",
-    summary: "Ward-based support duties, equipment checks, transport and daily readiness.",
+    id: "gastro",
+    code: "GA",
+    name: "Gastro",
+    summary: "Procedure-area preparation, patient support, cleaning and gastro workflows.",
     detail: "Planned",
     active: false
   },
   {
-    id: "emergency-support",
+    id: "emergency-department",
     code: "ED",
-    name: "Emergency Support",
-    summary: "Department readiness, urgent transport support, safety and escalation pathways.",
+    name: "Emergency Department",
+    summary: "Department readiness, urgent patient transport, safety and emergency workflows.",
     detail: "Planned",
     active: false
   }
