@@ -60,6 +60,18 @@ const DEPARTMENTS = [
   }
 ];
 
+const WORKPLACE_ROLES = {
+  pca: "PCA",
+  cleaner: "Cleaner",
+  "pca-trainer": "PCA Trainer",
+  "cleaner-trainer": "Cleaner Trainer",
+  management: "Management"
+};
+
+function workplaceRoleLabel(role) {
+  return WORKPLACE_ROLES[role] || "Staff member";
+}
+
 function departmentIcon(departmentId) {
   const paths = {
     "operating-theatre": `
@@ -198,8 +210,7 @@ function renderShell(content) {
           </div>
         </div>
         <div class="top-actions">
-          ${user ? `<span class="role-pill">${user.role === "trainer" ? "Trainer" : "Staff learner"}</span>` : ""}
-          ${user && department ? `<button class="btn btn-secondary" id="changeDepartmentBtn">Departments</button>` : ""}
+          ${user ? `<span class="role-pill">${workplaceRoleLabel(user.role)}</span>` : ""}
           ${user ? `<button class="btn btn-secondary" id="switchRoleBtn">Switch role</button>` : ""}
         </div>
       </header>
@@ -219,12 +230,6 @@ function renderShell(content) {
     state.selectedDepartment = null;
     saveState();
     renderLogin();
-  });
-
-  document.getElementById("changeDepartmentBtn")?.addEventListener("click", () => {
-    state.selectedDepartment = null;
-    saveState();
-    renderDepartmentSelection();
   });
 
 }
@@ -275,8 +280,11 @@ function renderLogin() {
             <label>
               <span>Workspace role</span>
               <select id="roleInput">
-                <option value="learner">Staff / Learner</option>
-                <option value="trainer">Trainer</option>
+                <option value="pca">PCA</option>
+                <option value="cleaner">Cleaner</option>
+                <option value="pca-trainer">PCA Trainer</option>
+                <option value="cleaner-trainer">Cleaner Trainer</option>
+                <option value="management">Management</option>
               </select>
             </label>
             <button class="btn btn-wide login-submit" id="loginBtn">Continue to SkillWard <span aria-hidden="true">→</span></button>
@@ -310,12 +318,58 @@ function renderLogin() {
     }
 
     state.currentUser = { name, role };
-    state.selectedDepartment = null;
-    if (role === "learner") state.learnerName = name;
+    state.selectedDepartment = "operating-theatre";
+    if (role === "pca") state.learnerName = name;
     saveState();
 
-    renderDepartmentSelection();
+    routeCurrentUser();
   });
+}
+
+function routeCurrentUser() {
+  let role = state.currentUser?.role;
+
+  if (role === "learner" || role === "trainer") {
+    role = role === "trainer" ? "pca-trainer" : "pca";
+    state.currentUser.role = role;
+    saveState();
+  }
+
+  if (role === "pca") {
+    renderLearnerDashboard();
+  } else if (role === "pca-trainer") {
+    renderTrainerDashboard();
+  } else {
+    renderRoleWorkspace(role);
+  }
+}
+
+function renderRoleWorkspace(role) {
+  const isManagement = role === "management";
+  const isTrainer = role === "cleaner-trainer";
+  const title = isManagement
+    ? "Management Workspace"
+    : isTrainer
+      ? "Cleaner Trainer Workspace"
+      : "Cleaner Training";
+  const description = isManagement
+    ? "Review workforce training pathways, learner progress and competency status from one place."
+    : isTrainer
+      ? "Cleaner learner progress, assessments and practical competency sign-offs will be managed here."
+      : "Your role-specific healthcare cleaning modules will appear here without mixing them with PCA training.";
+
+  renderShell(`
+    <section class="department-heading">
+      <span class="eyebrow">OPERATING THEATRE &amp; RECOVERY</span>
+      <h2>${title}</h2>
+      <p>${description}</p>
+    </section>
+    <section class="card pathway-ready-card">
+      <span class="badge badge-in-progress">Pathway ready</span>
+      <h3>${workplaceRoleLabel(role)} access is now separated</h3>
+      <p class="small">Approved role-specific modules can be added here next. Your existing PCA training remains unchanged.</p>
+    </section>
+  `);
 }
 
 function renderDepartmentSelection() {
@@ -359,7 +413,7 @@ function renderDepartmentSelection() {
     button.addEventListener("click", () => {
       state.selectedDepartment = button.dataset.id;
       saveState();
-      state.currentUser.role === "trainer" ? renderTrainerDashboard() : renderLearnerDashboard();
+      routeCurrentUser();
     });
   });
 }
@@ -743,10 +797,7 @@ function escapeHtml(value) {
 
 if (!state.currentUser) {
   renderLogin();
-} else if (!state.selectedDepartment) {
-  renderDepartmentSelection();
-} else if (state.currentUser.role === "trainer") {
-  renderTrainerDashboard();
 } else {
-  renderLearnerDashboard();
+  if (!state.selectedDepartment) state.selectedDepartment = "operating-theatre";
+  routeCurrentUser();
 }
