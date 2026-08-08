@@ -1,4 +1,4 @@
-SkillWard — Healthcare Workforce Training Platform — Front-end MVP v2.3
+SkillWard — Healthcare Workforce Training Platform — Front-end MVP v2.4
 
 HOW TO OPEN
 1. Unzip the downloaded file.
@@ -26,6 +26,7 @@ WHAT IS INCLUDED
 - Operating Theatre & Recovery active with Day Surgery, ASU, Dialysis, Gastro and ED roadmap
 - Operating Theatre & Recovery pathway organised into PRA, Recovery and Prep areas
 - Six area-based modules following the patient journey from ward pickup to theatre support
+- Custom SkillWard SW medical-shield logo and browser icon
 
 IMPORTANT LIMITATIONS
 - This is a front-end preview.

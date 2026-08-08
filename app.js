@@ -161,7 +161,12 @@ function renderShell(content) {
     <div class="shell">
       <header class="topbar">
         <div class="brand">
-          <div class="brand-mark" aria-hidden="true">S</div>
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 48 54" focusable="false">
+              <path class="logo-shield" d="M24 2 44 9v16c0 13-8 22-20 28C12 47 4 38 4 25V9L24 2Z" />
+              <text class="logo-letters" x="24" y="31" text-anchor="middle">SW</text>
+            </svg>
+          </div>
           <div class="brand-copy">
             <h1>SkillWard</h1>
             <p>${department ? `${department.name} Training Hub` : "Healthcare Workforce Training"}</p>

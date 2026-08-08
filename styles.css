@@ -80,16 +80,22 @@ textarea:focus-visible {
 }
 
 .brand-mark {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
+  width: 43px;
+  height: 47px;
   display: grid;
   place-items: center;
-  color: var(--navy);
-  background: linear-gradient(145deg, #9ce3d4, #ffffff);
+  flex: 0 0 43px;
+  filter: drop-shadow(0 4px 8px rgba(0,0,0,.2));
+}
+
+.brand-mark svg { width: 100%; height: 100%; display: block; }
+.logo-shield { fill: #dff5ef; stroke: #9ce3d4; stroke-width: 2; }
+.logo-letters {
+  fill: var(--navy);
+  font-family: Inter, Arial, Helvetica, sans-serif;
+  font-size: 14px;
   font-weight: 900;
-  font-size: 1.15rem;
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,.55);
+  letter-spacing: -.8px;
 }
 
 .brand-copy { min-width: 0; }
