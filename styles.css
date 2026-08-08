@@ -420,23 +420,19 @@ textarea:focus-visible {
   flex-direction: column;
   justify-content: center;
   min-height: 100%;
-  text-align: left;
+  text-align: center;
 }
 
-.get-started-mark {
-  width: 58px;
-  height: 64px;
-  margin-bottom: 24px;
-  display: grid;
-  place-items: center;
-  color: var(--navy);
-  font-size: .9rem;
-  font-weight: 900;
-  background: var(--mint);
-  border: 1px solid #b8e5d9;
-  border-radius: 19px 19px 25px 25px;
-  box-shadow: 0 12px 28px rgba(12,139,131,.12);
+.get-started-logo {
+  width: 74px;
+  height: 82px;
+  margin: 0 auto 18px;
+  filter: drop-shadow(0 10px 16px rgba(17,47,62,.14));
 }
+
+.get-started-logo svg { width: 100%; height: 100%; display: block; }
+.login-card-front h2 { margin-top: 4px; }
+.login-card-front .login-card-intro { margin-bottom: 24px; }
 
 .get-started-btn {
   justify-content: space-between;

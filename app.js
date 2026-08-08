@@ -256,12 +256,15 @@ function renderLogin() {
       <div class="login-flip-shell">
         <div class="login-flip" id="loginFlip">
           <section class="card login-card login-card-front" id="welcomeCard">
-            <div class="get-started-mark" aria-hidden="true">SW</div>
-            <div class="access-label"><span></span> YOUR TRAINING STARTS HERE</div>
-            <h2>Ready to build your confidence?</h2>
-            <p class="login-card-intro">Access practical, role-based training designed for your department and your first shift.</p>
+            <div class="get-started-logo" aria-hidden="true">
+              <svg viewBox="0 0 48 54" focusable="false">
+                <path class="logo-shield" d="M24 2 44 9v16c0 13-8 22-20 28C12 47 4 38 4 25V9L24 2Z" />
+                <text class="logo-letters" x="24" y="31" text-anchor="middle">SW</text>
+              </svg>
+            </div>
+            <h2>Get Started</h2>
+            <p class="login-card-intro">Enter your SkillWard workspace.</p>
             <button class="btn btn-wide get-started-btn" id="getStartedBtn">Get Started <span aria-hidden="true">→</span></button>
-            <div class="access-note"><span aria-hidden="true">✓</span> Learn at your pace. Validate your knowledge. Build confidence.</div>
           </section>
 
           <section class="card login-card login-card-back" id="workspaceCard" aria-hidden="true" inert>
