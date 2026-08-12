@@ -21,7 +21,7 @@
     };
     const activeAdmins = () => data.managers.filter(item => item.level === "Hospital Administrator" && item.accountStatus === "Active");
     const protectFinalAdmin = (target, nextStatus, nextLevel = target.level) => {
-      if (target.level === "Hospital Administrator" && target.accountStatus === "Active" && (nextStatus !== "Active" || nextLevel !== "Hospital Administrator") && activeAdmins().length === 1) throw new Error("A hospital must retain at least one active Hospital Administrator.");
+      if (target.level === "Hospital Administrator" && target.accountStatus === "Active" && (nextStatus !== "Active" || nextLevel !== "Hospital Administrator") && activeAdmins().length === 1) throw new Error("A hospital must retain at least one active administrator.");
     };
     const trainerLoad = id => data.staff.filter(item => item.trainerId === id && item.accountStatus === "Active").length;
     const trainerCapacity = id => ({ active: trainerLoad(id), capacity: data.trainerCapacity, atCapacity: trainerLoad(id) >= data.trainerCapacity });

@@ -135,10 +135,7 @@ function statusTone(status) {
 function workspaceHeader(user, department) {
   if (!user) return "Healthcare Workforce Training";
   if (user.role === "management") {
-    const actor = currentManager();
-    return actor.level === "Hospital Administrator"
-      ? "SkillWard Hospital Administration · Hospital-wide workspace"
-      : `${department?.name || "Department"} · Department management workspace`;
+    return "Healthcare Workforce Training";
   }
   const labels = {
     pca: "PCA Training Hub",
@@ -502,7 +499,7 @@ function renderManagementDashboard() {
   const store = managementStore(), actor = currentManager(store);
   const department = DEPARTMENTS.find(item => item.id === state.selectedDepartment);
   if (!department) return renderDepartmentSelection();
-  if (!store.actorCanAccess(actor, department.id)) { state.selectedDepartment = actor.departments[0] || null; saveState(); return state.selectedDepartment ? renderManagementDashboard() : renderShell('<section class="card access-blocked"><h2>No department access</h2><p>Ask a Hospital Administrator to assign a department.</p></section>'); }
+  if (!store.actorCanAccess(actor, department.id)) { state.selectedDepartment = actor.departments[0] || null; saveState(); return state.selectedDepartment ? renderManagementDashboard() : renderShell('<section class="card access-blocked"><h2>No department access</h2><p>Ask Management to assign a department.</p></section>'); }
   const hospitalWide = actor.level === "Hospital Administrator";
   const report = MANAGEMENT_REPORTS[state.selectedDepartment];
   const records = workflowRecords().filter(item => item.department === state.selectedDepartment);
@@ -516,8 +513,7 @@ function renderManagementDashboard() {
   const staffRows = visibleStaff.map(person => { const trainer=store.data.staff.find(p=>p.id===person.trainerId), manager=store.data.managers.find(p=>p.id===person.managerId), overdue=store.data.assignments.some(a=>a.staffId===person.id && a.dueDate < new Date().toISOString().slice(0,10) && a.managementApprovalStatus!=="Approved"); return `<tr class="directory-row" data-search="${escapeHtml((person.name+' '+person.id+' '+person.email).toLowerCase())}" data-role="${person.role}" data-department="${person.departments.join(' ')}" data-account="${person.accountStatus}" data-employment="${person.employmentStatus}" data-competency="${person.competencyStatus}" data-trainer="${trainer?.id||'unassigned'}" data-manager="${manager?.id||'unassigned'}" data-progress="${person.progress}" data-overdue="${overdue?'overdue':'current'}"><td><input type="checkbox" class="bulk-select" data-id="${person.id}" aria-label="Select ${escapeHtml(person.name)}"> <button class="link-button staff-profile" data-id="${person.id}">${identity(person)}</button></td><td>${person.role}</td><td>${person.departments.map(departmentName).map(escapeHtml).join(', ')}</td><td>${person.progress}%</td><td><span class="status-chip status-${person.accountStatus==='Suspended'?'danger':person.accountStatus==='Active'?'success':'warning'}">${person.accountStatus}</span></td></tr>`; }).join("");
 
   renderShell(`
-    <section class="management-title" id="home"><div><span class="eyebrow">${escapeHtml(actor.level.toUpperCase())}</span><h2>${hospitalWide ? "SkillWard Hospital Administration" : escapeHtml(department.name)}</h2><span class="readonly-label">${hospitalWide ? "Hospital-wide workspace" : "Department management workspace"}</span></div><button class="btn btn-secondary" id="changeDepartmentBtn">Switch Department</button></section>
-    <section class="demo-warning"><div><strong>Management Dashboard</strong><span>Hospital-wide workspace</span></div><span>Demonstration mode uses sample browser data; no hospital name is configured.</span></section>
+    <section class="management-title" id="home"><div><h2>Management Dashboard</h2><p class="management-subtitle">${hospitalWide ? "Hospital-wide workspace" : `${escapeHtml(department.name)} · Department management workspace`}</p></div><button class="btn btn-secondary" id="changeDepartmentBtn">Switch Department</button></section>
     <div class="stats-grid management-stats"><div class="stat-card"><span>Total PCA staff</span><strong>${report.pca}</strong></div><div class="stat-card"><span>Total Cleaner staff</span><strong>${report.cleaners}</strong></div><div class="stat-card stat-complete"><span>Completed training</span><strong>${report.completed}</strong></div><div class="stat-card stat-overdue"><span>Overdue training</span><strong>${report.overdue}</strong></div></div>
     <section class="card dashboard-card management-section" id="training"><div class="section-heading"><div><span class="eyebrow">WORKFORCE ASSIGNMENTS</span><h3>Assignments</h3></div><span class="small">Role and capacity checked</span></div><p class="readonly-note">Assign staff and trainers to departments, then connect each staff member with the appropriate trainer.</p><div class="assignment-groups"><section><h4>1. Staff department assignments</h4><div class="assignment-list">${staffDepartmentRows}</div></section><section><h4>2. Trainer department assignments</h4><div class="assignment-list">${trainerDepartmentRows}</div></section><section><h4>3. Staff-to-trainer assignments</h4><p class="small">Trainer capacity is shown before confirmation. Selecting a new trainer replaces the current assignment.</p><div class="assignment-list">${staffTrainerRows}</div></section></div></section>
     <section class="card dashboard-card management-section" id="reports"><div class="section-heading"><div><span class="eyebrow">FINAL APPROVAL</span><h3>Sign-off recommendations</h3></div><span class="count-badge">${records.filter(item=>item.status==="Sent to Management").length}</span></div><div class="review-list">${recommendations || '<p class="empty-state">No recommendations awaiting Management.</p>'}</div></section>
