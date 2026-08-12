@@ -255,3 +255,44 @@ window.MANAGEMENT_ALERTS = [
   { level: "Medium", title: "Completion below target", detail: "Gastro training completion is 63%, below the 75% monthly target.", due: "Due 16 Aug", tone: "warning" },
   { level: "Medium", title: "Sign-offs awaiting review", detail: "3 Day Surgery competencies have been awaiting trainer review for more than 48 hours.", due: "Due 14 Aug", tone: "warning" }
 ];
+
+const MANAGEMENT_NAMES = ["Maya Chen", "Noah Williams", "Priya Nair", "Liam Osei", "Amelia Brooks", "Ethan Okafor", "Sofia Patel", "Jack Nguyen"];
+
+window.MANAGEMENT_REPORTS = Object.fromEntries([
+  ["operating-theatre", 24, 12, 3, 2, 29, 8, 2, 79],
+  ["day-surgery", 10, 6, 2, 1, 11, 5, 1, 68],
+  ["acute-surgical-unit", 18, 9, 2, 2, 24, 4, 1, 84],
+  ["dialysis", 13, 8, 2, 1, 20, 3, 0, 91],
+  ["gastro", 9, 5, 1, 1, 9, 4, 2, 63],
+  ["emergency-department", 31, 18, 4, 2, 37, 12, 6, 72]
+].map(([id, pca, cleaners, pcaTrainers, cleanerTrainers, completed, inProgress, overdue, progress], departmentIndex) => {
+  const department = window.MANAGEMENT_DEPARTMENTS[departmentIndex];
+  const staff = MANAGEMENT_NAMES.map((name, index) => {
+    const isOverdue = index < Math.min(overdue, 2);
+    const isComplete = !isOverdue && index % 3 === 0;
+    return {
+      name,
+      id: `SW-${departmentIndex + 1}${String(index + 1).padStart(2, "0")}`,
+      role: index % 3 === 1 ? "Cleaner" : index === 7 ? "PCA Trainer" : "PCA",
+      progress: isOverdue ? 46 + index * 3 : isComplete ? 100 : 64 + index * 4,
+      status: isOverdue ? "Overdue" : isComplete ? "Completed" : "In progress",
+      tone: isOverdue ? "danger" : isComplete ? "success" : "warning",
+      due: isOverdue ? "Overdue" : isComplete ? "Complete" : `${18 + index} Aug 2026`
+    };
+  });
+  const signoffs = staff.slice(0, Math.min(department.signoffs, 4)).map((person, index) => ({
+    staff: person.name,
+    role: person.role,
+    competency: index % 2 ? "Infection prevention" : "Safe patient movement",
+    waiting: `${index + 2} days`
+  }));
+  const alerts = overdue ? [{
+    level: overdue > 3 ? "High" : "Medium",
+    title: "Mandatory training overdue",
+    detail: `${overdue} ${department.name} staff require follow-up.`,
+    due: "Action now",
+    tone: "danger"
+  }] : [];
+  if (progress < 75) alerts.push({ level: "Medium", title: "Completion below target", detail: `Completion is ${progress}%, below the 75% target.`, due: "Due 16 Aug", tone: "warning" });
+  return [id, { pca, cleaners, pcaTrainers, cleanerTrainers, completed, inProgress, overdue, progress, staff, signoffs, alerts }];
+}));
