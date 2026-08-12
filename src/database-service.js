@@ -2,9 +2,19 @@
 export class SkillWardDatabaseService {
   constructor(client) { this.client = client; }
 
+  contextError(error) {
+    const permissionDenied = error?.code === "42501" || /permission denied/i.test(error?.message || "");
+    const development = ["localhost", "127.0.0.1"].includes(globalThis.location?.hostname);
+    if (permissionDenied && development) {
+      console.warn("SkillWard development diagnostic: authenticated table privilege missing.");
+      return new Error("CONTEXT_TABLE_PERMISSION");
+    }
+    return new Error("CONTEXT_READ_FAILED");
+  }
+
   async one(table, userId) {
     const { data, error } = await this.client.from(table).select("*").eq("user_id", userId).maybeSingle();
-    if (error) throw new Error("CONTEXT_READ_FAILED");
+    if (error) throw this.contextError(error);
     return data;
   }
 
@@ -17,7 +27,7 @@ export class SkillWardDatabaseService {
       let request = this.client.from(table).select("*");
       request = configure(request);
       const { data, error } = await request;
-      if (error) throw new Error("CONTEXT_READ_FAILED");
+      if (error) throw this.contextError(error);
       return data || [];
     };
     const departments = await query("department_memberships", q => q.eq("user_id", user.id).eq("is_active", true));

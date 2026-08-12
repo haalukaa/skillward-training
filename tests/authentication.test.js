@@ -12,13 +12,44 @@ test("sign-in and Demo Mode are separate and public sign-up is unavailable", () 
   assert.match(app, /await authService\?\.signOut\(\); authenticatedContext=null/);
 });
 
-test("trusted context obtains roles, departments, trainers and pathways from Supabase", () => {
+test("authenticated REST-style context loads its permitted profile, membership and routing data", async () => {
   for (const table of ["user_profiles", "hospital_memberships", "department_memberships", "departments", "trainer_assignments", "training_assignments"]) assert.match(database, new RegExp(`"${table}"`));
   assert.match(auth, /context\.membership\.role/); assert.match(auth, /departmentDetails/);
   assert.doesNotMatch(auth, /localStorage/);
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(database).toString("base64")}`;
+  const { SkillWardDatabaseService } = await import(moduleUrl);
+  const user = { id: "admin-user" };
+  const rows = {
+    user_profiles: { user_id: user.id, full_name: "Development Administrator", account_status: "Active" },
+    hospital_memberships: { user_id: user.id, role: "Hospital Administrator", account_status: "Active" },
+    department_memberships: [],
+  };
+  const client = {
+    from(table) {
+      const result = () => ({ data: rows[table] ?? [], error: null });
+      const query = {
+        select() { return query; }, eq() { return query; }, in() { return query; },
+        maybeSingle() { return Promise.resolve(result()); },
+        then(resolve) { return Promise.resolve(result()).then(resolve); },
+      };
+      return query;
+    },
+  };
+
+  const context = await new SkillWardDatabaseService(client).loadSessionContext(user);
+  assert.equal(context.profile.user_id, user.id);
+  assert.equal(context.membership.user_id, user.id);
+  assert.equal(context.membership.role, "Hospital Administrator");
 });
 
-test("account blocking, recovery, restoration and sign-out are implemented safely", () => {
+test("account blocking, recovery, restoration and safe diagnostics are implemented", () => {
+  assert.match(database, /error\?\.code === "42501"/);
+  assert.match(database, /CONTEXT_TABLE_PERMISSION/);
+  assert.equal(
+    app.match(/CONTEXT_TABLE_PERMISSION: "([^"]+)"/)[1],
+    app.match(/CONTEXT_READ_FAILED: "([^"]+)"/)[1]
+  );
+  assert.doesNotMatch(database, /console\.(?:warn|error)\([^)]*error/);
   for (const text of ["ACCOUNT_SUSPENDED", "ACCOUNT_ARCHIVED", "ACCOUNT_INVITED", "MISSING_PROFILE", "MISSING_MEMBERSHIP", "resetPasswordForEmail", "updateUser", "getUser", "onAuthStateChange", "signOut"]) assert.match(app + auth, new RegExp(text));
   assert.match(app, /If an eligible account exists/); assert.match(app, /button\.disabled=true/);
 });
