@@ -1,13 +1,15 @@
-/** Future Supabase browser adapter. The demonstration application does not import this file. */
-(function (global) {
-  function createSupabaseAdapter(options = {}) {
-    const { url, anonKey, createClient } = options;
-    if (!url || !anonKey || typeof createClient !== "function") {
-      return { configured: false, client: null };
-    }
-    // The anonymous key identifies the project; authorization remains enforced by RLS.
-    return { configured: true, client: createClient(url, anonKey) };
-  }
-  global.SkillWardSupabase = { createSupabaseAdapter };
-})(typeof window === "undefined" ? globalThis : window);
+import { createClient } from "@supabase/supabase-js";
 
+const safeConfig = () => globalThis.SKILLWARD_CONFIG || {};
+
+export function createSupabaseAdapter(config = safeConfig()) {
+  const url = typeof config.supabaseUrl === "string" ? config.supabaseUrl.trim() : "";
+  const anonKey = typeof config.supabaseAnonKey === "string" ? config.supabaseAnonKey.trim() : "";
+  if (!url || !anonKey) return { configured: false, client: null };
+  return {
+    configured: true,
+    client: createClient(url, anonKey, {
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+    })
+  };
+}

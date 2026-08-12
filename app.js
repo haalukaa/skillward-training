@@ -291,7 +291,7 @@ function bindModuleButtons() {
 }
 
 function renderShell(content) {
-  const user = state.currentUser;
+  const user = authenticatedContext?.appUser || state.currentUser;
   const department = DEPARTMENTS.find(item => item.id === state.selectedDepartment);
   const authenticatedWorkspace = Boolean(user && (department || user.role?.includes("trainer")));
   const navigation = NAV_ITEMS.map(([id, label, icon], index) => `
@@ -317,7 +317,7 @@ function renderShell(content) {
         <div class="top-actions">
           ${authenticatedWorkspace ? `<button class="notification-button" aria-label="Notifications"><span aria-hidden="true">●</span></button>` : ""}
           ${user ? `<span class="role-pill">${workplaceRoleLabel(user.role)}</span>` : ""}
-          ${authenticatedWorkspace ? `<button class="profile-button" id="switchRoleBtn" aria-label="User profile: ${escapeHtml(user.name)}"><span>${escapeHtml(user.name).charAt(0).toUpperCase()}</span><strong>${escapeHtml(user.name)}</strong></button>` : user ? `<button class="btn btn-secondary" id="switchRoleBtn">Switch role</button>` : ""}
+          ${authenticatedContext ? `<button class="btn btn-secondary" id="signOutBtn">Sign Out</button>` : ""}${authenticatedWorkspace ? `<button class="profile-button" id="switchRoleBtn" aria-label="User profile: ${escapeHtml(user.name)}"><span>${escapeHtml(user.name).charAt(0).toUpperCase()}</span><strong>${escapeHtml(user.name)}</strong></button>` : user ? `<button class="btn btn-secondary" id="switchRoleBtn">Switch role</button>` : ""}
         </div>
       </header>
       ${authenticatedWorkspace ? `<nav class="side-nav" aria-label="Primary navigation">${navigation}</nav>` : ""}
@@ -332,6 +332,8 @@ function renderShell(content) {
       </footer>
     </div>
   `;
+
+  document.getElementById("signOutBtn")?.addEventListener("click", async () => { await authService?.signOut(); authenticatedContext = null; state.currentUser = null; state.selectedDepartment = null; saveState(); renderLogin(); });
 
   document.getElementById("switchRoleBtn")?.addEventListener("click", () => {
     state.currentUser = null;
@@ -354,98 +356,64 @@ function renderShell(content) {
 
 }
 
-function renderLogin() {
+let authService = null;
+let authenticatedContext = null;
+
+function authMessage(code) {
+  const messages = {
+    ACCOUNT_SUSPENDED: "Your access is currently suspended. Contact Management.",
+    ACCOUNT_ARCHIVED: "This account is no longer active. Contact Management.",
+    ACCOUNT_INVITED: "Your account setup is not complete. Contact Management.",
+    MISSING_PROFILE: "Your account is not configured for SkillWard. Contact Management.",
+    MISSING_MEMBERSHIP: "Your account is not configured for SkillWard. Contact Management.",
+    CONFIGURATION_MISSING: "Secure sign-in is not configured for this deployment.",
+    CONTEXT_READ_FAILED: "We could not load your workplace access. Check your connection or contact Management.",
+    RECOVERY_INVALID: "This recovery link is invalid or has expired. Request a new link."
+  };
+  return messages[code] || "We could not sign you in. Check your details and try again.";
+}
+
+function renderLogin(message = "") {
   renderShell(`
     <div class="login-layout">
       <section class="login-intro">
-        <div class="hero-motion" aria-hidden="true">
-          <span class="motion-orb motion-orb-one"></span>
-          <span class="motion-orb motion-orb-two"></span>
-          <span class="motion-grid"></span>
-        </div>
+        <div class="hero-motion" aria-hidden="true"><span class="motion-orb motion-orb-one"></span><span class="motion-orb motion-orb-two"></span><span class="motion-grid"></span></div>
         <div class="login-label hero-reveal hero-reveal-1"><span></span> Healthcare workforce enablement</div>
-        <h2 class="hero-title" aria-label="Build your confidence before your first shift">
-          <span class="hero-line hero-reveal hero-reveal-2">Build Your Confidence</span>
-          <span class="hero-line hero-accent hero-reveal hero-reveal-3">Before Your First Shift<span class="typing-cursor" aria-hidden="true"></span></span>
-        </h2>
+        <h2 class="hero-title" aria-label="Build your confidence before your first shift"><span class="hero-line hero-reveal hero-reveal-2">Build Your Confidence</span><span class="hero-line hero-accent hero-reveal hero-reveal-3">Before Your First Shift<span class="typing-cursor" aria-hidden="true"></span></span></h2>
         <p class="hero-reveal hero-reveal-4">Structured, role-based learning that turns approved procedures into confident workplace practice.</p>
-        <div class="learning-flow" aria-label="SkillWard learning process">
-          <div><span>01</span><strong>Learn</strong><small>Role-based pathways</small></div>
-          <i aria-hidden="true"></i>
-          <div><span>02</span><strong>Validate</strong><small>Knowledge checks</small></div>
-          <i aria-hidden="true"></i>
-          <div><span>03</span><strong>Sign off</strong><small>Observed competency</small></div>
-        </div>
+        <div class="learning-flow" aria-label="SkillWard learning process"><div><span>01</span><strong>Learn</strong><small>Role-based pathways</small></div><i aria-hidden="true"></i><div><span>02</span><strong>Validate</strong><small>Knowledge checks</small></div><i aria-hidden="true"></i><div><span>03</span><strong>Sign off</strong><small>Observed competency</small></div></div>
         <p class="login-platform-note hero-reveal hero-reveal-5">Designed for hospital teams, trainers and frontline staff.</p>
       </section>
-      <div class="login-flip-shell">
-        <div class="login-flip" id="loginFlip">
-          <section class="card login-card login-card-front" id="welcomeCard">
-            <div class="get-started-logo">
-              <svg viewBox="0 0 48 54" focusable="false">
-                <title>SkillWard</title>
-                <path class="logo-shield" d="M24 2 44 9v16c0 13-8 22-20 28C12 47 4 38 4 25V9L24 2Z" />
-              </svg>
-            </div>
-            <h2>Get Started</h2>
-            <p class="login-card-intro">Enter your SkillWard workspace.</p>
-            <button class="btn btn-wide get-started-btn" id="getStartedBtn">Get Started <span aria-hidden="true">→</span></button>
-          </section>
+      <div class="login-flip-shell"><div class="login-flip" id="loginFlip">
+        <section class="card login-card login-card-front" id="welcomeCard"><div class="get-started-logo"><svg viewBox="0 0 48 54" focusable="false"><title>SkillWard</title><path class="logo-shield" d="M24 2 44 9v16c0 13-8 22-20 28C12 47 4 38 4 25V9L24 2Z" /></svg></div><h2>Get Started</h2><p class="login-card-intro">Enter your SkillWard workspace.</p><button class="btn btn-wide get-started-btn" id="getStartedBtn">Get Started <span aria-hidden="true">→</span></button></section>
+        <section class="card login-card login-card-back" id="workspaceCard" aria-hidden="true" inert>
+          <div class="access-label"><span></span> SKILLWARD ACCESS</div><h2>Enter your workspace</h2>
+          ${message ? `<p class="auth-status" role="status">${escapeHtml(message)}</p>` : ""}
+          <div class="entry-options" id="entryOptions"><button class="entry-option" id="showSignIn"><strong>Sign in to SkillWard</strong><small>Use your Management-issued account.</small></button><button class="entry-option" id="showDemo"><strong>Explore Demo Mode</strong><small>Uses sample data stored only in this browser.</small></button></div>
+          <form id="signInForm" class="access-form" hidden novalidate><h3>Sign in to SkillWard</h3><label><span>Email</span><input id="emailInput" type="email" autocomplete="username" inputmode="email" required /></label><label><span>Password</span><input id="passwordInput" type="password" autocomplete="current-password" required /></label><p id="authError" class="auth-status" role="alert"></p><button class="btn btn-wide login-submit" type="submit">Sign in <span aria-hidden="true">→</span></button><button class="link-button" type="button" id="forgotPassword">Forgot password?</button><button class="link-button backChoices" type="button">Back</button></form>
+          <form id="demoForm" class="access-form" hidden><h3>Demo Mode</h3><p class="small">Explore with sample browser data. Nothing in Demo Mode is written to Supabase.</p><label><span>Full name</span><input id="nameInput" type="text" autocomplete="name" placeholder="e.g. Alex Smith" required /></label><label><span>Workspace role</span><select id="roleInput"><option value="pca">PCA</option><option value="cleaner">Cleaner</option><option value="pca-trainer">PCA Trainer</option><option value="cleaner-trainer">Cleaner Trainer</option><option value="management">Management</option></select></label><button class="btn btn-wide login-submit" type="submit">Continue in Demo Mode <span aria-hidden="true">→</span></button><button class="link-button backChoices" type="button">Leave Demo Mode and return to sign-in</button></form>
+          <form id="resetForm" class="access-form" hidden><h3>Reset password</h3><p class="small">Enter your email. For privacy, the confirmation is always the same.</p><label><span>Email</span><input id="resetEmail" type="email" autocomplete="username" required /></label><button class="btn btn-wide" type="submit">Send recovery link</button><button class="link-button backChoices" type="button">Back</button></form>
+        </section>
+      </div></div>
+    </div>`);
+  const flip=document.getElementById("loginFlip"), welcome=document.getElementById("welcomeCard"), card=document.getElementById("workspaceCard");
+  document.getElementById("getStartedBtn").addEventListener("click",()=>{ flip.classList.add("is-flipped"); welcome.setAttribute("aria-hidden","true"); welcome.setAttribute("inert",""); card.removeAttribute("aria-hidden"); card.removeAttribute("inert"); });
+  const choices=document.getElementById("entryOptions"), forms=["signInForm","demoForm","resetForm"].map(id=>document.getElementById(id));
+  const show=id=>{ choices.hidden=true; forms.forEach(form=>form.hidden=form.id!==id); };
+  document.getElementById("showSignIn").addEventListener("click",()=>show("signInForm")); document.getElementById("showDemo").addEventListener("click",()=>show("demoForm")); document.getElementById("forgotPassword").addEventListener("click",()=>show("resetForm"));
+  document.querySelectorAll(".backChoices").forEach(b=>b.addEventListener("click",()=>{ forms.forEach(f=>f.hidden=true); choices.hidden=false; }));
+  document.getElementById("demoForm").addEventListener("submit",async event=>{ event.preventDefault(); const name=document.getElementById("nameInput").value.trim(); if(!name)return; await authService?.signOut(); authenticatedContext=null; state.currentUser={name,role:document.getElementById("roleInput").value,mode:"demo"}; state.selectedDepartment=null; if(state.currentUser.role==="pca")state.learnerName=name; saveState(); routeSignedInUser(); });
+  document.getElementById("signInForm").addEventListener("submit",async event=>{ event.preventDefault(); const form=event.currentTarget, button=form.querySelector("button[type=submit]"), error=document.getElementById("authError"); button.disabled=true; error.textContent="Signing in securely…"; try { state.currentUser=null; state.selectedDepartment=null; saveState(); authenticatedContext=await authService.signIn(document.getElementById("emailInput").value,document.getElementById("passwordInput").value); renderAuthenticatedWorkspace(); } catch(e) { error.textContent=authMessage(e.message); if(["MISSING_PROFILE","MISSING_MEMBERSHIP"].includes(e.message)) await authService?.signOut(); } finally { button.disabled=false; }});
+  document.getElementById("resetForm").addEventListener("submit",async event=>{ event.preventDefault(); const button=event.currentTarget.querySelector("button[type=submit]"); button.disabled=true; try { await authService.resetPassword(document.getElementById("resetEmail").value,`${location.origin}/skillward-training/?recovery=1`); } catch {} renderLogin("If an eligible account exists, a password recovery link has been sent."); });
+}
 
-          <section class="card login-card login-card-back" id="workspaceCard" aria-hidden="true" inert>
-            <div class="access-label"><span></span> SKILLWARD ACCESS</div>
-            <h2>Enter your workspace</h2>
-            <p class="login-card-intro">Choose your role to continue to the correct training environment.</p>
-            <label><span>Full name</span><input id="nameInput" type="text" placeholder="e.g. Alex Smith" /></label>
-            <label>
-              <span>Workspace role</span>
-              <select id="roleInput">
-                <option value="pca">PCA</option>
-                <option value="cleaner">Cleaner</option>
-                <option value="pca-trainer">PCA Trainer</option>
-                <option value="cleaner-trainer">Cleaner Trainer</option>
-                <option value="management">Management</option>
-              </select>
-            </label>
-            <button class="btn btn-wide login-submit" id="loginBtn">Continue to SkillWard <span aria-hidden="true">→</span></button>
-            <div class="access-note"><span aria-hidden="true">✓</span> Training access is organised by role and department.</div>
-          </section>
-        </div>
-      </div>
-    </div>
-  `);
-
-  const loginFlip = document.getElementById("loginFlip");
-  const welcomeCard = document.getElementById("welcomeCard");
-  const workspaceCard = document.getElementById("workspaceCard");
-
-  document.getElementById("getStartedBtn").addEventListener("click", () => {
-    loginFlip.classList.add("is-flipped");
-    welcomeCard.setAttribute("aria-hidden", "true");
-    welcomeCard.setAttribute("inert", "");
-    welcomeCard.inert = true;
-    workspaceCard.removeAttribute("aria-hidden");
-    workspaceCard.removeAttribute("inert");
-    workspaceCard.inert = false;
-    window.setTimeout(() => document.getElementById("nameInput").focus(), 480);
-  });
-
-  document.getElementById("loginBtn").addEventListener("click", () => {
-    const name = document.getElementById("nameInput").value.trim();
-    const role = document.getElementById("roleInput").value;
-
-    if (!name) {
-      alert("Please enter your name.");
-      return;
-    }
-
-    state.currentUser = { name, role };
-    state.selectedDepartment = null;
-    if (role === "pca") state.learnerName = name;
-    saveState();
-
-    routeSignedInUser();
-  });
+function renderAuthenticatedWorkspace() {
+  const c=authenticatedContext; if(!c)return renderLogin();
+  const departments=c.departmentDetails, role=c.membership.role;
+  if(role!=="Hospital Administrator" && !departments.length) return renderShell('<section class="card access-blocked"><h2>No assigned department</h2><p>Contact Management to have a department assigned.</p></section>');
+  const choose=departments.length>1 && ["Department Manager","PCA Trainer","Cleaner Trainer"].includes(role);
+  const title=role==="Hospital Administrator"?"Management Dashboard":role==="Department Manager"?"Department Management Workspace":`${role} ${role.includes("Trainer")?"Workspace":"Training Workspace"}`;
+  renderShell(`<section class="dashboard-hero"><div class="dashboard-welcome"><span class="eyebrow">AUTHENTICATED WORKSPACE</span><h2>${escapeHtml(title)}</h2><p>Your role and access are loaded securely from SkillWard's database.</p></div></section>${choose?`<section class="card"><label>Permitted department<select id="authenticatedDepartment">${departments.map(d=>`<option value="${escapeHtml(d.id)}">${escapeHtml(d.name)}</option>`).join("")}</select></label></section>`:""}<section class="card"><h3>${role==="Hospital Administrator"?"Hospital-wide Management access":escapeHtml(departments[0]?.name||"Assigned access")}</h3><p>${c.trainingAssignments.length?`${c.trainingAssignments.length} assigned training pathway(s) loaded.`:"No assigned training pathways are available."}</p>${role.includes("Trainer")?`<p>${c.trainerAssignments.length} compatible trainee assignment(s) loaded.</p>`:""}<p class="small">This development integration provides safe read-only dashboard loading. Privileged changes remain unavailable.</p></section>`);
 }
 
 function routeCurrentUser() {
@@ -534,7 +502,7 @@ function renderManagementDashboard() {
   const updateBulk=()=>{const count=document.querySelectorAll('.bulk-select:checked').length;document.getElementById('selectionCount').textContent=`${count} selected`;document.getElementById('applyBulk').disabled=!count||!document.getElementById('bulkAction').value;};
   document.querySelectorAll('.bulk-select').forEach(el=>el.addEventListener('change',updateBulk)); document.getElementById('bulkAction').addEventListener('change',updateBulk);
   document.getElementById('applyBulk').addEventListener('click',()=>{const ids=[...document.querySelectorAll('.bulk-select:checked')].map(el=>el.dataset.id),status=document.getElementById('bulkAction').value;confirmChange(`Apply ${status} to ${ids.map(id=>store.data.staff.find(p=>p.id===id)?.name+' · '+id).join(', ')}?`,()=>store.bulk(actor,ids,{accountStatus:status},true));});
-  document.getElementById('inviteStaff').addEventListener('click',()=>confirmChange(`Simulate an invitation for a new ${department.name} staff profile?`,()=>store.invite(actor,{id:`EMP-${Date.now().toString().slice(-6)}`,name:'Invited Staff Member',email:'invited@example.test',role:'PCA',departments:[department.id],startDate:new Date().toISOString().slice(0,10),employmentStatus:'New Starter'})));
+  document.getElementById('inviteStaff').addEventListener('click',async()=>{ const Service=globalThis.SkillWardServices?.InvitationService; const result=Service ? await new Service().invite({email:'',role:'PCA',departmentId:department.id}) : {message:'Staff invitations are not available in this development integration. A protected Management service must be deployed first.'}; alert(result.message); });
   document.querySelectorAll('.staff-profile').forEach(button=>button.addEventListener('click',()=>{const person=store.data.staff.find(p=>p.id===button.dataset.id),trainer=store.data.staff.find(p=>p.id===person.trainerId);document.getElementById('staffProfilePanel').innerHTML=`<article class="staff-detail"><span class="eyebrow">STAFF PROFILE</span><h3>${escapeHtml(person.name)}</h3><span class="employee-id">${person.id}</span><p>${escapeHtml(person.email)}</p><dl><div><dt>Role</dt><dd>${person.role}</dd></div><div><dt>Department</dt><dd>${person.departments.map(departmentName).join(', ')}</dd></div><div><dt>Trainer</dt><dd>${trainer?`${escapeHtml(trainer.name)}<small>${trainer.id}</small>`:'Not assigned'}</dd></div><div><dt>Account</dt><dd>${person.accountStatus}</dd></div></dl></article>`;}));
   document.querySelectorAll('.approve-signoff,.reassess-signoff').forEach(button=>button.addEventListener('click',()=>{const card=button.closest('.review-card'),record=workflowRecords().find(item=>item.id===card.dataset.id),reassess=button.classList.contains('reassess-signoff'),feedback=card.querySelector('.management-feedback').value.trim();if(reassess&&!feedback)return alert('Enter feedback for the trainer before requesting reassessment.');record.status=reassess?'Reassessment Required':'Approved';record.feedback=feedback||'Management approved final competency.';saveState();renderManagementDashboard();}));
 }
@@ -907,8 +875,19 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
-if (!state.currentUser) {
+async function bootstrap() {
+  if (!globalThis.SkillWardServices) return state.currentUser ? routeSignedInUser() : renderLogin();
+  authService = new globalThis.SkillWardServices.AuthService();
+  const recovery = new URLSearchParams(globalThis.location?.search || "").get("recovery") === "1";
+  if (recovery) return renderPasswordUpdate();
+  if (state.currentUser?.mode === "demo" || (state.currentUser && !state.currentUser.mode)) return routeSignedInUser();
+  renderShell('<section class="card"><h2>Loading SkillWard…</h2><p>Resolving your secure session and workplace access.</p></section>');
+  authService.onChange((event) => { if (event === "SIGNED_OUT" || event === "TOKEN_REFRESHED" && !authenticatedContext) { authenticatedContext = null; renderLogin("Your session has expired. Please sign in again."); } });
+  try { authenticatedContext = await authService.restore(); if (authenticatedContext) return renderAuthenticatedWorkspace(); } catch (error) { await authService.signOut(); return renderLogin(authMessage(error.message)); }
   renderLogin();
-} else {
-  routeSignedInUser();
 }
+function renderPasswordUpdate() {
+  renderShell(`<section class="card recovery-card"><h2>Choose a new password</h2><form id="updatePasswordForm"><label><span>New password</span><input id="newPassword" type="password" autocomplete="new-password" minlength="12" required></label><label><span>Confirm password</span><input id="confirmPassword" type="password" autocomplete="new-password" minlength="12" required></label><p id="recoveryError" role="alert"></p><button class="btn" type="submit">Update password</button></form></section>`);
+  document.getElementById("updatePasswordForm").addEventListener("submit", async event => { event.preventDefault(); const password=document.getElementById("newPassword").value, confirmation=document.getElementById("confirmPassword").value, error=document.getElementById("recoveryError"); if(password.length<12 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password) || password!==confirmation){ error.textContent="Use at least 12 characters with upper-case, lower-case and a number, and make both entries match."; return; } try { await authService.updatePassword(password); await authService.signOut(); history.replaceState({},"",location.pathname); renderLogin("Password updated. Sign in with your new password."); } catch(e) { error.textContent=authMessage(e.message); } });
+}
+bootstrap();

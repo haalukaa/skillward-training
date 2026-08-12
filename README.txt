@@ -58,3 +58,6 @@ NEXT DEVELOPMENT STAGE
 
 DATABASE FOUNDATION
 See docs/database.md for the version-controlled, local-only Supabase schema, security model, tests and setup. The current demonstration application does not import or depend on it.
+
+SUPABASE AUTHENTICATION DEVELOPMENT INTEGRATION
+See docs/authentication.md for the authentication architecture, Demo Mode separation, GitHub Pages configuration, exact redirect URLs, invitation limitation, troubleshooting, and production requirements. Public sign-up is not provided. Authenticated role and department access come only from RLS-protected database records.
