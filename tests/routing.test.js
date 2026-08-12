@@ -27,9 +27,9 @@ test("PCA, Cleaner and Management retain department selection", () => {
 
 test("trainer roles route to role-specific, assigned-department dashboards", () => {
   const pca = session("pca-trainer").html;
-  assert.match(pca, /PCA Trainer Dashboard/); assert.match(pca, /Operating Theatre &amp; Recovery/); assert.match(pca, /Day Surgery/); assert.doesNotMatch(pca, /Gastro/); assert.doesNotMatch(pca, /Cleaner trainees/);
+  assert.match(pca, /PCA Trainer Workspace/); assert.match(pca, /Operating Theatre &amp; Recovery/); assert.match(pca, /Day Surgery/); assert.doesNotMatch(pca, /Gastro/); assert.doesNotMatch(pca, /Cleaner trainees/);
   const cleaner = session("cleaner-trainer").html;
-  assert.match(cleaner, /Cleaner Trainer Dashboard/); assert.match(cleaner, /Gastro/); assert.doesNotMatch(cleaner, /Day Surgery/); assert.doesNotMatch(cleaner, /PCA trainees/);
+  assert.match(cleaner, /Cleaner Trainer Workspace/); assert.match(cleaner, /Gastro/); assert.doesNotMatch(cleaner, /Day Surgery/); assert.doesNotMatch(cleaner, /PCA trainees/);
 });
 
 test("an unassigned trainer URL department is replaced with an assigned department", () => {
@@ -40,7 +40,7 @@ test("an unassigned trainer URL department is replaced with an assigned departme
 
 test("management dashboard stays department scoped and provides trainer assignments and final approval", () => {
   const html = session("management", "day-surgery").html;
-  for (const text of ["Day Surgery", "Department assignments", "PCA Trainer", "Cleaner Trainer", "Sign-off recommendations", "Approve", "Request reassessment", "Management feedback", "Training content coming soon"]) assert.match(html, new RegExp(text));
+  for (const text of ["Day Surgery", "Staff department assignments", "Trainer department assignments", "Staff-to-trainer assignments", "PCA Trainer", "Cleaner Trainer", "Sign-off recommendations", "Approve", "Request reassessment", "Management feedback", "Training content coming soon"]) assert.match(html, new RegExp(text));
   assert.match(html, /Hospital-wide workspace|Emergency Department/); assert.doesNotMatch(html, /open-module|Complete sign-off/);
 });
 
@@ -48,7 +48,7 @@ test("known Department Manager direct navigation is safely restricted", () => {
   const result = session("management", "gastro", "Priya Nair");
   assert.equal(result.saved().selectedDepartment, "operating-theatre");
   assert.doesNotMatch(result.html, /option value="gastro"/);
-  assert.match(result.html, /Assigned departments only/);
+  assert.match(result.html, /Department management workspace/);
 });
 
 test("management directory exposes filters, bulk confirmation, profiles and read-only audit", () => {
@@ -69,8 +69,8 @@ test("all six workflow statuses and audit fields are implemented", () => {
 });
 
 test("legacy learner and trainer sessions remain compatible", () => {
-  assert.match(session("learner", "operating-theatre").html, /MY LEARNING/);
-  assert.match(session("trainer").html, /PCA Trainer Dashboard/);
+  assert.match(session("learner", "operating-theatre").html, /PCA Training Hub/);
+  assert.match(session("trainer").html, /PCA Trainer Workspace/);
 });
 
 test("landing content and mobile full-name field remain present", () => {
@@ -82,4 +82,28 @@ test("authenticated navigation retains desktop and mobile destinations", () => {
   const html = session("management", "operating-theatre").html;
   assert.equal((html.match(/class="side-nav"/g) || []).length, 1); assert.equal((html.match(/class="bottom-nav"/g) || []).length, 1);
   for (const label of ["Home", "Training", "Staff", "Reports"]) assert.match(html, new RegExp(`>${label}<`));
+});
+
+test("management presentation has no fictional hospital, separates IDs, and exposes every filter", () => {
+  const html = session("management", "operating-theatre", "Unusual Demo Name").html;
+  assert.doesNotMatch(html, /St Catherine|Hospital name:/i);
+  assert.match(html, /SkillWard Hospital Administration/);
+  assert.match(html, /Management Dashboard/);
+  assert.match(html, /Alex Morgan<\/strong><small>EMP-1001/);
+  assert.doesNotMatch(html, /Alex MorganEMP-1001/);
+  for (const text of ["Trainer", "Manager", "Training progress", "Overdue status", "Review and apply"]) assert.match(html, new RegExp(text));
+  assert.match(html, /User profile: Unusual Demo Name/);
+});
+
+test("role and department headers are contextual", () => {
+  assert.match(session("pca", "operating-theatre").html, /Operating Theatre &amp; Recovery · PCA Training Hub/);
+  assert.match(session("cleaner", "operating-theatre").html, /Operating Theatre &amp; Recovery · Cleaner Training Hub/);
+  assert.match(session("management", "day-surgery", "Priya Nair").html, /Day Surgery · Department management workspace/);
+  assert.match(session("cleaner-trainer", "gastro").html, /Gastro · Cleaner Trainer Workspace/);
+});
+
+test("temporary text logo badges are absent while accessible shield placeholders remain", () => {
+  const html = session("management", "operating-theatre").html;
+  assert.doesNotMatch(html, />SW<|logo-letters/);
+  assert.match(html, /<title>SkillWard<\/title>/);
 });

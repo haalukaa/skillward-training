@@ -1,6 +1,8 @@
 /* Demonstration records only. Replace this adapter with authenticated API data in production. */
 window.SKILLWARD_MANAGEMENT_SAMPLE = {
-  hospital: { id: "st-catherines", name: "St Catherine's Hospital" },
+  // Kept configurable for the production hospital-administrator/API adapter.
+  // Demonstration mode deliberately has no hospital identity configured.
+  hospital: { id: null, name: null },
   trainerCapacity: 3,
   managers: [
     { id: "MGR-001", name: "Dr Maya Chen", level: "Hospital Administrator", departments: ["operating-theatre", "day-surgery", "acute-surgical-unit", "dialysis", "gastro", "emergency-department"], accountStatus: "Active" },
