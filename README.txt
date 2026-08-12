@@ -15,8 +15,10 @@ WHAT IS INCLUDED
 - Knowledge checks
 - 80% quiz pass mark
 - Saved progress using browser localStorage
-- Trainer dashboard
-- Read-only, department-scoped management dashboards with staff, progress, competency and compliance reporting
+- Department-scoped PCA and Cleaner trainer dashboards
+- Management trainer assignments and final competency approval
+- Audited trainer recommendation and reassessment workflow
+- Department-scoped management dashboards with staff, progress, competency and compliance reporting
 - Four-item authenticated navigation with a desktop side menu and mobile bottom bar
 - Management access boundary that excludes clinical lessons, assessments and content editing
 - Practical competency sign-off
@@ -50,6 +52,6 @@ NEXT DEVELOPMENT STAGE
 2. Replace preview text with approved procedures.
 3. Add approved photos and videos.
 4. Add real accounts and a secure database.
-5. Add trainer permissions and audit history.
+5. Connect trainer permissions and audit history to secure server APIs.
 6. Add certificates, refresher dates and reporting.
 7. Pilot with a small number of staff.
