@@ -19,7 +19,9 @@ create function public.validate_department_membership() returns trigger language
  if not exists(select 1 from public.hospital_memberships h where h.hospital_id=new.hospital_id and h.user_id=new.user_id and h.role=new.role and h.account_status='Active') then raise exception 'Department role requires an active matching hospital membership'; end if; return new; end $$;
 create trigger validate_department_membership before insert or update on public.department_memberships for each row execute function public.validate_department_membership();
 create function public.validate_trainer_assignment() returns trigger language plpgsql set search_path='' as $$ begin
- if not ((new.trainer_role='PCA Trainer' and new.trainee_role='PCA') or (new.trainer_role='Cleaner Trainer' and new.trainee_role='Cleaner')) then raise exception 'Incompatible trainer and trainee roles'; end if;
+ -- Use the check-violation SQLSTATE deliberately: role compatibility is a
+ -- row invariant, even though the membership lookups require a trigger.
+ if not ((new.trainer_role='PCA Trainer' and new.trainee_role='PCA') or (new.trainer_role='Cleaner Trainer' and new.trainee_role='Cleaner')) then raise exception using errcode='23514', message='Incompatible trainer and trainee roles'; end if;
  if not exists(select 1 from public.department_memberships d where d.hospital_id=new.hospital_id and d.department_id=new.department_id and d.user_id=new.trainer_user_id and d.role=new.trainer_role and d.is_active) or not exists(select 1 from public.department_memberships d where d.hospital_id=new.hospital_id and d.department_id=new.department_id and d.user_id=new.trainee_user_id and d.role=new.trainee_role and d.is_active) then raise exception 'Trainer and trainee require active access to the same hospital and department'; end if; return new; end $$;
 create trigger validate_trainer_assignment before insert or update on public.trainer_assignments for each row execute function public.validate_trainer_assignment();
 create function public.audit_append_only() returns trigger language plpgsql set search_path='' as $$ begin raise exception 'Audit logs are append-only'; end $$;
