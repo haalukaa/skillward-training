@@ -230,3 +230,28 @@ window.COMPETENCY_ITEMS = [
   "Follows hand hygiene, PPE and theatre-cleaning requirements",
   "Completes final safety and quality checks"
 ];
+
+// Preview reporting data for the read-only management dashboard. This is kept
+// separate from approved training content so management users can see workforce
+// status without being given access to lessons, quizzes or clinical procedures.
+window.MANAGEMENT_DEPARTMENTS = [
+  { name: "Operating Theatre & Recovery", staff: 42, complete: 79, signoffs: 4, compliance: "On track", tone: "success" },
+  { name: "Day Surgery", staff: 18, complete: 68, signoffs: 3, compliance: "Attention", tone: "warning" },
+  { name: "Acute Surgical Unit", staff: 31, complete: 84, signoffs: 2, compliance: "On track", tone: "success" },
+  { name: "Dialysis", staff: 24, complete: 91, signoffs: 1, compliance: "On track", tone: "success" },
+  { name: "Gastro", staff: 16, complete: 63, signoffs: 3, compliance: "Attention", tone: "warning" },
+  { name: "Emergency Department", staff: 55, complete: 72, signoffs: 5, compliance: "At risk", tone: "danger" }
+];
+
+window.MANAGEMENT_SIGNOFFS = [
+  { staff: "Maya Chen", role: "PCA", department: "Operating Theatre & Recovery", competency: "Patient transport", waiting: "2 days" },
+  { staff: "Noah Williams", role: "Cleaner", department: "Emergency Department", competency: "Infection prevention", waiting: "3 days" },
+  { staff: "Priya Nair", role: "PCA", department: "Day Surgery", competency: "Safe patient movement", waiting: "4 days" },
+  { staff: "Liam Osei", role: "Cleaner", department: "Gastro", competency: "Room turnover", waiting: "5 days" }
+];
+
+window.MANAGEMENT_ALERTS = [
+  { level: "High", title: "Mandatory refreshers overdue", detail: "6 Emergency Department staff require infection-prevention refreshers.", due: "Action now", tone: "danger" },
+  { level: "Medium", title: "Completion below target", detail: "Gastro training completion is 63%, below the 75% monthly target.", due: "Due 16 Aug", tone: "warning" },
+  { level: "Medium", title: "Sign-offs awaiting review", detail: "3 Day Surgery competencies have been awaiting trainer review for more than 48 hours.", due: "Due 14 Aug", tone: "warning" }
+];

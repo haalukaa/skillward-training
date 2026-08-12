@@ -49,7 +49,18 @@ test("PCA and Cleaner users are sent to department selection", () => {
 test("trainer and management users are sent directly to their dashboards", () => {
   assert.match(renderForRole("pca-trainer"), /Trainer Dashboard/);
   assert.match(renderForRole("cleaner-trainer"), /Cleaner Trainer Workspace/);
-  assert.match(renderForRole("management"), /Management Workspace/);
+  assert.match(renderForRole("management"), /Workforce training at a glance/);
+});
+
+test("management receives a read-only, all-department reporting dashboard", () => {
+  const html = renderForRole("management");
+  assert.match(html, /Workforce training at a glance/);
+  assert.match(html, /Read-only workforce reporting/);
+  assert.match(html, /Operating Theatre &amp; Recovery/);
+  assert.match(html, /Emergency Department/);
+  assert.match(html, /Pending sign-offs/);
+  assert.match(html, /Alerts requiring attention/);
+  assert.doesNotMatch(html, /open-module|signoffBtn|Complete sign-off/);
 });
 
 test("legacy trainer sessions continue directly to the PCA trainer dashboard", () => {

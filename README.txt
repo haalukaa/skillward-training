@@ -16,6 +16,8 @@ WHAT IS INCLUDED
 - 80% quiz pass mark
 - Saved progress using browser localStorage
 - Trainer dashboard
+- Read-only management dashboard with organisation-wide staff, progress, department, competency and compliance reporting
+- Management access boundary that excludes clinical lessons, assessments and content editing
 - Practical competency sign-off
 - Mobile-friendly layout
 - SkillWard healthcare brand system
