@@ -14,32 +14,30 @@ end
 $$;
 set local role postgres;
 
--- PostgreSQL table privileges are checked before RLS. Supabase test roles need
--- the same operation-level privileges an API deployment would receive so these
--- tests exercise policies rather than stopping at GRANT checks. These grants
--- are test-only because the entire harness is rolled back at the end.
-grant usage on schema public to anon, authenticated;
-grant select on public.hospitals to anon;
-grant select on all tables in schema public to authenticated;
-grant insert, update, delete on public.hospital_memberships,
-  public.department_memberships, public.trainer_assignments,
-  public.module_progress, public.knowledge_check_attempts,
-  public.practical_observations, public.signoff_recommendations,
-  public.competency_records, public.audit_logs to authenticated;
-
-select plan(33);
+-- Do not add test-only grants here: role switches must exercise the exact base
+-- privileges installed by the ordered migrations, just like PostgREST does.
+select plan(39);
 select is((select count(*)::int from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname=any(array['hospitals','departments','user_profiles','hospital_memberships','department_memberships','trainer_assignments','trainer_capacity','training_pathways','training_modules','lessons','knowledge_questions','knowledge_answer_options','training_assignments','module_progress','knowledge_check_attempts','practical_observations','signoff_recommendations','competency_records','notifications','staff_invitations','transfer_history','audit_logs']) and c.relrowsecurity),22,'every application table has RLS');
 set local role anon;
-select is((select count(*)::int from public.hospitals),0,'anonymous cannot read hospitals');
+select throws_ok($$select * from public.hospitals$$,'42501',null,'anonymous has no protected table access');
 reset role; set local role postgres; select set_config('request.jwt.claim.sub','',true); select set_config('request.jwt.claim.role','',true);
+select ok(
+  has_schema_privilege('authenticated','public','USAGE')
+  and has_table_privilege('authenticated','public.user_profiles','SELECT')
+  and has_table_privilege('authenticated','public.hospital_memberships','SELECT')
+  and not has_table_privilege('authenticated','public.knowledge_answer_options','SELECT')
+  and not has_table_privilege('authenticated','public.audit_logs','INSERT,UPDATE,DELETE'),
+  'authenticated receives only the required sensitive-table privilege boundary'
+);
 create or replace function pg_temp.as_user(uid uuid) returns void language plpgsql as $$ begin perform set_config('request.jwt.claim.sub',uid::text,true); perform set_config('request.jwt.claim.role','authenticated',true); execute 'set local role authenticated'; end $$;
 select pg_temp.as_user('10000000-0000-0000-0000-000000000003');
-select is((select count(*)::int from public.hospitals),1,'PCA hospital is isolated'); select is((select count(*)::int from public.user_profiles),1,'PCA sees own profile only'); select is((select count(*)::int from public.training_assignments),1,'PCA sees own assignment'); select is((select count(*)::int from public.departments),1,'PCA sees assigned department'); select is((select count(*)::int from public.knowledge_answer_options),0,'trainee cannot read correct answers');
+select is((select count(*)::int from public.hospitals),1,'PCA hospital is isolated'); select is((select count(*)::int from public.user_profiles),1,'PCA sees own profile only'); select is((select count(*)::int from public.training_assignments),1,'PCA sees own assignment'); select is((select count(*)::int from public.departments),1,'PCA sees assigned department'); select throws_ok($$select * from public.knowledge_answer_options$$,'42501',null,'trainee has no privilege to read correct answers');
 reset role; set local role postgres; select set_config('request.jwt.claim.sub','',true); select set_config('request.jwt.claim.role','',true); select pg_temp.as_user('10000000-0000-0000-0000-000000000004'); select is((select count(*)::int from public.training_assignments where user_id='10000000-0000-0000-0000-000000000003'),0,'Cleaner cannot access PCA assignment');
 reset role; set local role postgres; select set_config('request.jwt.claim.sub','',true); select set_config('request.jwt.claim.role','',true); select pg_temp.as_user('10000000-0000-0000-0000-000000000005'); select is((select count(*)::int from public.trainer_assignments),1,'PCA Trainer sees assigned PCA only'); select is((select count(*)::int from public.departments),1,'PCA Trainer sees assigned departments only'); with attempted as (update public.signoff_recommendations set management_decision='Approved' where id='a1200000-0000-0000-0000-000000000001' returning 1) select is(count(*)::int,0,'trainer cannot final approve') from attempted;
 reset role; set local role postgres; select set_config('request.jwt.claim.sub','',true); select set_config('request.jwt.claim.role','',true); select pg_temp.as_user('10000000-0000-0000-0000-000000000006'); select is((select count(*)::int from public.trainer_assignments),1,'Cleaner Trainer sees assigned Cleaner only'); select is((select count(*)::int from public.departments),1,'Cleaner Trainer sees assigned departments only');
 reset role; set local role postgres; select set_config('request.jwt.claim.sub','',true); select set_config('request.jwt.claim.role','',true); select pg_temp.as_user('10000000-0000-0000-0000-000000000002'); select is((select count(*)::int from public.departments),1,'manager cannot access unassigned department'); select throws_ok($$insert into public.hospital_memberships(hospital_id,user_id,role) values ('a0000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000004','Hospital Administrator')$$,'42501',null,'manager cannot promote administrator');
-reset role; set local role postgres; select set_config('request.jwt.claim.sub','',true); select set_config('request.jwt.claim.role','',true); select pg_temp.as_user('10000000-0000-0000-0000-000000000001'); select is((select count(*)::int from public.hospitals),1,'administrator limited to own hospital');
+reset role; set local role postgres; select set_config('request.jwt.claim.sub','',true); select set_config('request.jwt.claim.role','',true); select pg_temp.as_user('10000000-0000-0000-0000-000000000001'); select is((select count(*)::int from public.hospitals),1,'administrator limited to own hospital'); select is((select count(*)::int from public.user_profiles where user_id=auth.uid()),1,'authenticated bootstrapped administrator loads own profile'); select is((select count(*)::int from public.hospital_memberships where user_id=auth.uid()),1,'authenticated bootstrapped administrator loads own membership');
+select throws_ok($$insert into public.audit_logs(hospital_id,action_type,record_type,record_id) values ('a0000000-0000-0000-0000-000000000001','tamper','test','a1300000-0000-0000-0000-000000000001')$$,'42501',null,'authenticated administrator cannot insert audit logs'); select throws_ok($$update public.audit_logs set reason='tamper' where id='a1300000-0000-0000-0000-000000000001'$$,'42501',null,'authenticated administrator cannot update audit logs'); select throws_ok($$delete from public.audit_logs where id='a1300000-0000-0000-0000-000000000001'$$,'42501',null,'authenticated administrator cannot delete audit logs');
 reset role; set local role postgres; select set_config('request.jwt.claim.sub','',true); select set_config('request.jwt.claim.role','',true); select throws_ok($$update public.hospital_memberships set account_status='Suspended' where id='aa000000-0000-0000-0000-000000000001'$$,'P0001','Cannot remove, suspend, archive, or demote the final active Hospital Administrator','final administrator cannot be suspended'); select throws_ok($$delete from public.hospital_memberships where id='aa000000-0000-0000-0000-000000000001'$$,'P0001','Cannot remove, suspend, archive, or demote the final active Hospital Administrator','final administrator cannot be removed');
 update public.user_profiles set account_status='Suspended' where user_id='10000000-0000-0000-0000-000000000003'; select pg_temp.as_user('10000000-0000-0000-0000-000000000003'); select is((select count(*)::int from public.hospitals),0,'suspended account blocked'); reset role; set local role postgres; select set_config('request.jwt.claim.sub','',true); select set_config('request.jwt.claim.role','',true);
 update public.user_profiles set account_status='Archived',archived_at=now() where user_id='10000000-0000-0000-0000-000000000004'; select pg_temp.as_user('10000000-0000-0000-0000-000000000004'); select is((select count(*)::int from public.hospitals),0,'archived account blocked'); reset role; set local role postgres; select set_config('request.jwt.claim.sub','',true); select set_config('request.jwt.claim.role','',true);

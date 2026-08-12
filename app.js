@@ -368,6 +368,7 @@ function authMessage(code) {
     MISSING_MEMBERSHIP: "Your account is not configured for SkillWard. Contact Management.",
     CONFIGURATION_MISSING: "Secure sign-in is not configured for this deployment.",
     CONTEXT_READ_FAILED: "We could not load your workplace access. Check your connection or contact Management.",
+    CONTEXT_TABLE_PERMISSION: "We could not load your workplace access. Check your connection or contact Management.",
     RECOVERY_INVALID: "This recovery link is invalid or has expired. Request a new link."
   };
   return messages[code] || "We could not sign you in. Check your details and try again.";

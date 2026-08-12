@@ -26,6 +26,8 @@ erDiagram
 
 Every application table has RLS enabled and forced. Anonymous access has no policies. Membership helpers evaluate `auth.uid()` on the server and reject suspended/archived profiles. Hospital Administrators are tenant-bound; Department Managers are explicitly department-bound; learners see their own records; trainers see compatible, assigned trainees. Correct-answer rows have no authenticated read policy. Trainers can recommend but Management alone can decide. Audit logs have no client mutation policy and an append-only trigger. A final-active-administrator trigger prevents suspension, archive, deletion, or demotion.
 
+PostgreSQL base privileges are intentionally separate from row authorization. The `authenticated` API role receives schema usage and only the table operations for which an RLS policy exists; RLS then decides which rows each request may affect. The migration explicitly withholds all protected-table access from `anon`, all browser access to knowledge-answer options, and every authenticated audit-log mutation. Projects created with automatic table exposure disabled therefore work without relying on permissive Dashboard defaults.
+
 The role helpers use `SECURITY DEFINER` only to avoid recursive membership-policy evaluation. They use an empty search path, qualified objects, and authenticated-only execution. The competency expiry function requires cross-tenant scheduler access and is executable only by `service_role`; it must run in trusted server infrastructure, never a browser.
 
 ## Local setup

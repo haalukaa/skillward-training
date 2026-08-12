@@ -34,7 +34,7 @@ test_sql = (ROOT / "supabase" / "tests" / "database.test.sql").read_text(
     encoding="utf-8"
 )
 plan = re.search(r"select\s+plan\((\d+)\)", test_sql, re.IGNORECASE)
-assert plan and int(plan.group(1)) == 33, "pgTAP plan must contain exactly 33 assertions"
+assert plan and int(plan.group(1)) == 39, "pgTAP plan must contain exactly 39 assertions"
 
 env_lines = (ROOT / ".env.example").read_text(encoding="utf-8").splitlines()
 values = {
@@ -79,4 +79,4 @@ for path in automatic_files:
     )
 
 print(f"Validated {len(files)} ordered migrations, {len(TABLES)} RLS tables, "
-      "33 pgTAP assertions, and the manual bootstrap safety contract.")
+      "39 pgTAP assertions, and the manual bootstrap safety contract.")
