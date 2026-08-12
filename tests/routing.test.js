@@ -53,7 +53,8 @@ test("known Department Manager direct navigation is safely restricted", () => {
 
 test("management directory exposes filters, bulk confirmation, profiles and read-only audit", () => {
   const html = session("management", "operating-theatre").html;
-  for (const text of ["STAFF DIRECTORY", "Name, employee ID or email", "All roles", "All departments", "All account statuses", "All employment statuses", "All competencies", "Bulk action", "Audit history", "Read only", "Demonstration mode"]) assert.match(html, new RegExp(text));
+  for (const text of ["STAFF DIRECTORY", "Name, employee ID or email", "All roles", "All departments", "All account statuses", "All employment statuses", "All competencies", "Bulk action", "Audit history", "Read only"]) assert.match(html, new RegExp(text));
+  assert.doesNotMatch(html, /Demonstration mode/);
 });
 
 test("trainer workspace includes monitoring, filters, profiles and assessment-only controls", () => {
@@ -87,8 +88,10 @@ test("authenticated navigation retains desktop and mobile destinations", () => {
 test("management presentation has no fictional hospital, separates IDs, and exposes every filter", () => {
   const html = session("management", "operating-theatre", "Unusual Demo Name").html;
   assert.doesNotMatch(html, /St Catherine|Hospital name:/i);
-  assert.match(html, /SkillWard Hospital Administration/);
-  assert.match(html, /Management Dashboard/);
+  assert.doesNotMatch(html, /SkillWard Hospital Administration|Hospital Administrator/);
+  assert.equal((html.match(/Management Dashboard/g) || []).length, 1);
+  assert.equal((html.match(/Hospital-wide workspace/g) || []).length, 1);
+  assert.match(html, /class="role-pill">Management/);
   assert.match(html, /Alex Morgan<\/strong><small>EMP-1001/);
   assert.doesNotMatch(html, /Alex MorganEMP-1001/);
   for (const text of ["Trainer", "Manager", "Training progress", "Overdue status", "Review and apply"]) assert.match(html, new RegExp(text));
