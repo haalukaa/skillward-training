@@ -8,7 +8,8 @@ const defaultState = {
   practicalSignoff: false,
   trainerComments: "",
   trainerAssignments: null,
-  traineeRecords: null
+  traineeRecords: null,
+  managementData: null
 };
 
 const DEPARTMENTS = [
@@ -102,6 +103,15 @@ function assignmentDirectory() {
   return state.trainerAssignments;
 }
 
+function managementStore() {
+  if (!state.managementData) state.managementData = JSON.parse(JSON.stringify(SKILLWARD_MANAGEMENT_SAMPLE));
+  return SkillWardManagement.createStore(state.managementData);
+}
+
+function currentManager(store = managementStore()) {
+  return store.data.managers.find(item => item.name.toLowerCase() === state.currentUser.name.toLowerCase()) || store.data.managers.find(item => item.level === "Hospital Administrator" && item.accountStatus === "Active");
+}
+
 function currentTrainerRecord() {
   const role = state.currentUser?.role;
   const named = assignmentDirectory().find(item => item.role === role && item.name.toLowerCase() === state.currentUser.name.toLowerCase());
@@ -124,6 +134,14 @@ function statusTone(status) {
 
 function routeSignedInUser() {
   normalizeCurrentUserRole();
+
+  const known = state.currentUser?.role === "management"
+    ? managementStore().data.managers.find(item => item.name.toLowerCase() === state.currentUser.name.toLowerCase())
+    : managementStore().data.staff.find(item => item.name.toLowerCase() === state.currentUser?.name?.toLowerCase());
+  if (known && ["Suspended", "Archived"].includes(known.accountStatus)) {
+    renderShell(`<section class="card access-blocked"><h2>Access unavailable</h2><p>${known.accountStatus === "Suspended" ? "Your access is suspended. Contact Management for assistance." : "This account is archived and cannot sign in."}</p></section>`);
+    return;
+  }
 
   if (state.currentUser?.role?.includes("trainer")) {
     const assigned = assignedDepartmentsForCurrentTrainer();
@@ -464,8 +482,11 @@ function renderRoleWorkspace(role) {
 
 function renderManagementDashboard() {
   if (state.currentUser?.role !== "management") return routeSignedInUser();
+  const store = managementStore();
+  const actor = currentManager(store);
   const department = DEPARTMENTS.find(item => item.id === state.selectedDepartment);
   if (!department) return renderDepartmentSelection();
+  if (!store.actorCanAccess(actor, department.id)) { state.selectedDepartment = actor.departments[0] || null; saveState(); return state.selectedDepartment ? renderManagementDashboard() : renderShell('<section class="card access-blocked"><h2>No department access</h2><p>Ask a Hospital Administrator to assign a department.</p></section>'); }
   const report = MANAGEMENT_REPORTS[state.selectedDepartment];
   const trainers = assignmentDirectory();
   const records = workflowRecords().filter(item => item.department === state.selectedDepartment);
@@ -474,16 +495,29 @@ function renderManagementDashboard() {
     return `<label class="assignment-row"><span><strong>${escapeHtml(trainer.name)}</strong><small>${workplaceRoleLabel(trainer.role)}</small></span><input class="trainer-assignment" type="checkbox" data-id="${trainer.id}" ${assigned ? "checked" : ""} /></label>`;
   }).join("");
   const recommendations = records.filter(item => item.status === "Sent to Management").map(item => `<article class="review-card" data-id="${item.id}"><div><strong>${escapeHtml(item.name)}</strong><span>${item.role} · ${escapeHtml(item.feedback || "Trainer recommendation")}</span></div><label>Management feedback<textarea class="management-feedback" placeholder="Required when requesting reassessment"></textarea></label><div><button class="btn approve-signoff">Approve</button><button class="btn btn-danger reassess-signoff">Request reassessment</button></div></article>`).join("");
-  const staffRows = records.map(person => `<tr><td><strong>${escapeHtml(person.name)}</strong><small>${person.id}</small></td><td>${person.role}</td><td>${person.progress}%</td><td><span class="status-chip status-${statusTone(person.status)}">${person.status}</span></td></tr>`).join("");
+  const visibleStaff = store.data.staff.filter(person => actor.level === "Hospital Administrator" || person.departments.some(id => actor.departments.includes(id)));
+  const staffRows = visibleStaff.map(person => `<tr class="directory-row" data-search="${escapeHtml((person.name + ' ' + person.id + ' ' + person.email).toLowerCase())}" data-role="${escapeHtml(person.role)}" data-department="${escapeHtml(person.departments.join(' '))}" data-account="${person.accountStatus}" data-employment="${person.employmentStatus}" data-competency="${person.competencyStatus}"><td><input type="checkbox" class="bulk-select" data-id="${person.id}" aria-label="Select ${escapeHtml(person.name)}"> <button class="link-button staff-profile" data-id="${person.id}">${escapeHtml(person.name)}</button><small>${person.id}</small></td><td>${person.role}</td><td>${person.departments.map(departmentName).map(escapeHtml).join(', ')}</td><td>${person.progress}%</td><td><span class="status-chip status-${person.accountStatus === 'Suspended' ? 'danger' : person.accountStatus === 'Active' ? 'success' : 'warning'}">${person.accountStatus}</span></td></tr>`).join("");
 
   renderShell(`
-    <section class="management-title" id="home"><div><span class="eyebrow">MANAGEMENT OVERVIEW</span><h2>${escapeHtml(department.name)}</h2><span class="readonly-label">Department scope</span></div><button class="btn btn-secondary" id="changeDepartmentBtn">Switch Department</button></section>
+    <section class="management-title" id="home"><div><span class="eyebrow">${escapeHtml(actor.level.toUpperCase())}</span><h2>${actor.level === 'Hospital Administrator' ? escapeHtml(store.data.hospital.name) : escapeHtml(department.name)}</h2><span class="readonly-label">${actor.level === 'Hospital Administrator' ? 'Hospital-wide workspace' : 'Assigned departments only'}</span></div><button class="btn btn-secondary" id="changeDepartmentBtn">Switch Department</button></section>
+    <section class="demo-warning"><strong>Demonstration mode</strong><span>These controls use sample browser data and are not production authentication or security.</span></section>
     <div class="stats-grid management-stats"><div class="stat-card"><span>Total PCA staff</span><strong>${report.pca}</strong></div><div class="stat-card"><span>Total Cleaner staff</span><strong>${report.cleaners}</strong></div><div class="stat-card stat-complete"><span>Completed training</span><strong>${report.completed}</strong></div><div class="stat-card stat-overdue"><span>Overdue training</span><strong>${report.overdue}</strong></div></div>
     <section class="card dashboard-card management-section" id="training"><div class="section-heading"><div><span class="eyebrow">TRAINER ACCESS</span><h3>Department assignments</h3></div><span class="small">Trainer roles only</span></div><p class="readonly-note">Assign PCA Trainers and Cleaner Trainers to this department. Individual learners cannot be assigned here.</p><div class="assignment-list">${assignments}</div></section>
     <section class="card dashboard-card management-section" id="reports"><div class="section-heading"><div><span class="eyebrow">FINAL APPROVAL</span><h3>Sign-off recommendations</h3></div><span class="count-badge">${records.filter(item => item.status === "Sent to Management").length}</span></div><div class="review-list">${recommendations || '<p class="empty-state">No recommendations awaiting Management.</p>'}</div></section>
-    <section class="card dashboard-card management-section" id="staff"><div class="section-heading"><div><span class="eyebrow">STAFF</span><h3>Individual staff records</h3></div><span class="small">${escapeHtml(department.name)} only</span></div><div class="table-wrap"><table><thead><tr><th>Staff member</th><th>Role</th><th>Progress</th><th>Sign-off status</th></tr></thead><tbody>${staffRows}</tbody></table></div></section>
+    <section class="card dashboard-card management-section" id="staff"><div class="section-heading"><div><span class="eyebrow">STAFF DIRECTORY</span><h3>Profiles and assignments</h3></div><button class="btn" id="inviteStaff">Invite staff</button></div>
+      <div class="directory-filters"><input id="staffSearch" type="search" placeholder="Name, employee ID or email"><select id="roleFilter"><option value="all">All roles</option>${['PCA','Cleaner','PCA Trainer','Cleaner Trainer'].map(v=>`<option>${v}</option>`).join('')}</select><select id="departmentFilter"><option value="all">All departments</option>${DEPARTMENTS.filter(d=>actor.departments.includes(d.id)).map(d=>`<option value="${d.id}">${d.name}</option>`).join('')}</select><select id="accountFilter"><option value="all">All account statuses</option>${store.ACCOUNT_STATUSES.map(v=>`<option>${v}</option>`).join('')}</select><select id="employmentFilter"><option value="all">All employment statuses</option>${store.EMPLOYMENT_STATUSES.map(v=>`<option>${v}</option>`).join('')}</select><select id="competencyFilter"><option value="all">All competencies</option><option>Not Started</option><option>In Progress</option><option>Approved</option><option>Reassessment Required</option></select></div>
+      <div class="bulk-bar"><strong id="selectionCount">0 selected</strong><select id="bulkAction"><option value="">Bulk action</option><option value="Suspended">Suspend access</option><option value="Archived">Archive accounts</option></select><button class="btn btn-secondary" id="applyBulk">Review and apply</button></div><div class="table-wrap"><table><thead><tr><th>Staff member</th><th>Role</th><th>Department</th><th>Progress</th><th>Account</th></tr></thead><tbody>${staffRows}</tbody></table></div><p id="emptyDirectory" class="empty-state" hidden>No staff match these filters.</p><div id="staffProfilePanel"></div></section>
+    <section class="card dashboard-card management-section" id="audit"><div class="section-heading"><div><span class="eyebrow">PERMANENT HISTORY</span><h3>Audit history</h3></div><span class="small">Read only</span></div><div class="audit-feed">${store.data.audit.slice(0,20).map(a=>`<article><strong>${escapeHtml(a.action)}</strong><span>${escapeHtml(a.staffName)} · ${escapeHtml(a.actor)} (${escapeHtml(a.actorRole)})</span><small>${escapeHtml(a.at)} · ${escapeHtml(a.department || 'Hospital')} ${a.reason ? '· '+escapeHtml(a.reason) : ''}</small></article>`).join('') || '<p class="empty-state">No management changes recorded yet.</p>'}</div></section>
     <section class="card coming-soon"><h3>Training content coming soon</h3><p>Management can monitor training and approve competency, but cannot edit clinical training content.</p></section>
   `);
+
+  const persistManagement = () => { state.managementData = store.data; saveState(); };
+  const filterDirectory = () => { let shown=0; document.querySelectorAll('.directory-row').forEach(row=>{ const ok=row.dataset.search.includes(document.getElementById('staffSearch').value.toLowerCase()) && [['role','roleFilter'],['department','departmentFilter'],['account','accountFilter'],['employment','employmentFilter'],['competency','competencyFilter']].every(([key,id])=>document.getElementById(id).value==='all'||row.dataset[key].includes(document.getElementById(id).value)); row.hidden=!ok; if(ok)shown++; }); document.getElementById('emptyDirectory').hidden=shown>0; };
+  document.querySelectorAll('.directory-filters input,.directory-filters select').forEach(el=>el.addEventListener(el.tagName==='INPUT'?'input':'change',filterDirectory));
+  document.querySelectorAll('.bulk-select').forEach(el=>el.addEventListener('change',()=>document.getElementById('selectionCount').textContent=`${document.querySelectorAll('.bulk-select:checked').length} selected`));
+  document.getElementById('inviteStaff').addEventListener('click',()=>{ const id=`EMP-${Date.now().toString().slice(-6)}`; if(!confirm(`Simulate an invitation for a new ${department.name} staff profile?`))return; try{store.invite(actor,{id,name:'Invited Staff Member',email:`${id.toLowerCase()}@example.test`,role:'PCA',departments:[department.id],trainerId:null,managerId:actor.level==='Department Manager'?actor.id:null,startDate:new Date().toISOString().slice(0,10),employmentStatus:'New Starter'});persistManagement();alert('Invitation simulated. The profile is awaiting activation.');renderManagementDashboard();}catch(error){alert(error.message);} });
+  document.getElementById('applyBulk').addEventListener('click',()=>{ const ids=[...document.querySelectorAll('.bulk-select:checked')].map(el=>el.dataset.id), accountStatus=document.getElementById('bulkAction').value; if(!ids.length||!accountStatus)return alert('Select staff and a bulk action.'); if(!confirm(`Apply ${accountStatus} to ${ids.length} profile(s)? Every profile will be audited.`))return; try{store.bulk(actor,ids,{accountStatus},true);persistManagement();renderManagementDashboard();}catch(error){alert(error.message);} });
+  document.querySelectorAll('.staff-profile').forEach(button=>button.addEventListener('click',()=>{ const person=store.data.staff.find(p=>p.id===button.dataset.id), trainer=store.data.staff.find(p=>p.id===person.trainerId), manager=store.data.managers.find(p=>p.id===person.managerId), assignments=store.data.assignments.filter(a=>a.staffId===person.id); document.getElementById('staffProfilePanel').innerHTML=`<article class="staff-detail"><div><span class="eyebrow">STAFF PROFILE</span><h3>${escapeHtml(person.name)}</h3><p>${escapeHtml(person.email)} · ${person.id}</p></div><dl><div><dt>Role</dt><dd>${person.role}</dd></div><div><dt>Hospital</dt><dd>${escapeHtml(store.data.hospital.name)}</dd></div><div><dt>Department</dt><dd>${person.departments.map(departmentName).join(', ')}</dd></div><div><dt>Trainer</dt><dd>${escapeHtml(trainer?.name||'Not assigned')} ${trainer ? `(${store.trainerCapacity(trainer.id).active}/${store.trainerCapacity(trainer.id).capacity})` : ''}</dd></div><div><dt>Manager</dt><dd>${escapeHtml(manager?.name||'Not assigned')}</dd></div><div><dt>Employment</dt><dd>${person.employmentStatus} · ${person.startDate}</dd></div><div><dt>Account</dt><dd>${person.accountStatus}</dd></div><div><dt>Competency</dt><dd>${person.competencyStatus}</dd></div></dl><h4>Required pathways and deadlines</h4>${assignments.map(a=>`<p><strong>${escapeHtml(a.pathway)}</strong> · ${a.progress}% · due ${a.dueDate} · ${a.managementApprovalStatus}</p>`).join('')||'<p class="empty-state">No pathway assigned.</p>'}<div class="profile-actions">${person.accountStatus==='Suspended'?'<button class="btn" id="accountAction">Reactivate</button>':person.accountStatus!=='Archived'?'<button class="btn btn-danger" id="accountAction">Suspend Access</button>':''}</div></article>`; document.getElementById('accountAction')?.addEventListener('click',()=>{ const next=person.accountStatus==='Suspended'?'Active':'Suspended'; if(!confirm(`${next==='Suspended'?'Suspend access for':'Reactivate'} ${person.name}?`))return; try{store.setAccountStatus(actor,person.id,next);persistManagement();renderManagementDashboard();}catch(error){alert(error.message);} }); }));
 
   document.querySelectorAll(".trainer-assignment").forEach(input => input.addEventListener("change", () => {
     const trainer = assignmentDirectory().find(item => item.id === input.dataset.id);

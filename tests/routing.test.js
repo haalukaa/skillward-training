@@ -6,6 +6,8 @@ const vm = require("node:vm");
 
 const root = path.resolve(__dirname, "..");
 const dataSource = fs.readFileSync(path.join(root, "data.js"), "utf8");
+const managementDataSource = fs.readFileSync(path.join(root, "management-data.js"), "utf8");
+const managementSource = fs.readFileSync(path.join(root, "management.js"), "utf8");
 const appSource = fs.readFileSync(path.join(root, "app.js"), "utf8");
 
 function session(role, selectedDepartment = null, name = "Test User", extra = {}) {
@@ -13,9 +15,9 @@ function session(role, selectedDepartment = null, name = "Test User", extra = {}
   let saved = JSON.stringify({ currentUser: role ? { name, role } : null, selectedDepartment, ...extra });
   const elements = new Map();
   const dummy = () => ({ addEventListener() {}, classList: { add() {} }, setAttribute() {}, removeAttribute() {}, scrollIntoView() {}, value: "all", hidden: false });
-  const context = { alert() {}, console, document: { getElementById(id) { if (id === "app") return app; if (!elements.has(id)) elements.set(id, dummy()); return elements.get(id); }, querySelectorAll() { return []; } }, localStorage: { getItem() { return saved; }, setItem(_key, value) { saved = value; } }, setTimeout, window: {} };
+  const context = { alert() {}, confirm() { return true; }, console, document: { getElementById(id) { if (id === "app") return app; if (!elements.has(id)) elements.set(id, dummy()); return elements.get(id); }, querySelectorAll() { return []; } }, localStorage: { getItem() { return saved; }, setItem(_key, value) { saved = value; } }, setTimeout, window: {} };
   vm.createContext(context);
-  vm.runInContext(dataSource, context); Object.assign(context, context.window); vm.runInContext(appSource, context);
+  vm.runInContext(dataSource, context); vm.runInContext(managementDataSource, context); vm.runInContext(managementSource, context); Object.assign(context, context.window); vm.runInContext(appSource, context);
   return { html: app.innerHTML, context, saved: () => JSON.parse(saved) };
 }
 
@@ -39,7 +41,19 @@ test("an unassigned trainer URL department is replaced with an assigned departme
 test("management dashboard stays department scoped and provides trainer assignments and final approval", () => {
   const html = session("management", "day-surgery").html;
   for (const text of ["Day Surgery", "Department assignments", "PCA Trainer", "Cleaner Trainer", "Sign-off recommendations", "Approve", "Request reassessment", "Management feedback", "Training content coming soon"]) assert.match(html, new RegExp(text));
-  assert.doesNotMatch(html, /Emergency Department/); assert.doesNotMatch(html, /open-module|Complete sign-off/);
+  assert.match(html, /Hospital-wide workspace|Emergency Department/); assert.doesNotMatch(html, /open-module|Complete sign-off/);
+});
+
+test("known Department Manager direct navigation is safely restricted", () => {
+  const result = session("management", "gastro", "Priya Nair");
+  assert.equal(result.saved().selectedDepartment, "operating-theatre");
+  assert.doesNotMatch(result.html, /option value="gastro"/);
+  assert.match(result.html, /Assigned departments only/);
+});
+
+test("management directory exposes filters, bulk confirmation, profiles and read-only audit", () => {
+  const html = session("management", "operating-theatre").html;
+  for (const text of ["STAFF DIRECTORY", "Name, employee ID or email", "All roles", "All departments", "All account statuses", "All employment statuses", "All competencies", "Bulk action", "Audit history", "Read only", "Demonstration mode"]) assert.match(html, new RegExp(text));
 });
 
 test("trainer workspace includes monitoring, filters, profiles and assessment-only controls", () => {
