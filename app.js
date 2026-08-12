@@ -6,7 +6,9 @@ const defaultState = {
   learnerName: "Staff Learner",
   moduleProgress: {},
   practicalSignoff: false,
-  trainerComments: ""
+  trainerComments: "",
+  trainerAssignments: null,
+  traineeRecords: null
 };
 
 const DEPARTMENTS = [
@@ -90,8 +92,44 @@ function normalizeCurrentUserRole() {
   }
 }
 
+function workflowRecords() {
+  if (!Array.isArray(state.traineeRecords)) state.traineeRecords = JSON.parse(JSON.stringify(TRAINEE_RECORDS));
+  return state.traineeRecords;
+}
+
+function assignmentDirectory() {
+  if (!Array.isArray(state.trainerAssignments)) state.trainerAssignments = JSON.parse(JSON.stringify(TRAINER_DIRECTORY));
+  return state.trainerAssignments;
+}
+
+function currentTrainerRecord() {
+  const role = state.currentUser?.role;
+  const named = assignmentDirectory().find(item => item.role === role && item.name.toLowerCase() === state.currentUser.name.toLowerCase());
+  return named || assignmentDirectory().find(item => item.role === role);
+}
+
+function assignedDepartmentsForCurrentTrainer() {
+  return currentTrainerRecord()?.departments || [];
+}
+
+function departmentName(id) {
+  return DEPARTMENTS.find(item => item.id === id)?.name || id;
+}
+
+function statusTone(status) {
+  if (status === "Approved") return "success";
+  if (status === "Reassessment Required") return "danger";
+  return status === "Not Started" ? "neutral" : "warning";
+}
+
 function routeSignedInUser() {
   normalizeCurrentUserRole();
+
+  if (state.currentUser?.role?.includes("trainer")) {
+    const assigned = assignedDepartmentsForCurrentTrainer();
+    if (!assigned.includes(state.selectedDepartment)) state.selectedDepartment = assigned[0] || null;
+    saveState();
+  }
 
   if (DEPARTMENT_SELECTION_ROLES.has(state.currentUser.role) && !state.selectedDepartment) {
     renderDepartmentSelection();
@@ -384,7 +422,7 @@ function routeCurrentUser() {
 
   if (role === "pca") {
     renderLearnerDashboard();
-  } else if (role === "pca-trainer") {
+  } else if (role === "pca-trainer" || role === "cleaner-trainer") {
     renderTrainerDashboard();
   } else {
     renderRoleWorkspace(role);
@@ -425,65 +463,47 @@ function renderRoleWorkspace(role) {
 }
 
 function renderManagementDashboard() {
+  if (state.currentUser?.role !== "management") return routeSignedInUser();
   const department = DEPARTMENTS.find(item => item.id === state.selectedDepartment);
   if (!department) return renderDepartmentSelection();
   const report = MANAGEMENT_REPORTS[state.selectedDepartment];
-  const signoffRows = report.signoffs.map(item => `
-    <tr><td><strong>${escapeHtml(item.staff)}</strong><small>${escapeHtml(item.role)}</small></td><td>${escapeHtml(item.competency)}</td><td><span class="status-chip status-warning">${escapeHtml(item.waiting)}</span></td></tr>
-  `).join("");
-  const alerts = report.alerts.map(alert => `
-    <article class="compliance-alert alert-${alert.tone}">
-      <span class="alert-indicator" aria-hidden="true">!</span>
-      <div><span class="status-chip status-${alert.tone}">${alert.level}</span><h4>${alert.title}</h4><p>${alert.detail}</p></div>
-      <strong>${alert.due}</strong>
-    </article>
-  `).join("");
-  const staffRows = report.staff.map(person => `
-    <tr class="staff-record" data-role="${person.role.toLowerCase().replace(" ", "-")}" data-status="${person.status.toLowerCase().replaceAll(" ", "-")}">
-      <td><strong>${escapeHtml(person.name)}</strong><small>${escapeHtml(person.id)}</small></td><td>${escapeHtml(person.role)}</td>
-      <td><div class="management-progress" aria-label="${person.progress}% complete"><span><i style="width:${person.progress}%"></i></span><strong>${person.progress}%</strong></div></td>
-      <td><span class="status-chip status-${person.tone}">${escapeHtml(person.status)}</span></td><td>${escapeHtml(person.due)}</td>
-    </tr>`).join("");
+  const trainers = assignmentDirectory();
+  const records = workflowRecords().filter(item => item.department === state.selectedDepartment);
+  const assignments = trainers.map(trainer => {
+    const assigned = trainer.departments.includes(state.selectedDepartment);
+    return `<label class="assignment-row"><span><strong>${escapeHtml(trainer.name)}</strong><small>${workplaceRoleLabel(trainer.role)}</small></span><input class="trainer-assignment" type="checkbox" data-id="${trainer.id}" ${assigned ? "checked" : ""} /></label>`;
+  }).join("");
+  const recommendations = records.filter(item => item.status === "Sent to Management").map(item => `<article class="review-card" data-id="${item.id}"><div><strong>${escapeHtml(item.name)}</strong><span>${item.role} · ${escapeHtml(item.feedback || "Trainer recommendation")}</span></div><label>Management feedback<textarea class="management-feedback" placeholder="Required when requesting reassessment"></textarea></label><div><button class="btn approve-signoff">Approve</button><button class="btn btn-danger reassess-signoff">Request reassessment</button></div></article>`).join("");
+  const staffRows = records.map(person => `<tr><td><strong>${escapeHtml(person.name)}</strong><small>${person.id}</small></td><td>${person.role}</td><td>${person.progress}%</td><td><span class="status-chip status-${statusTone(person.status)}">${person.status}</span></td></tr>`).join("");
 
   renderShell(`
-    <section class="management-title" id="home">
-      <div><span class="eyebrow">MANAGEMENT OVERVIEW</span><h2>${escapeHtml(department.name)}</h2><span class="readonly-label">View only</span></div>
-      <button class="btn btn-secondary" id="changeDepartmentBtn">Switch Department</button>
-    </section>
-    <div class="stats-grid management-stats">
-      <div class="stat-card"><span>Total PCA staff</span><strong>${report.pca}</strong><small>${report.pcaTrainers} PCA Trainers</small></div>
-      <div class="stat-card"><span>Total Cleaner staff</span><strong>${report.cleaners}</strong><small>${report.cleanerTrainers} Cleaner ${report.cleanerTrainers === 1 ? "Trainer" : "Trainers"}</small></div>
-      <div class="stat-card stat-complete"><span>Completed training</span><strong>${report.completed}</strong><small>${report.inProgress} Training in progress</small></div>
-      <div class="stat-card stat-overdue"><span>Overdue training</span><strong>${report.overdue}</strong><small>${report.signoffs.length} pending sign-offs</small></div>
-    </div>
-    <section class="card dashboard-card management-section" id="training">
-      <div class="section-heading"><div><span class="eyebrow">TRAINING PROGRESS</span><h3>Department performance summary</h3></div><strong>${report.progress}%</strong></div>
-      <div class="performance-bar"><span style="width:${report.progress}%"></span></div>
-      <div class="progress-legend"><span><i class="legend-complete"></i>${report.completed} completed</span><span><i class="legend-pending"></i>${report.inProgress} in progress</span><span><i class="legend-overdue"></i>${report.overdue} overdue</span></div>
-      <button class="btn">Continue Training</button>
-    </section>
-    <section class="card dashboard-card management-section" id="reports"><div class="section-heading"><div><span class="eyebrow">COMPLIANCE</span><h3>Compliance alerts</h3></div><span class="count-badge">${report.alerts.length}</span></div><div class="alert-list">${alerts || '<p class="empty-state">No compliance alerts.</p>'}</div></section>
-    <section class="card dashboard-card management-section"><div class="section-heading"><div><span class="eyebrow">COMPETENCY</span><h3>Pending competency sign-offs</h3></div><button class="btn">Review Sign-offs</button></div><div class="table-wrap"><table><thead><tr><th>Staff member</th><th>Competency</th><th>Waiting</th></tr></thead><tbody>${signoffRows}</tbody></table></div><p class="readonly-note">Authorised trainers complete sign-offs. Management access is view only.</p></section>
-    <section class="card dashboard-card management-section" id="staff">
-      <div class="section-heading"><div><span class="eyebrow">STAFF</span><h3>Individual staff records</h3></div><span class="small">Sample data · Updated 12 Aug 2026</span></div>
-      <div class="staff-tools"><label><span class="sr-only">Search staff</span><input id="staffSearch" type="search" placeholder="Search staff by name or ID" /></label><label><span class="sr-only">Filter staff</span><select id="staffFilter"><option value="all">All staff</option><option value="pca">PCA</option><option value="cleaner">Cleaner</option><option value="overdue">Overdue</option><option value="in-progress">In progress</option></select></label></div>
-      <div class="table-wrap"><table><thead><tr><th>Staff member</th><th>Role</th><th>Progress</th><th>Status</th><th>Next due</th></tr></thead><tbody>${staffRows}</tbody></table></div><p class="empty-state" id="noStaff" hidden>No staff match your search.</p>
-    </section>
+    <section class="management-title" id="home"><div><span class="eyebrow">MANAGEMENT OVERVIEW</span><h2>${escapeHtml(department.name)}</h2><span class="readonly-label">Department scope</span></div><button class="btn btn-secondary" id="changeDepartmentBtn">Switch Department</button></section>
+    <div class="stats-grid management-stats"><div class="stat-card"><span>Total PCA staff</span><strong>${report.pca}</strong></div><div class="stat-card"><span>Total Cleaner staff</span><strong>${report.cleaners}</strong></div><div class="stat-card stat-complete"><span>Completed training</span><strong>${report.completed}</strong></div><div class="stat-card stat-overdue"><span>Overdue training</span><strong>${report.overdue}</strong></div></div>
+    <section class="card dashboard-card management-section" id="training"><div class="section-heading"><div><span class="eyebrow">TRAINER ACCESS</span><h3>Department assignments</h3></div><span class="small">Trainer roles only</span></div><p class="readonly-note">Assign PCA Trainers and Cleaner Trainers to this department. Individual learners cannot be assigned here.</p><div class="assignment-list">${assignments}</div></section>
+    <section class="card dashboard-card management-section" id="reports"><div class="section-heading"><div><span class="eyebrow">FINAL APPROVAL</span><h3>Sign-off recommendations</h3></div><span class="count-badge">${records.filter(item => item.status === "Sent to Management").length}</span></div><div class="review-list">${recommendations || '<p class="empty-state">No recommendations awaiting Management.</p>'}</div></section>
+    <section class="card dashboard-card management-section" id="staff"><div class="section-heading"><div><span class="eyebrow">STAFF</span><h3>Individual staff records</h3></div><span class="small">${escapeHtml(department.name)} only</span></div><div class="table-wrap"><table><thead><tr><th>Staff member</th><th>Role</th><th>Progress</th><th>Sign-off status</th></tr></thead><tbody>${staffRows}</tbody></table></div></section>
+    <section class="card coming-soon"><h3>Training content coming soon</h3><p>Management can monitor training and approve competency, but cannot edit clinical training content.</p></section>
   `);
-  const filterStaff = () => {
-    const query = document.getElementById("staffSearch").value.trim().toLowerCase();
-    const filter = document.getElementById("staffFilter").value;
-    let visible = 0;
-    document.querySelectorAll(".staff-record").forEach(row => {
-      const matchesQuery = row.textContent.toLowerCase().includes(query);
-      const matchesFilter = filter === "all" || row.dataset.role === filter || row.dataset.status === filter;
-      row.hidden = !(matchesQuery && matchesFilter);
-      if (!row.hidden) visible++;
-    });
-    document.getElementById("noStaff").hidden = visible > 0;
-  };
-  document.getElementById("staffSearch").addEventListener("input", filterStaff);
-  document.getElementById("staffFilter").addEventListener("change", filterStaff);
+
+  document.querySelectorAll(".trainer-assignment").forEach(input => input.addEventListener("change", () => {
+    const trainer = assignmentDirectory().find(item => item.id === input.dataset.id);
+    trainer.departments = input.checked ? [...new Set([...trainer.departments, state.selectedDepartment])] : trainer.departments.filter(id => id !== state.selectedDepartment);
+    saveState();
+  }));
+  document.querySelectorAll(".approve-signoff, .reassess-signoff").forEach(button => button.addEventListener("click", () => {
+    const card = button.closest(".review-card");
+    const record = workflowRecords().find(item => item.id === card.dataset.id);
+    const reassess = button.classList.contains("reassess-signoff");
+    const feedback = card.querySelector(".management-feedback").value.trim();
+    if (reassess && !feedback) return alert("Enter feedback for the trainer before requesting reassessment.");
+    const previous = record.status;
+    record.status = reassess ? "Reassessment Required" : "Approved";
+    record.reviewStatus = reassess ? "Reassessment" : "Complete";
+    record.feedback = feedback || "Management approved final competency.";
+    record.history.unshift({ actor: state.currentUser.name, role: "Management", action: reassess ? "Requested reassessment" : "Approved competency", at: new Date().toLocaleString("en-AU"), detail: record.feedback, previousStatus: previous, newStatus: record.status });
+    saveState();
+    renderManagementDashboard();
+  }));
 }
 
 function renderDepartmentSelection() {
@@ -808,97 +828,40 @@ function renderQuiz(moduleId) {
 }
 
 function renderTrainerDashboard() {
-  const completedLessons = TRAINING_MODULES.filter(m => getModuleState(m.id).lessonComplete).length;
-  const passed = passedModules();
-
-  const rows = TRAINING_MODULES.map(module => {
-    const m = getModuleState(module.id);
-    return `
-      <tr>
-        <td>${getArea(module.area)?.name || "—"}</td>
-        <td>${module.title}</td>
-        <td>${m.lessonComplete ? "Completed" : "Not completed"}</td>
-        <td>${m.quizPassed ? `Passed (${m.quizScore}%)` : m.quizScore ? `Not passed (${m.quizScore}%)` : "Not attempted"}</td>
-      </tr>
-    `;
-  }).join("");
-
-  renderShell(`
-    <section class="dashboard-hero trainer-hero">
-      <div class="dashboard-welcome">
-        <span class="eyebrow">TRAINER WORKSPACE</span>
-        <h2>Trainer Dashboard</h2>
-        <p>Monitor learning progress and record observed practical competency.</p>
-      </div>
-      <div class="trainer-identity">
-        <span>Signed in as</span>
-        <strong>${escapeHtml(state.currentUser.name)}</strong>
-      </div>
-    </section>
-
-    <div class="stats-grid trainer-stats">
-      <div class="stat-card"><span>Lessons completed</span><strong>${completedLessons}/${TRAINING_MODULES.length}</strong></div>
-      <div class="stat-card"><span>Quizzes passed</span><strong>${passed}/${TRAINING_MODULES.length}</strong></div>
-      <div class="stat-card"><span>Practical sign-off</span><strong class="status-word">${state.practicalSignoff ? "Complete" : "Pending"}</strong></div>
-    </div>
-
-    <section class="card dashboard-card">
-      <h3>Learner: ${escapeHtml(state.learnerName)}</h3>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Area</th><th>Module</th><th>Lesson</th><th>Quiz</th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>
-    </section>
-
-    <section class="card dashboard-card">
-      <h3>Practical competency sign-off</h3>
-      <p class="small">The trainer should only sign off after directly observing the learner perform the approved practical tasks.</p>
-
-      ${COMPETENCY_ITEMS.map((item, index) => `
-        <label class="check-row">
-          <input type="checkbox" class="competencyCheck" />
-          <span>${item}</span>
-        </label>
-      `).join("")}
-
-      <label>
-        Trainer comments
-        <textarea id="trainerComments" placeholder="Strengths, corrections or actions required">${escapeHtml(state.trainerComments || "")}</textarea>
-      </label>
-
-      <button class="btn" id="signoffBtn">${state.practicalSignoff ? "Update sign-off" : "Complete sign-off"}</button>
-      <div id="signoffResult"></div>
-    </section>
-
-    <p class="footer-note">This preview stores progress only in this browser. Secure accounts and central reporting will be enabled before operational use.</p>
-  `);
-
-  document.getElementById("signoffBtn").addEventListener("click", () => {
-    const checks = [...document.querySelectorAll(".competencyCheck")];
-    const allChecked = checks.every(c => c.checked);
-    const result = document.getElementById("signoffResult");
-
-    if (passed < TRAINING_MODULES.length) {
-      result.className = "result result-fail";
-      result.textContent = "The learner must pass all module quizzes before final sign-off.";
-      return;
-    }
-
-    if (!allChecked) {
-      result.className = "result result-fail";
-      result.textContent = "Confirm every observed competency item before signing off.";
-      return;
-    }
-
-    state.practicalSignoff = true;
-    state.trainerComments = document.getElementById("trainerComments").value.trim();
+  const role = state.currentUser?.role;
+  if (!role?.includes("trainer")) return routeSignedInUser();
+  const assigned = assignedDepartmentsForCurrentTrainer();
+  if (!assigned.includes(state.selectedDepartment)) {
+    state.selectedDepartment = assigned[0] || null;
     saveState();
+  }
+  const roleLabel = role === "pca-trainer" ? "PCA" : "Cleaner";
+  const records = workflowRecords().filter(item => item.role === roleLabel && assigned.includes(item.department));
+  const activeRecords = records.filter(item => item.department === state.selectedDepartment);
+  const options = assigned.map(id => `<option value="${id}" ${id === state.selectedDepartment ? "selected" : ""}>${escapeHtml(departmentName(id))}</option>`).join("");
+  const rows = activeRecords.map(item => `<tr class="trainee-row" data-search="${escapeHtml((item.name + ' ' + item.id).toLowerCase())}" data-progress="${item.progress === 100 ? 'complete' : 'in-progress'}" data-overdue="${item.overdue}" data-review="${escapeHtml(item.reviewStatus.toLowerCase().replaceAll(' ', '-'))}" data-signoff="${escapeHtml(item.status.toLowerCase().replaceAll(' ', '-'))}"><td><button class="link-button open-profile" data-id="${item.id}">${escapeHtml(item.name)}</button><small>${item.id}</small></td><td>${item.progress}%</td><td>${item.knowledge.at(-1)?.score || 0}%</td><td><span class="status-chip status-${statusTone(item.status)}">${item.status}</span></td><td>${item.overdue ? '<span class="status-chip status-danger">Overdue</span>' : 'On track'}</td></tr>`).join("");
+  renderShell(`
+    <section class="dashboard-hero trainer-hero" id="home"><div class="dashboard-welcome"><span class="eyebrow">${roleLabel.toUpperCase()} TRAINER WORKSPACE</span><h2>${roleLabel} Trainer Dashboard</h2><p>Monitor progress, record observations and recommend sign-off.</p></div><div class="trainer-identity"><span>Assigned departments</span><strong>${assigned.length}</strong></div></section>
+    ${assigned.length ? `<section class="department-switcher"><label>Department<select id="trainerDepartment">${options}</select></label><span>${assigned.map(departmentName).map(escapeHtml).join(" · ")}</span></section>` : '<section class="card alert-danger"><h3>No department assigned</h3><p>Ask Management to assign a department.</p></section>'}
+    <div class="stats-grid trainer-stats"><div class="stat-card"><span>${roleLabel} trainees</span><strong>${activeRecords.length}</strong></div><div class="stat-card"><span>Pending reviews</span><strong>${activeRecords.filter(i => i.status === 'Ready for Trainer Review' || i.status === 'Reassessment Required').length}</strong></div><div class="stat-card stat-overdue"><span>Overdue training</span><strong>${activeRecords.filter(i => i.overdue).length}</strong></div><div class="stat-card"><span>Recommendations sent</span><strong>${activeRecords.filter(i => i.status === 'Sent to Management').length}</strong></div></div>
+    <section class="card dashboard-card" id="staff"><div class="section-heading"><div><span class="eyebrow">TRAINEES</span><h3>Training and competency</h3></div></div><div class="trainer-filters"><input id="traineeSearch" type="search" placeholder="Search trainees"><select id="progressFilter"><option value="all">All progress</option><option value="complete">Complete</option><option value="in-progress">In progress</option></select><select id="overdueFilter"><option value="all">All due dates</option><option value="true">Overdue</option><option value="false">On track</option></select><select id="reviewFilter"><option value="all">All reviews</option><option value="pending-review">Pending review</option><option value="reassessment">Reassessment</option></select><select id="signoffFilter"><option value="all">All sign-offs</option><option value="sent-to-management">Sent to Management</option><option value="approved">Approved</option></select></div><div class="table-wrap"><table><thead><tr><th>Trainee</th><th>Progress</th><th>Latest result</th><th>Sign-off</th><th>Due</th></tr></thead><tbody>${rows}</tbody></table></div><p id="noTrainees" class="empty-state" ${activeRecords.length ? 'hidden' : ''}>No ${roleLabel} trainees in this assigned department.</p></section>
+    <section class="card coming-soon" id="training"><h3>Training content coming soon</h3><p>Trainer access is assessment-only. Content editing and Management settings are unavailable.</p></section><div id="profilePanel"></div>
+  `);
+  document.getElementById("trainerDepartment")?.addEventListener("change", event => { if (assigned.includes(event.target.value)) { state.selectedDepartment = event.target.value; saveState(); renderTrainerDashboard(); } });
+  const applyFilters = () => { let visible = 0; document.querySelectorAll(".trainee-row").forEach(row => { const match = row.dataset.search.includes(document.getElementById("traineeSearch").value.toLowerCase()) && ["progress", "overdue", "review", "signoff"].every(key => { const value = document.getElementById(`${key}Filter`).value; return value === "all" || row.dataset[key] === value; }); row.hidden = !match; if (match) visible++; }); document.getElementById("noTrainees").hidden = visible > 0; };
+  document.querySelectorAll(".trainer-filters input, .trainer-filters select").forEach(control => control.addEventListener(control.tagName === "INPUT" ? "input" : "change", applyFilters));
+  document.querySelectorAll(".open-profile").forEach(button => button.addEventListener("click", () => renderTraineeProfile(button.dataset.id)));
+}
 
-    result.className = "result result-pass";
-    result.textContent = "Practical competency signed off successfully.";
-  });
+function renderTraineeProfile(id) {
+  const record = workflowRecords().find(item => item.id === id);
+  const allowed = record && record.role === (state.currentUser.role === "pca-trainer" ? "PCA" : "Cleaner") && assignedDepartmentsForCurrentTrainer().includes(record.department);
+  if (!allowed) return alert("You do not have access to this trainee or department.");
+  const history = record.history.map(item => `<li><div><strong>${escapeHtml(item.action)}</strong><span>${escapeHtml(item.actor)} · ${escapeHtml(item.role)} · ${escapeHtml(item.at)}</span></div><p>${escapeHtml(item.detail || '—')}</p><small>${escapeHtml(item.previousStatus)} → ${escapeHtml(item.newStatus)}</small></li>`).join("");
+  document.getElementById("profilePanel").innerHTML = `<section class="card trainee-profile" id="reports"><div class="section-heading"><div><span class="eyebrow">TRAINEE PROFILE</span><h3>${escapeHtml(record.name)}</h3><p>${record.role} · ${escapeHtml(departmentName(record.department))}</p></div><span class="status-chip status-${statusTone(record.status)}">${record.status}</span></div><div class="profile-grid"><div><h4>Modules</h4><strong>${record.modules.completed.length} completed · ${record.modules.remaining.length} remaining</strong><p>${escapeHtml(record.modules.remaining.join(", ") || "All required modules completed")}</p></div><div><h4>Knowledge checks</h4>${record.knowledge.map(k => `<p>${escapeHtml(k.module)} <strong>${k.score}%</strong></p>`).join("")}</div><div><h4>Practical observations</h4>${record.observations.map(o => `<p><strong>${escapeHtml(o.result)}</strong> · ${escapeHtml(o.date)}<br>${escapeHtml(o.note)}</p>`).join("") || '<p>No observation recorded.</p>'}</div><div><h4>Trainer / Management feedback</h4><p class="${record.status === 'Reassessment Required' ? 'alert-text' : ''}">${escapeHtml(record.feedback || "No feedback yet.")}</p></div></div><label>Assessment observation<textarea id="assessmentNote" placeholder="Record observable competency evidence"></textarea></label><div class="profile-actions"><button class="btn" id="recordObservation">Record observation</button><button class="btn" id="recommendSignoff" ${record.progress < 100 || !['Ready for Trainer Review','Reassessment Required'].includes(record.status) ? 'disabled' : ''}>Submit recommendation</button></div><h4>Activity history</h4><ol class="activity-history">${history}</ol></section>`;
+  document.getElementById("profilePanel").scrollIntoView({ behavior: "smooth" });
+  document.getElementById("recordObservation").addEventListener("click", () => { const note = document.getElementById("assessmentNote").value.trim(); if (!note) return alert("Enter an observation first."); record.observations.unshift({ date: new Date().toLocaleString("en-AU"), result: "Observed", note }); record.feedback = note; record.history.unshift({ actor: state.currentUser.name, role: workplaceRoleLabel(state.currentUser.role), action: "Recorded competency observation", at: new Date().toLocaleString("en-AU"), detail: note, previousStatus: record.status, newStatus: record.status }); saveState(); renderTraineeProfile(id); });
+  document.getElementById("recommendSignoff").addEventListener("click", () => { const previous = record.status; const detail = document.getElementById("assessmentNote").value.trim() || record.feedback || "Competency recommended"; record.status = "Sent to Management"; record.reviewStatus = "Management review"; record.feedback = detail; record.history.unshift({ actor: state.currentUser.name, role: workplaceRoleLabel(state.currentUser.role), action: "Submitted sign-off recommendation", at: new Date().toLocaleString("en-AU"), detail, previousStatus: previous, newStatus: record.status }); saveState(); renderTrainerDashboard(); });
 }
 
 function escapeHtml(value) {
