@@ -16,7 +16,8 @@ WHAT IS INCLUDED
 - 80% quiz pass mark
 - Saved progress using browser localStorage
 - Trainer dashboard
-- Read-only management dashboard with organisation-wide staff, progress, department, competency and compliance reporting
+- Read-only, department-scoped management dashboards with staff, progress, competency and compliance reporting
+- Four-item authenticated navigation with a desktop side menu and mobile bottom bar
 - Management access boundary that excludes clinical lessons, assessments and content editing
 - Practical competency sign-off
 - Mobile-friendly layout

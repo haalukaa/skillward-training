@@ -68,7 +68,14 @@ const WORKPLACE_ROLES = {
   management: "Management"
 };
 
-const DEPARTMENT_SELECTION_ROLES = new Set(["pca", "cleaner"]);
+const DEPARTMENT_SELECTION_ROLES = new Set(["pca", "cleaner", "management"]);
+
+const NAV_ITEMS = [
+  ["home", "Home", "⌂"],
+  ["training", "Training", "▷"],
+  ["staff", "Staff", "♙"],
+  ["reports", "Reports", "▥"]
+];
 
 function workplaceRoleLabel(role) {
   return WORKPLACE_ROLES[role] || "Staff member";
@@ -216,8 +223,14 @@ function bindModuleButtons() {
 function renderShell(content) {
   const user = state.currentUser;
   const department = DEPARTMENTS.find(item => item.id === state.selectedDepartment);
+  const authenticatedWorkspace = Boolean(user && (department || user.role?.includes("trainer")));
+  const navigation = NAV_ITEMS.map(([id, label, icon], index) => `
+    <button class="workspace-nav-item ${index === 0 ? "is-active" : ""}" data-nav="${id}" aria-label="${label}">
+      <span aria-hidden="true">${icon}</span><small>${label}</small>
+    </button>
+  `).join("");
   app.innerHTML = `
-    <div class="shell">
+    <div class="shell ${authenticatedWorkspace ? "authenticated-shell" : ""}">
       <header class="topbar">
         <div class="brand">
           <div class="brand-mark" aria-hidden="true">
@@ -232,12 +245,14 @@ function renderShell(content) {
           </div>
         </div>
         <div class="top-actions">
+          ${authenticatedWorkspace ? `<button class="notification-button" aria-label="Notifications"><span aria-hidden="true">●</span></button>` : ""}
           ${user ? `<span class="role-pill">${workplaceRoleLabel(user.role)}</span>` : ""}
-          ${user && department && DEPARTMENT_SELECTION_ROLES.has(user.role) ? `<button class="btn btn-secondary" id="changeDepartmentBtn">Departments</button>` : ""}
-          ${user ? `<button class="btn btn-secondary" id="switchRoleBtn">Switch role</button>` : ""}
+          ${authenticatedWorkspace ? `<button class="profile-button" id="switchRoleBtn" aria-label="User profile: ${escapeHtml(user.name)}"><span>${escapeHtml(user.name).charAt(0).toUpperCase()}</span><strong>${escapeHtml(user.name)}</strong></button>` : user ? `<button class="btn btn-secondary" id="switchRoleBtn">Switch role</button>` : ""}
         </div>
       </header>
-      <main class="page">${content}</main>
+      ${authenticatedWorkspace ? `<nav class="side-nav" aria-label="Primary navigation">${navigation}</nav>` : ""}
+      <main class="page" id="mainContent">${content}</main>
+      ${authenticatedWorkspace ? `<nav class="bottom-nav" aria-label="Primary navigation">${navigation}</nav>` : ""}
       <footer class="site-footer">
         <div class="footer-inner">
           <span class="footer-wordmark">SkillWard</span>
@@ -259,6 +274,12 @@ function renderShell(content) {
     state.selectedDepartment = null;
     saveState();
     renderDepartmentSelection();
+  });
+
+  document.querySelectorAll(".workspace-nav-item").forEach(button => {
+    button.addEventListener("click", () => {
+      document.getElementById(button.dataset.nav)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   });
 
 }
@@ -404,83 +425,75 @@ function renderRoleWorkspace(role) {
 }
 
 function renderManagementDashboard() {
-  const departments = MANAGEMENT_DEPARTMENTS;
-  const totalStaff = departments.reduce((total, department) => total + department.staff, 0);
-  const averageProgress = Math.round(departments.reduce((total, department) => total + department.complete, 0) / departments.length);
-  const pendingSignoffs = departments.reduce((total, department) => total + department.signoffs, 0);
-  const departmentRows = departments.map(department => `
-    <tr>
-      <td><strong>${escapeHtml(department.name)}</strong></td>
-      <td>${department.staff}</td>
-      <td>
-        <div class="management-progress" aria-label="${department.complete}% complete">
-          <span><i style="width:${department.complete}%"></i></span><strong>${department.complete}%</strong>
-        </div>
-      </td>
-      <td>${department.signoffs}</td>
-      <td><span class="status-chip status-${department.tone}">${department.compliance}</span></td>
-    </tr>
+  const department = DEPARTMENTS.find(item => item.id === state.selectedDepartment);
+  if (!department) return renderDepartmentSelection();
+  const report = MANAGEMENT_REPORTS[state.selectedDepartment];
+  const signoffRows = report.signoffs.map(item => `
+    <tr><td><strong>${escapeHtml(item.staff)}</strong><small>${escapeHtml(item.role)}</small></td><td>${escapeHtml(item.competency)}</td><td><span class="status-chip status-warning">${escapeHtml(item.waiting)}</span></td></tr>
   `).join("");
-
-  const signoffRows = MANAGEMENT_SIGNOFFS.map(item => `
-    <tr><td><strong>${escapeHtml(item.staff)}</strong><small>${escapeHtml(item.role)}</small></td><td>${escapeHtml(item.department)}</td><td>${escapeHtml(item.competency)}</td><td>${escapeHtml(item.waiting)}</td></tr>
-  `).join("");
-
-  const alerts = MANAGEMENT_ALERTS.map(alert => `
+  const alerts = report.alerts.map(alert => `
     <article class="compliance-alert alert-${alert.tone}">
       <span class="alert-indicator" aria-hidden="true">!</span>
       <div><span class="status-chip status-${alert.tone}">${alert.level}</span><h4>${alert.title}</h4><p>${alert.detail}</p></div>
       <strong>${alert.due}</strong>
     </article>
   `).join("");
+  const staffRows = report.staff.map(person => `
+    <tr class="staff-record" data-role="${person.role.toLowerCase().replace(" ", "-")}" data-status="${person.status.toLowerCase().replaceAll(" ", "-")}">
+      <td><strong>${escapeHtml(person.name)}</strong><small>${escapeHtml(person.id)}</small></td><td>${escapeHtml(person.role)}</td>
+      <td><div class="management-progress" aria-label="${person.progress}% complete"><span><i style="width:${person.progress}%"></i></span><strong>${person.progress}%</strong></div></td>
+      <td><span class="status-chip status-${person.tone}">${escapeHtml(person.status)}</span></td><td>${escapeHtml(person.due)}</td>
+    </tr>`).join("");
 
   renderShell(`
-    <section class="dashboard-hero management-hero">
-      <div class="dashboard-welcome">
-        <span class="eyebrow">MANAGEMENT OVERVIEW</span>
-        <h2>Workforce training at a glance</h2>
-        <p>Monitor training, competency and compliance across every department.</p>
-      </div>
-      <div class="trainer-identity"><span>Signed in as</span><strong>${escapeHtml(state.currentUser.name)}</strong></div>
+    <section class="management-title" id="home">
+      <div><span class="eyebrow">MANAGEMENT OVERVIEW</span><h2>${escapeHtml(department.name)}</h2><span class="readonly-label">View only</span></div>
+      <button class="btn btn-secondary" id="changeDepartmentBtn">Switch Department</button>
     </section>
-
-    <aside class="access-boundary" aria-label="Management access notice">
-      <span aria-hidden="true">🔒</span><div><strong>Read-only workforce reporting</strong><p>You can view all departments and training status. Clinical lessons, assessments and training content are restricted to authorised learners and trainers.</p></div>
-    </aside>
-
     <div class="stats-grid management-stats">
-      <div class="stat-card"><span>Total staff</span><strong>${totalStaff}</strong><small>Across 6 departments</small></div>
-      <div class="stat-card"><span>Training progress</span><strong>${averageProgress}%</strong><small>Average completion</small></div>
-      <div class="stat-card"><span>Pending sign-offs</span><strong>${pendingSignoffs}</strong><small>Trainer action required</small></div>
-      <div class="stat-card"><span>Compliance alerts</span><strong>${MANAGEMENT_ALERTS.length}</strong><small>1 high priority</small></div>
+      <div class="stat-card"><span>Total PCA staff</span><strong>${report.pca}</strong><small>${report.pcaTrainers} PCA Trainers</small></div>
+      <div class="stat-card"><span>Total Cleaner staff</span><strong>${report.cleaners}</strong><small>${report.cleanerTrainers} Cleaner ${report.cleanerTrainers === 1 ? "Trainer" : "Trainers"}</small></div>
+      <div class="stat-card stat-complete"><span>Completed training</span><strong>${report.completed}</strong><small>${report.inProgress} Training in progress</small></div>
+      <div class="stat-card stat-overdue"><span>Overdue training</span><strong>${report.overdue}</strong><small>${report.signoffs.length} pending sign-offs</small></div>
     </div>
-
-    <section class="card dashboard-card management-section">
-      <div class="section-heading"><div><span class="eyebrow">DEPARTMENT STATUS</span><h3>All departments</h3></div><span class="small">Updated 12 Aug 2026 · Sample data</span></div>
-      <div class="table-wrap"><table><thead><tr><th>Department</th><th>Staff</th><th>Training progress</th><th>Pending sign-offs</th><th>Compliance</th></tr></thead><tbody>${departmentRows}</tbody></table></div>
+    <section class="card dashboard-card management-section" id="training">
+      <div class="section-heading"><div><span class="eyebrow">TRAINING PROGRESS</span><h3>Department performance summary</h3></div><strong>${report.progress}%</strong></div>
+      <div class="performance-bar"><span style="width:${report.progress}%"></span></div>
+      <div class="progress-legend"><span><i class="legend-complete"></i>${report.completed} completed</span><span><i class="legend-pending"></i>${report.inProgress} in progress</span><span><i class="legend-overdue"></i>${report.overdue} overdue</span></div>
+      <button class="btn">Continue Training</button>
     </section>
-
-    <div class="management-grid">
-      <section class="card dashboard-card management-section">
-        <div class="section-heading"><div><span class="eyebrow">COMPETENCY</span><h3>Pending sign-offs</h3></div><span class="count-badge">${pendingSignoffs}</span></div>
-        <div class="table-wrap"><table><thead><tr><th>Staff member</th><th>Department</th><th>Competency</th><th>Waiting</th></tr></thead><tbody>${signoffRows}</tbody></table></div>
-        <p class="readonly-note">Sign-offs must be completed by an authorised trainer.</p>
-      </section>
-      <section class="card dashboard-card management-section">
-        <div class="section-heading"><div><span class="eyebrow">COMPLIANCE</span><h3>Alerts requiring attention</h3></div></div>
-        <div class="alert-list">${alerts}</div>
-      </section>
-    </div>
+    <section class="card dashboard-card management-section" id="reports"><div class="section-heading"><div><span class="eyebrow">COMPLIANCE</span><h3>Compliance alerts</h3></div><span class="count-badge">${report.alerts.length}</span></div><div class="alert-list">${alerts || '<p class="empty-state">No compliance alerts.</p>'}</div></section>
+    <section class="card dashboard-card management-section"><div class="section-heading"><div><span class="eyebrow">COMPETENCY</span><h3>Pending competency sign-offs</h3></div><button class="btn">Review Sign-offs</button></div><div class="table-wrap"><table><thead><tr><th>Staff member</th><th>Competency</th><th>Waiting</th></tr></thead><tbody>${signoffRows}</tbody></table></div><p class="readonly-note">Authorised trainers complete sign-offs. Management access is view only.</p></section>
+    <section class="card dashboard-card management-section" id="staff">
+      <div class="section-heading"><div><span class="eyebrow">STAFF</span><h3>Individual staff records</h3></div><span class="small">Sample data · Updated 12 Aug 2026</span></div>
+      <div class="staff-tools"><label><span class="sr-only">Search staff</span><input id="staffSearch" type="search" placeholder="Search staff by name or ID" /></label><label><span class="sr-only">Filter staff</span><select id="staffFilter"><option value="all">All staff</option><option value="pca">PCA</option><option value="cleaner">Cleaner</option><option value="overdue">Overdue</option><option value="in-progress">In progress</option></select></label></div>
+      <div class="table-wrap"><table><thead><tr><th>Staff member</th><th>Role</th><th>Progress</th><th>Status</th><th>Next due</th></tr></thead><tbody>${staffRows}</tbody></table></div><p class="empty-state" id="noStaff" hidden>No staff match your search.</p>
+    </section>
   `);
+  const filterStaff = () => {
+    const query = document.getElementById("staffSearch").value.trim().toLowerCase();
+    const filter = document.getElementById("staffFilter").value;
+    let visible = 0;
+    document.querySelectorAll(".staff-record").forEach(row => {
+      const matchesQuery = row.textContent.toLowerCase().includes(query);
+      const matchesFilter = filter === "all" || row.dataset.role === filter || row.dataset.status === filter;
+      row.hidden = !(matchesQuery && matchesFilter);
+      if (!row.hidden) visible++;
+    });
+    document.getElementById("noStaff").hidden = visible > 0;
+  };
+  document.getElementById("staffSearch").addEventListener("input", filterStaff);
+  document.getElementById("staffFilter").addEventListener("change", filterStaff);
 }
 
 function renderDepartmentSelection() {
+  const managementSelection = state.currentUser?.role === "management";
   const departmentCards = DEPARTMENTS.map(department => `
-    <article class="department-card ${department.active ? "department-active" : "department-planned"}">
+    <article class="department-card ${department.active || managementSelection ? "department-active" : "department-planned"}">
       <div class="department-card-top">
         <span class="department-icon" aria-hidden="true">${departmentIcon(department.id)}</span>
-        <span class="department-status ${department.active ? "status-active" : "status-planned"}">
-          ${department.active ? "Available" : "Coming soon"}
+        <span class="department-status ${department.active || managementSelection ? "status-active" : "status-planned"}">
+          ${department.active || managementSelection ? "Available" : "Coming soon"}
         </span>
       </div>
       <div>
@@ -489,7 +502,7 @@ function renderDepartmentSelection() {
       </div>
       <div class="department-card-footer">
         <span>${department.detail}</span>
-        ${department.active
+        ${department.active || managementSelection
           ? `<button class="btn open-department" data-id="${department.id}">Open department</button>`
           : `<button class="btn btn-disabled" disabled>In development</button>`}
       </div>
