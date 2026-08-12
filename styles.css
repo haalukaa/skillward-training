@@ -471,6 +471,7 @@ textarea:focus-visible {
 .login-submit span { font-size: 1.2rem; }
 .access-note { display: flex; align-items: center; gap: 8px; margin-top: 18px; color: var(--muted); font-size: .76rem; }
 .access-note span { color: var(--teal-dark); font-weight: 900; }
+.entry-options,.access-form{display:grid;gap:14px}.entry-options[hidden],.access-form[hidden]{display:none}.entry-option{border:1px solid #ccd9df;border-radius:12px;background:#fbfcfc;color:var(--navy);padding:15px;text-align:left;cursor:pointer}.entry-option:hover,.entry-option:focus-visible{border-color:var(--teal);box-shadow:0 0 0 3px rgba(32,165,142,.12)}.entry-option strong,.entry-option small{display:block}.entry-option small{color:var(--muted);margin-top:4px}.access-form h3{margin:0;color:var(--navy)}.access-form .link-button{justify-self:start}.auth-status{border-radius:8px;background:#f2f8f7;color:var(--navy);padding:9px;font-size:.82rem;min-height:1em}.auth-status:empty{display:none}.recovery-card{max-width:520px;margin:40px auto}.recovery-card form{display:grid;gap:14px}
 
 .department-heading {
   max-width: 760px;

@@ -1,0 +1,50 @@
+name: Test and deploy GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm install --ignore-scripts
+      - run: npm test
+      - run: python3 scripts/validate_database_foundation.py
+      - run: bash scripts/scan_secrets.sh
+      - run: npm run build
+      - name: Create browser-safe runtime configuration
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          test -n "$SUPABASE_URL" || { echo "Required SUPABASE_URL is missing" >&2; exit 1; }
+          test -n "$SUPABASE_ANON_KEY" || { echo "Required SUPABASE_ANON_KEY is missing" >&2; exit 1; }
+          node -e 'const fs=require("fs"); fs.writeFileSync("dist/runtime-config.js", `window.SKILLWARD_CONFIG = Object.freeze(${JSON.stringify({supabaseUrl:process.env.SUPABASE_URL,supabaseAnonKey:process.env.SUPABASE_ANON_KEY})});\n`)'
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: dist }
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy reviewed main artifact
+        id: deployment
+        uses: actions/deploy-pages@v4
