@@ -55,3 +55,6 @@ NEXT DEVELOPMENT STAGE
 5. Connect trainer permissions and audit history to secure server APIs.
 6. Add certificates, refresher dates and reporting.
 7. Pilot with a small number of staff.
+
+DATABASE FOUNDATION
+See docs/database.md for the version-controlled, local-only Supabase schema, security model, tests and setup. The current demonstration application does not import or depend on it.
