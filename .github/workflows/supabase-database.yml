@@ -10,6 +10,8 @@ on:
       - "src/supabase-client.js"
       - "scripts/validate_database_foundation.py"
       - "scripts/scan_secrets.sh"
+      - "scripts/bootstrap-development-admin.sql"
+      - "docs/development-admin-bootstrap.md"
       - ".github/workflows/supabase-database.yml"
   workflow_dispatch:
 
@@ -56,4 +58,3 @@ jobs:
       - name: Stop local Supabase services
         if: always()
         run: supabase stop --no-backup
-

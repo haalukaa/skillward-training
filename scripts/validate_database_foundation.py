@@ -50,5 +50,33 @@ assert "enable_signup = false" in (ROOT / "supabase" / "config.toml").read_text(
     encoding="utf-8"
 ), "Local open sign-up must remain disabled"
 
-print(f"Validated {len(files)} ordered migrations, {len(TABLES)} RLS tables, and 33 pgTAP assertions.")
+bootstrap_path = ROOT / "scripts" / "bootstrap-development-admin.sql"
+bootstrap = bootstrap_path.read_text(encoding="utf-8")
+bootstrap_lower = bootstrap.lower()
+assert "begin;" in bootstrap_lower and "commit;" in bootstrap_lower
+assert "from auth.users" in bootstrap_lower and "email_confirmed_at" in bootstrap_lower
+assert "matched_auth_count <> 1" in bootstrap
+assert "'hospital administrator'::public.workplace_role" in bootstrap_lower
+assert "'active'::public.account_status" in bootstrap_lower
+assert "public.user_profiles%rowtype" in bootstrap_lower
+assert "public.hospital_memberships%rowtype" in bootstrap_lower
+assert "count(*)" in bootstrap_lower and "<> 1" in bootstrap
+for forbidden in (
+    "disable row level security", "grant execute", "grant all", "service_role",
+    "create function", "create or replace function",
+):
+    assert forbidden not in bootstrap_lower, f"Unsafe bootstrap SQL: {forbidden}"
 
+# The bootstrap may be statically validated, but must never be loaded by a
+# migration, seed, application startup, package script, or build script.
+automatic_files = [ROOT / "supabase" / "seed.sql", ROOT / "package.json"]
+automatic_files += sorted(MIGRATIONS.glob("*.sql"))
+automatic_files += sorted((ROOT / "src").glob("*.js"))
+automatic_files += [ROOT / "app.js", ROOT / "scripts" / "build.mjs"]
+for path in automatic_files:
+    assert bootstrap_path.name not in path.read_text(encoding="utf-8"), (
+        f"Bootstrap must not be referenced by automatic execution path: {path}"
+    )
+
+print(f"Validated {len(files)} ordered migrations, {len(TABLES)} RLS tables, "
+      "33 pgTAP assertions, and the manual bootstrap safety contract.")
