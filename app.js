@@ -68,8 +68,30 @@ const WORKPLACE_ROLES = {
   management: "Management"
 };
 
+const DEPARTMENT_SELECTION_ROLES = new Set(["pca", "cleaner"]);
+
 function workplaceRoleLabel(role) {
   return WORKPLACE_ROLES[role] || "Staff member";
+}
+
+function normalizeCurrentUserRole() {
+  const role = state.currentUser?.role;
+
+  if (role === "learner" || role === "trainer") {
+    state.currentUser.role = role === "trainer" ? "pca-trainer" : "pca";
+    saveState();
+  }
+}
+
+function routeSignedInUser() {
+  normalizeCurrentUserRole();
+
+  if (DEPARTMENT_SELECTION_ROLES.has(state.currentUser.role) && !state.selectedDepartment) {
+    renderDepartmentSelection();
+    return;
+  }
+
+  routeCurrentUser();
 }
 
 function departmentIcon(departmentId) {
@@ -211,7 +233,7 @@ function renderShell(content) {
         </div>
         <div class="top-actions">
           ${user ? `<span class="role-pill">${workplaceRoleLabel(user.role)}</span>` : ""}
-          ${user && department ? `<button class="btn btn-secondary" id="changeDepartmentBtn">Departments</button>` : ""}
+          ${user && department && DEPARTMENT_SELECTION_ROLES.has(user.role) ? `<button class="btn btn-secondary" id="changeDepartmentBtn">Departments</button>` : ""}
           ${user ? `<button class="btn btn-secondary" id="switchRoleBtn">Switch role</button>` : ""}
         </div>
       </header>
@@ -331,18 +353,13 @@ function renderLogin() {
     if (role === "pca") state.learnerName = name;
     saveState();
 
-    renderDepartmentSelection();
+    routeSignedInUser();
   });
 }
 
 function routeCurrentUser() {
-  let role = state.currentUser?.role;
-
-  if (role === "learner" || role === "trainer") {
-    role = role === "trainer" ? "pca-trainer" : "pca";
-    state.currentUser.role = role;
-    saveState();
-  }
+  normalizeCurrentUserRole();
+  const role = state.currentUser?.role;
 
   if (role === "pca") {
     renderLearnerDashboard();
@@ -806,8 +823,6 @@ function escapeHtml(value) {
 
 if (!state.currentUser) {
   renderLogin();
-} else if (!state.selectedDepartment) {
-  renderDepartmentSelection();
 } else {
-  routeCurrentUser();
+  routeSignedInUser();
 }
