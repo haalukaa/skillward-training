@@ -1,0 +1,59 @@
+name: Supabase database foundation
+
+on:
+  pull_request:
+    paths:
+      - "supabase/**"
+      - ".env.example"
+      - ".gitignore"
+      - "src/database-service.js"
+      - "src/supabase-client.js"
+      - "scripts/validate_database_foundation.py"
+      - "scripts/scan_secrets.sh"
+      - ".github/workflows/supabase-database.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Migrations, RLS, seed, pgTAP, and application tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out the pull request
+        uses: actions/checkout@v4
+
+      - name: Install the officially supported Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Validate migration and repository structure
+        run: python3 scripts/validate_database_foundation.py
+
+      - name: Scan tracked files for committed secrets
+        run: bash scripts/scan_secrets.sh
+
+      - name: Start local Supabase services
+        run: supabase start
+
+      - name: Apply clean migrations and test-only development seed
+        run: supabase db reset
+
+      - name: Run all 33 database assertions
+        run: supabase test db
+
+      - name: Run existing JavaScript tests
+        run: node --test tests/*.test.js
+
+      - name: Show local service status on failure
+        if: failure()
+        run: supabase status || true
+
+      - name: Stop local Supabase services
+        if: always()
+        run: supabase stop --no-backup
+
