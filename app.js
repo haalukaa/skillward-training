@@ -384,6 +384,11 @@ function renderRoleWorkspace(role) {
       ? "Cleaner learner progress, assessments and practical competency sign-offs will be managed here."
       : "Your role-specific healthcare cleaning modules will appear here without mixing them with PCA training.";
 
+  if (isManagement) {
+    renderManagementDashboard();
+    return;
+  }
+
   renderShell(`
     <section class="department-heading">
       <span class="eyebrow">OPERATING THEATRE &amp; RECOVERY</span>
@@ -395,6 +400,77 @@ function renderRoleWorkspace(role) {
       <h3>${workplaceRoleLabel(role)} access is now separated</h3>
       <p class="small">Approved role-specific modules can be added here next. Your existing PCA training remains unchanged.</p>
     </section>
+  `);
+}
+
+function renderManagementDashboard() {
+  const departments = MANAGEMENT_DEPARTMENTS;
+  const totalStaff = departments.reduce((total, department) => total + department.staff, 0);
+  const averageProgress = Math.round(departments.reduce((total, department) => total + department.complete, 0) / departments.length);
+  const pendingSignoffs = departments.reduce((total, department) => total + department.signoffs, 0);
+  const departmentRows = departments.map(department => `
+    <tr>
+      <td><strong>${escapeHtml(department.name)}</strong></td>
+      <td>${department.staff}</td>
+      <td>
+        <div class="management-progress" aria-label="${department.complete}% complete">
+          <span><i style="width:${department.complete}%"></i></span><strong>${department.complete}%</strong>
+        </div>
+      </td>
+      <td>${department.signoffs}</td>
+      <td><span class="status-chip status-${department.tone}">${department.compliance}</span></td>
+    </tr>
+  `).join("");
+
+  const signoffRows = MANAGEMENT_SIGNOFFS.map(item => `
+    <tr><td><strong>${escapeHtml(item.staff)}</strong><small>${escapeHtml(item.role)}</small></td><td>${escapeHtml(item.department)}</td><td>${escapeHtml(item.competency)}</td><td>${escapeHtml(item.waiting)}</td></tr>
+  `).join("");
+
+  const alerts = MANAGEMENT_ALERTS.map(alert => `
+    <article class="compliance-alert alert-${alert.tone}">
+      <span class="alert-indicator" aria-hidden="true">!</span>
+      <div><span class="status-chip status-${alert.tone}">${alert.level}</span><h4>${alert.title}</h4><p>${alert.detail}</p></div>
+      <strong>${alert.due}</strong>
+    </article>
+  `).join("");
+
+  renderShell(`
+    <section class="dashboard-hero management-hero">
+      <div class="dashboard-welcome">
+        <span class="eyebrow">MANAGEMENT OVERVIEW</span>
+        <h2>Workforce training at a glance</h2>
+        <p>Monitor training, competency and compliance across every department.</p>
+      </div>
+      <div class="trainer-identity"><span>Signed in as</span><strong>${escapeHtml(state.currentUser.name)}</strong></div>
+    </section>
+
+    <aside class="access-boundary" aria-label="Management access notice">
+      <span aria-hidden="true">🔒</span><div><strong>Read-only workforce reporting</strong><p>You can view all departments and training status. Clinical lessons, assessments and training content are restricted to authorised learners and trainers.</p></div>
+    </aside>
+
+    <div class="stats-grid management-stats">
+      <div class="stat-card"><span>Total staff</span><strong>${totalStaff}</strong><small>Across 6 departments</small></div>
+      <div class="stat-card"><span>Training progress</span><strong>${averageProgress}%</strong><small>Average completion</small></div>
+      <div class="stat-card"><span>Pending sign-offs</span><strong>${pendingSignoffs}</strong><small>Trainer action required</small></div>
+      <div class="stat-card"><span>Compliance alerts</span><strong>${MANAGEMENT_ALERTS.length}</strong><small>1 high priority</small></div>
+    </div>
+
+    <section class="card dashboard-card management-section">
+      <div class="section-heading"><div><span class="eyebrow">DEPARTMENT STATUS</span><h3>All departments</h3></div><span class="small">Updated 12 Aug 2026 · Sample data</span></div>
+      <div class="table-wrap"><table><thead><tr><th>Department</th><th>Staff</th><th>Training progress</th><th>Pending sign-offs</th><th>Compliance</th></tr></thead><tbody>${departmentRows}</tbody></table></div>
+    </section>
+
+    <div class="management-grid">
+      <section class="card dashboard-card management-section">
+        <div class="section-heading"><div><span class="eyebrow">COMPETENCY</span><h3>Pending sign-offs</h3></div><span class="count-badge">${pendingSignoffs}</span></div>
+        <div class="table-wrap"><table><thead><tr><th>Staff member</th><th>Department</th><th>Competency</th><th>Waiting</th></tr></thead><tbody>${signoffRows}</tbody></table></div>
+        <p class="readonly-note">Sign-offs must be completed by an authorised trainer.</p>
+      </section>
+      <section class="card dashboard-card management-section">
+        <div class="section-heading"><div><span class="eyebrow">COMPLIANCE</span><h3>Alerts requiring attention</h3></div></div>
+        <div class="alert-list">${alerts}</div>
+      </section>
+    </div>
   `);
 }
 

@@ -1122,6 +1122,37 @@ th {
 .trainer-identity strong { display: block; margin-top: 3px; }
 .dashboard-card { margin-top: 18px; }
 
+.access-boundary {
+  display: flex; align-items: flex-start; gap: 12px; margin: 18px 0;
+  padding: 14px 16px; border: 1px solid #b9ddd7; border-radius: 14px; background: var(--mint); color: var(--navy);
+}
+.access-boundary p { margin: 2px 0 0; color: var(--muted); font-size: .84rem; }
+.management-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 0; }
+.management-stats .stat-card { align-items: flex-start; flex-direction: column; gap: 3px; }
+.management-stats .stat-card small { color: var(--muted); font-size: .75rem; }
+.management-section h3 { margin: 5px 0 0; color: var(--navy); }
+.management-section .section-heading { margin-bottom: 16px; }
+.management-progress { min-width: 170px; display: flex; align-items: center; gap: 10px; }
+.management-progress > span { width: 110px; height: 8px; overflow: hidden; border-radius: 99px; background: #dce7ec; }
+.management-progress i { display: block; height: 100%; border-radius: inherit; background: var(--teal); }
+.management-progress strong { color: var(--navy); font-size: .86rem; }
+.status-chip { display: inline-block; padding: 4px 8px; border-radius: 99px; font-size: .72rem; font-weight: 900; white-space: nowrap; }
+.status-success { color: var(--green); background: #e3f5eb; }
+.status-warning { color: #8a5b10; background: #fff3d6; }
+.status-danger { color: var(--red); background: #fde8e8; }
+.management-grid { display: grid; grid-template-columns: 1.25fr .75fr; gap: 18px; }
+.management-grid table small { display: block; color: var(--muted); }
+.count-badge { display: grid; place-items: center; min-width: 30px; height: 30px; border-radius: 99px; background: var(--mint); color: var(--teal-dark); font-weight: 900; }
+.readonly-note { margin: 14px 0 0; color: var(--muted); font-size: .8rem; }
+.alert-list { display: grid; gap: 10px; }
+.compliance-alert { display: grid; grid-template-columns: auto 1fr auto; align-items: start; gap: 11px; padding: 13px; border: 1px solid var(--line); border-left-width: 4px; border-radius: 12px; }
+.compliance-alert.alert-danger { border-left-color: var(--red); }
+.compliance-alert.alert-warning { border-left-color: var(--amber); }
+.alert-indicator { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--sky); color: var(--navy); font-weight: 900; }
+.compliance-alert h4 { margin: 6px 0 2px; color: var(--navy); }
+.compliance-alert p { margin: 0; color: var(--muted); font-size: .8rem; }
+.compliance-alert > strong { color: var(--muted); font-size: .72rem; white-space: nowrap; }
+
 .small { font-size: .88rem; color: var(--muted); }
 
 .footer-note {
@@ -1145,6 +1176,8 @@ th {
   .login-intro h2 { font-size: clamp(2.15rem, 9vw, 3.45rem); }
   .dashboard-hero { align-items: flex-start; }
   .stats-grid { grid-template-columns: 1fr; }
+  .management-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .management-grid { grid-template-columns: 1fr; }
   .department-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .area-hero { grid-template-columns: auto 1fr; }
   .area-completion { grid-column: 1 / -1; }
@@ -1190,6 +1223,12 @@ th {
   .progress-ring::before { width: 82px; height: 82px; }
   .section-heading { align-items: flex-start; flex-direction: column; }
   .stat-card { padding: 15px 16px; }
+  .management-stats { grid-template-columns: 1fr; }
+  .access-boundary { padding: 12px; }
+  .management-progress { min-width: 145px; }
+  .management-progress > span { width: 82px; }
+  .compliance-alert { grid-template-columns: auto 1fr; }
+  .compliance-alert > strong { grid-column: 2; }
   .department-grid { grid-template-columns: 1fr; }
   .department-card { min-height: 270px; }
   .department-card-footer { align-items: stretch; flex-direction: column; }
