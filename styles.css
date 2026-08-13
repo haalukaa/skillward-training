@@ -422,6 +422,17 @@ textarea:focus-visible {
   transform: translateZ(1px);
 }
 
+/* Authentication is a single, always-visible surface. It must not depend on the
+   retired flip-card state or on Supabase/session availability. */
+.auth-card {
+  position: relative;
+  display: block;
+  transform: none;
+  backface-visibility: visible;
+  -webkit-backface-visibility: visible;
+  pointer-events: auto;
+}
+
 .login-card-front { pointer-events: auto; }
 .login-card-back {
   transform: rotateY(180deg) translateZ(1px);

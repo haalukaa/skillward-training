@@ -19,6 +19,25 @@ test("premium authentication states are accessible and safely navigable", () => 
   assert.match(app, /button\.disabled=true/);
 });
 
+test("authentication card remains visible independent of configuration and restoration", () => {
+  assert.match(app, /class="card login-card auth-card" id="workspaceCard"/);
+  assert.match(app, /renderLogin\("Checking for an existing session…"\);[\s\S]*await authService\.restore\(\)/);
+  assert.match(app, /CONFIGURATION_MISSING/);
+  assert.match(app, /history\.replaceState\(\{ signedOut: true \}[\s\S]*renderLogin\(\)/);
+  const styles = read("styles.css");
+  assert.match(styles, /\.auth-card\s*\{[\s\S]*transform: none;[\s\S]*pointer-events: auto;/);
+  assert.match(styles, /@media \(max-width: 800px\)/);
+  assert.match(styles, /@media \(max-width: 560px\)/);
+});
+
+test("entry, sign-in, demo, recovery and password update share the authentication card", () => {
+  assert.match(app, /authenticationLayout\(`/);
+  for (const id of ["entryOptions", "signInForm", "demoForm", "resetForm", "updatePasswordForm"]) assert.match(app, new RegExp(`id="${id}"`));
+  assert.match(app, /backChoices/);
+  assert.match(app, /id="backToSignIn"/);
+  assert.match(app, /id="passwordBack"/);
+});
+
 test("authenticated REST-style context loads its permitted profile, membership and routing data", async () => {
   for (const table of ["user_profiles", "hospital_memberships", "department_memberships", "departments", "trainer_assignments", "training_assignments"]) assert.match(database, new RegExp(`"${table}"`));
   assert.match(auth, /context\.membership\.role/); assert.match(auth, /departmentDetails/);

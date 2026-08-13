@@ -383,28 +383,29 @@ function authMessage(code) {
   return messages[code] || "We could not sign you in. Check your details and try again.";
 }
 
+function authenticationLayout(cardContent) {
+  return `<div class="login-layout">
+    <section class="login-intro">
+      <div class="hero-motion" aria-hidden="true"><span class="motion-orb motion-orb-one"></span><span class="motion-orb motion-orb-two"></span><span class="motion-grid"></span></div>
+      <div class="login-label hero-reveal hero-reveal-1"><span></span> Healthcare workforce enablement</div>
+      <h2 class="hero-title" aria-label="Build your confidence before your first shift"><span class="hero-line hero-reveal hero-reveal-2">Build Your Confidence</span><span class="hero-line hero-accent hero-reveal hero-reveal-3">Before Your First Shift</span></h2>
+      <p class="hero-reveal hero-reveal-4">Structured, role-based learning that turns approved procedures into confident workplace practice.</p>
+      <div class="learning-flow" aria-label="SkillWard learning process"><div><span>01</span><strong>Learn</strong><small>Role-based pathways</small></div><i aria-hidden="true"></i><div><span>02</span><strong>Validate</strong><small>Knowledge checks</small></div><i aria-hidden="true"></i><div><span>03</span><strong>Sign off</strong><small>Observed competency</small></div></div>
+      <p class="login-platform-note hero-reveal hero-reveal-5">Designed for hospital teams, trainers and frontline staff.</p>
+    </section>
+    <div class="login-flip-shell"><section class="card login-card auth-card" id="workspaceCard">${cardContent}</section></div>
+  </div>`;
+}
+
 function renderLogin(message = "") {
-  renderShell(`
-    <div class="login-layout">
-      <section class="login-intro">
-        <div class="hero-motion" aria-hidden="true"><span class="motion-orb motion-orb-one"></span><span class="motion-orb motion-orb-two"></span><span class="motion-grid"></span></div>
-        <div class="login-label hero-reveal hero-reveal-1"><span></span> Healthcare workforce enablement</div>
-        <h2 class="hero-title" aria-label="Build your confidence before your first shift"><span class="hero-line hero-reveal hero-reveal-2">Build Your Confidence</span><span class="hero-line hero-accent hero-reveal hero-reveal-3">Before Your First Shift</span></h2>
-        <p class="hero-reveal hero-reveal-4">Structured, role-based learning that turns approved procedures into confident workplace practice.</p>
-        <div class="learning-flow" aria-label="SkillWard learning process"><div><span>01</span><strong>Learn</strong><small>Role-based pathways</small></div><i aria-hidden="true"></i><div><span>02</span><strong>Validate</strong><small>Knowledge checks</small></div><i aria-hidden="true"></i><div><span>03</span><strong>Sign off</strong><small>Observed competency</small></div></div>
-        <p class="login-platform-note hero-reveal hero-reveal-5">Designed for hospital teams, trainers and frontline staff.</p>
-      </section>
-      <div class="login-flip-shell"><div class="login-flip" id="loginFlip">
-        <section class="card login-card login-card-back" id="workspaceCard">
+  renderShell(authenticationLayout(`
           <div class="get-started-logo"><svg viewBox="0 0 48 54" focusable="false"><title>SkillWard</title><path class="logo-shield" d="M24 2 44 9v16c0 13-8 22-20 28C12 47 4 38 4 25V9L24 2Z" /></svg></div><h2 id="authHeading">Get Started</h2><p class="login-card-intro" id="authIntro">Choose how you would like to continue.</p>
           ${message ? `<p class="auth-status" role="status">${escapeHtml(message)}</p>` : ""}
           <div class="entry-options" id="entryOptions"><button class="btn btn-wide" id="showSignIn">Sign in to SkillWard</button><button class="btn btn-wide btn-secondary" id="showDemo">Explore Demo</button></div>
           <form id="signInForm" class="access-form" hidden novalidate><button class="link-button backChoices" type="button">← Back</button><label><span>Email</span><input id="emailInput" type="email" autocomplete="username" inputmode="email" required /></label><label><span>Password</span><span class="password-field"><input id="passwordInput" type="password" autocomplete="current-password" required /><button type="button" id="togglePassword" aria-label="Show password">Show</button></span></label><button class="link-button forgot-link" type="button" id="forgotPassword">Forgot password?</button><p id="authError" class="auth-status" role="alert" aria-live="polite"></p><button class="btn btn-wide login-submit" type="submit">Sign In <span aria-hidden="true">→</span></button></form>
           <form id="demoForm" class="access-form" hidden><button class="link-button backChoices" type="button">← Back</button><span class="status-chip status-success">Demo Mode</span><p class="small">Sample browser data is used and never sent to Supabase.</p><label><span>Full name</span><input id="nameInput" type="text" autocomplete="name" required /></label><label><span>Role</span><select id="roleInput"><option value="pca">PCA</option><option value="cleaner">Cleaner</option><option value="pca-trainer">PCA Trainer</option><option value="cleaner-trainer">Cleaner Trainer</option><option value="management">Management</option></select></label><button class="btn btn-wide login-submit" type="submit">Enter Demo</button></form>
           <form id="resetForm" class="access-form" hidden><button class="link-button" type="button" id="backToSignIn">← Back to Sign In</button><p class="small">Enter your email to request a recovery link.</p><label><span>Email</span><input id="resetEmail" type="email" autocomplete="username" required /></label><button class="btn btn-wide" type="submit">Send recovery link</button></form>
-        </section>
-      </div></div>
-    </div>`);
+  `));
   const heading=document.getElementById("authHeading"), intro=document.getElementById("authIntro");
   const choices=document.getElementById("entryOptions"), forms=["signInForm","demoForm","resetForm"].map(id=>document.getElementById(id));
   const show=id=>{ choices.hidden=true; forms.forEach(form=>form.hidden=form.id!==id); heading.textContent=id==="signInForm"?"Welcome back":id==="demoForm"?"Explore SkillWard":"Reset password"; intro.hidden=true; };
@@ -893,13 +894,13 @@ async function bootstrap() {
   const recovery = new URLSearchParams(globalThis.location?.search || "").get("recovery") === "1";
   if (recovery) return renderPasswordUpdate();
   if (state.currentUser?.mode === "demo" || (state.currentUser && !state.currentUser.mode)) return routeSignedInUser();
-  renderShell('<section class="card"><h2>Loading SkillWard…</h2><p>Resolving your secure session and workplace access.</p></section>');
+  renderLogin("Checking for an existing session…");
   authService.onChange((event) => { if (event === "SIGNED_OUT" || event === "TOKEN_REFRESHED" && !authenticatedContext) { authenticatedContext = null; renderLogin("Your session has expired. Please sign in again."); } });
   try { authenticatedContext = await authService.restore(); if (authenticatedContext) return renderAuthenticatedWorkspace(); } catch (error) { await authService.signOut(); return renderLogin(authMessage(error.message)); }
   renderLogin();
 }
 function renderPasswordUpdate() {
-  renderShell(`<section class="card recovery-card"><button class="link-button" id="passwordBack">← Back to Sign In</button><h2>Choose a new password</h2><p class="small">Use 12 or more characters with upper-case, lower-case and a number.</p><form id="updatePasswordForm"><label><span>New password</span><input id="newPassword" type="password" autocomplete="new-password" minlength="12" required></label><label><span>Confirm password</span><input id="confirmPassword" type="password" autocomplete="new-password" minlength="12" required></label><p id="recoveryError" role="alert" aria-live="polite"></p><button class="btn" type="submit">Update password</button></form></section>`);
+  renderShell(authenticationLayout(`<div class="get-started-logo"><svg viewBox="0 0 48 54" focusable="false"><title>SkillWard</title><path class="logo-shield" d="M24 2 44 9v16c0 13-8 22-20 28C12 47 4 38 4 25V9L24 2Z" /></svg></div><button class="link-button" id="passwordBack">← Back to Sign In</button><h2>Choose a new password</h2><p class="small">Use 12 or more characters with upper-case, lower-case and a number.</p><form class="access-form" id="updatePasswordForm"><label><span>New password</span><input id="newPassword" type="password" autocomplete="new-password" minlength="12" required></label><label><span>Confirm password</span><input id="confirmPassword" type="password" autocomplete="new-password" minlength="12" required></label><p id="recoveryError" role="alert" aria-live="polite"></p><button class="btn" type="submit">Update password</button></form>`));
   document.getElementById("passwordBack").addEventListener("click",()=>{document.getElementById("newPassword").value="";document.getElementById("confirmPassword").value="";history.replaceState({},"",location.pathname);renderLogin();});
   document.getElementById("updatePasswordForm").addEventListener("submit", async event => { event.preventDefault(); const password=document.getElementById("newPassword").value, confirmation=document.getElementById("confirmPassword").value, error=document.getElementById("recoveryError"); if(password.length<12 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password) || password!==confirmation){ error.textContent="Use at least 12 characters with upper-case, lower-case and a number, and make both entries match."; return; } try { await authService.updatePassword(password); await authService.signOut(); history.replaceState({},"",location.pathname); renderLogin("Password updated. Sign in with your new password."); } catch(e) { error.textContent=authMessage(e.message); } });
 }
