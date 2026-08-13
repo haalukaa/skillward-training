@@ -38,6 +38,19 @@ test("entry, sign-in, demo, recovery and password update share the authenticatio
   assert.match(app, /id="passwordBack"/);
 });
 
+test("authentication controls and laptop layout are compact and consistent", () => {
+  const styles = read("styles.css");
+  for (const id of ["emailInput", "passwordInput", "nameInput", "resetEmail", "newPassword", "confirmPassword"]) {
+    assert.match(app, new RegExp(`class="auth-control" id="${id}"`));
+  }
+  assert.match(styles, /\.auth-control, \.password-field[\s\S]*width: 100%;[\s\S]*max-width: none;/);
+  assert.match(styles, /\.auth-control \{[\s\S]*height: 46px;[\s\S]*border: 1px solid/);
+  assert.match(styles, /\.signed-out-shell \.page[\s\S]*padding-top: 0;[\s\S]*padding-bottom: 0;/);
+  assert.match(styles, /@media \(min-width: 801px\) and \(max-height: 780px\)/);
+  assert.doesNotMatch(app.match(/function renderLogin[\s\S]*?function renderAuthenticatedWorkspace/)[0], /get-started-logo|logo-shield/);
+  assert.doesNotMatch(app, /INVALID_CREDENTIALS[^\n]*authError/);
+});
+
 test("authenticated REST-style context loads its permitted profile, membership and routing data", async () => {
   for (const table of ["user_profiles", "hospital_memberships", "department_memberships", "departments", "trainer_assignments", "training_assignments"]) assert.match(database, new RegExp(`"${table}"`));
   assert.match(auth, /context\.membership\.role/); assert.match(auth, /departmentDetails/);
