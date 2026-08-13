@@ -6,10 +6,17 @@ const read = file => fs.readFileSync(file, "utf8");
 const app = read("app.js"), auth = read("src/auth-service.js"), database = read("src/database-service.js");
 
 test("sign-in and Demo Mode are separate and public sign-up is unavailable", () => {
-  assert.match(app, /Sign in to SkillWard/); assert.match(app, /Explore Demo Mode/);
-  assert.match(app, /Nothing in Demo Mode is written to Supabase/);
+  assert.match(app, /Sign in to SkillWard/); assert.match(app, /Explore Demo/);
+  assert.match(app, /never sent to Supabase/);
   assert.doesNotMatch(app + auth, /signUp\s*\(/);
   assert.match(app, /await authService\?\.signOut\(\); authenticatedContext=null/);
+});
+
+test("premium authentication states are accessible and safely navigable", () => {
+  for (const text of ["Get Started", "Welcome back", "Explore SkillWard", "← Back", "← Back to Sign In", "Show password", "aria-live", "autocomplete=\"current-password\""]) assert.match(app, new RegExp(text));
+  assert.doesNotMatch(app, /class="typing-cursor"/);
+  assert.match(app, /document\.getElementById\("passwordInput"\)\.value=""/);
+  assert.match(app, /button\.disabled=true/);
 });
 
 test("authenticated REST-style context loads its permitted profile, membership and routing data", async () => {
