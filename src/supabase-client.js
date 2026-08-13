@@ -9,7 +9,9 @@ export function createSupabaseAdapter(config = safeConfig()) {
   return {
     configured: true,
     client: createClient(url, anonKey, {
-      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+      // SkillWard owns callback processing so it can keep recovery parameters intact
+      // until the PKCE exchange (or legacy token session) has completed.
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false }
     })
   };
 }

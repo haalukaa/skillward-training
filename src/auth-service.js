@@ -1,6 +1,7 @@
 import { createSupabaseAdapter } from "./supabase-client.js";
 import { SkillWardDatabaseService } from "./database-service.js";
 import { InvitationService } from "./invitation-service.js";
+import { establishRecoverySession } from "./recovery-service.js";
 
 const publicRole = { "Hospital Administrator":"management", "Department Manager":"management", PCA:"pca", Cleaner:"cleaner", "PCA Trainer":"pca-trainer", "Cleaner Trainer":"cleaner-trainer" };
 export class AuthService {
@@ -25,6 +26,8 @@ export class AuthService {
   async restore() { if (!this.client) return null; const { data } = await this.client.auth.getUser(); return data.user ? this.resolve(data.user) : null; }
   onChange(callback) { return this.client?.auth.onAuthStateChange((event, session) => callback(event, session))?.data?.subscription; }
   async resetPassword(email, redirectTo) { if (!this.client) throw new Error("CONFIGURATION_MISSING"); await this.client.auth.resetPasswordForEmail(email, { redirectTo }); }
+  async establishRecovery(callback) { if (!this.client) throw new Error("RECOVERY_INVALID"); return establishRecoverySession(this.client, callback); }
+  async recoverySession() { if (!this.client) return null; const { data, error } = await this.client.auth.getSession(); return error ? null : data.session; }
   async updatePassword(password) { const { error } = await this.client.auth.updateUser({ password }); if (error) throw new Error("RECOVERY_INVALID"); }
   async signOut() { if (this.client) await this.client.auth.signOut(); }
 }

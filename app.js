@@ -879,16 +879,38 @@ function escapeHtml(value) {
 async function bootstrap() {
   if (!globalThis.SkillWardServices) return state.currentUser ? routeSignedInUser() : renderLogin();
   authService = new globalThis.SkillWardServices.AuthService();
-  const recovery = new URLSearchParams(globalThis.location?.search || "").get("recovery") === "1";
-  if (recovery) return renderPasswordUpdate();
+  const recovery = globalThis.SkillWardRecovery.parseRecoveryCallback(globalThis.location.href);
+  if (recovery.requested) return processRecoveryCallback(recovery);
+  if (globalThis.SkillWardRecovery.isRecoveryPending(sessionStorage)) {
+    const session = await authService.recoverySession();
+    if (session?.user) return renderPasswordUpdate();
+    globalThis.SkillWardRecovery.clearRecoveryPending(sessionStorage);
+    return renderRecoveryInvalid();
+  }
   if (state.currentUser?.mode === "demo" || (state.currentUser && !state.currentUser.mode)) return routeSignedInUser();
   renderShell('<section class="card"><h2>Loading SkillWard…</h2><p>Resolving your secure session and workplace access.</p></section>');
   authService.onChange((event) => { if (event === "SIGNED_OUT" || event === "TOKEN_REFRESHED" && !authenticatedContext) { authenticatedContext = null; renderLogin("Your session has expired. Please sign in again."); } });
   try { authenticatedContext = await authService.restore(); if (authenticatedContext) return renderAuthenticatedWorkspace(); } catch (error) { await authService.signOut(); return renderLogin(authMessage(error.message)); }
   renderLogin();
 }
+async function processRecoveryCallback(recovery) {
+  renderShell('<section class="card recovery-card"><h2>Opening your secure recovery link…</h2><p>Please wait while SkillWard verifies the link.</p></section>');
+  try {
+    await authService.establishRecovery(recovery);
+    globalThis.SkillWardRecovery.markRecoveryPending(sessionStorage);
+    history.replaceState({}, "", location.pathname);
+    renderPasswordUpdate();
+  } catch {
+    renderRecoveryInvalid();
+  }
+}
+function renderRecoveryInvalid() {
+  renderShell('<section class="card recovery-card"><h2>Recovery link unavailable</h2><p class="auth-status" role="alert">This recovery link is invalid, expired or has already been used.</p><button class="btn" id="requestRecovery">Request another recovery email</button></section>');
+  document.getElementById("requestRecovery").addEventListener("click", () => { renderLogin(); document.getElementById("getStartedBtn").click(); document.getElementById("showSignIn").click(); document.getElementById("forgotPassword").click(); });
+}
 function renderPasswordUpdate() {
-  renderShell(`<section class="card recovery-card"><h2>Choose a new password</h2><form id="updatePasswordForm"><label><span>New password</span><input id="newPassword" type="password" autocomplete="new-password" minlength="12" required></label><label><span>Confirm password</span><input id="confirmPassword" type="password" autocomplete="new-password" minlength="12" required></label><p id="recoveryError" role="alert"></p><button class="btn" type="submit">Update password</button></form></section>`);
-  document.getElementById("updatePasswordForm").addEventListener("submit", async event => { event.preventDefault(); const password=document.getElementById("newPassword").value, confirmation=document.getElementById("confirmPassword").value, error=document.getElementById("recoveryError"); if(password.length<12 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password) || password!==confirmation){ error.textContent="Use at least 12 characters with upper-case, lower-case and a number, and make both entries match."; return; } try { await authService.updatePassword(password); await authService.signOut(); history.replaceState({},"",location.pathname); renderLogin("Password updated. Sign in with your new password."); } catch(e) { error.textContent=authMessage(e.message); } });
+  renderShell(`<section class="card recovery-card"><h2>Create new password</h2><p>Use at least 12 characters with upper-case, lower-case and a number.</p><form id="updatePasswordForm"><label><span>New password</span><span class="password-control"><input id="newPassword" type="password" autocomplete="new-password" minlength="12" required><button class="link-button password-toggle" type="button" data-for="newPassword">Show</button></span></label><label><span>Confirm new password</span><span class="password-control"><input id="confirmPassword" type="password" autocomplete="new-password" minlength="12" required><button class="link-button password-toggle" type="button" data-for="confirmPassword">Show</button></span></label><p id="recoveryError" class="auth-status" role="alert"></p><button class="btn" type="submit">Save new password</button></form></section>`);
+  document.querySelectorAll(".password-toggle").forEach(button => button.addEventListener("click", () => { const input=document.getElementById(button.dataset.for), showing=input.type==="text"; input.type=showing?"password":"text"; button.textContent=showing?"Show":"Hide"; }));
+  document.getElementById("updatePasswordForm").addEventListener("submit", async event => { event.preventDefault(); const password=document.getElementById("newPassword").value, confirmation=document.getElementById("confirmPassword").value, error=document.getElementById("recoveryError"), button=event.currentTarget.querySelector("button[type=submit]"); if(password.length<12 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password) || password!==confirmation){ error.textContent="Use at least 12 characters with upper-case, lower-case and a number, and make both entries match."; return; } button.disabled=true; try { await authService.updatePassword(password); globalThis.SkillWardRecovery.clearRecoveryPending(sessionStorage); await authService.signOut(); renderLogin("Password updated successfully. Sign in with your new password."); } catch { error.textContent=authMessage("RECOVERY_INVALID"); button.disabled=false; } });
 }
 bootstrap();
