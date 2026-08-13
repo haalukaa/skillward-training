@@ -4,6 +4,11 @@ const test = require("node:test");
 
 const read = file => fs.readFileSync(file, "utf8");
 const app = read("app.js"), auth = read("src/auth-service.js"), database = read("src/database-service.js");
+const recoverySource = read("src/recovery-service.js");
+
+async function loadRecoveryModule() {
+  return import(`data:text/javascript;base64,${Buffer.from(recoverySource).toString("base64")}#${Math.random()}`);
+}
 
 test("sign-in and Demo Mode are separate and public sign-up is unavailable", () => {
   assert.match(app, /Sign in to SkillWard/); assert.match(app, /Explore Demo Mode/);
@@ -52,6 +57,46 @@ test("account blocking, recovery, restoration and safe diagnostics are implement
   assert.doesNotMatch(database, /console\.(?:warn|error)\([^)]*error/);
   for (const text of ["ACCOUNT_SUSPENDED", "ACCOUNT_ARCHIVED", "ACCOUNT_INVITED", "MISSING_PROFILE", "MISSING_MEMBERSHIP", "resetPasswordForEmail", "updateUser", "getUser", "onAuthStateChange", "signOut"]) assert.match(app + auth, new RegExp(text));
   assert.match(app, /If an eligible account exists/); assert.match(app, /button\.disabled=true/);
+});
+
+test("recovery callbacks parse PKCE codes and legacy recovery hashes", async () => {
+  const { parseRecoveryCallback } = await loadRecoveryModule();
+  const pkce = parseRecoveryCallback("https://example.test/?recovery=1&code=pkce-code");
+  assert.equal(pkce.requested, true); assert.equal(pkce.code, "pkce-code"); assert.equal(pkce.legacy, false);
+  const legacy = parseRecoveryCallback("https://example.test/#access_token=access&refresh_token=refresh&type=recovery");
+  assert.equal(legacy.requested, true); assert.equal(legacy.legacy, true);
+  assert.equal(legacy.accessToken, "access"); assert.equal(legacy.refreshToken, "refresh");
+});
+
+test("PASSWORD_RECOVERY and PKCE exchange establish the recovery session", async () => {
+  const { establishRecoverySession } = await loadRecoveryModule();
+  const session = { user: { id: "user-id" } }; let exchanged; let unsubscribed = false;
+  const client = { auth: {
+    onAuthStateChange(callback) { callback("PASSWORD_RECOVERY", session); return { data: { subscription: { unsubscribe() { unsubscribed = true; } } } }; },
+    async exchangeCodeForSession(code) { exchanged = code; return { data: { session }, error: null }; }
+  } };
+  assert.equal(await establishRecoverySession(client, { requested: true, code: "one-time-code", legacy: false }), session);
+  assert.equal(exchanged, "one-time-code"); assert.equal(unsubscribed, true);
+});
+
+test("legacy recovery establishes a session and invalid or expired links remain neutral", async () => {
+  const { establishRecoverySession } = await loadRecoveryModule(); let supplied;
+  const client = { auth: {
+    onAuthStateChange() { return { data: { subscription: { unsubscribe() {} } } }; },
+    async setSession(tokens) { supplied = tokens; return { data: { session: { user: { id: "user-id" } } }, error: null }; }
+  } };
+  await establishRecoverySession(client, { requested: true, legacy: true, accessToken: "a", refreshToken: "r" });
+  assert.deepEqual(supplied, { access_token: "a", refresh_token: "r" });
+  await assert.rejects(establishRecoverySession(client, { requested: true }), { message: "RECOVERY_INVALID" });
+  assert.match(app, /invalid, expired or has already been used/); assert.match(app, /Request another recovery email/);
+  assert.doesNotMatch(app, /console\.(?:log|warn|error)/);
+});
+
+test("recovery form validates matching strong passwords and updates only through the recovery session", () => {
+  assert.match(app, /Create new password/); assert.match(app, /Confirm new password/); assert.match(app, /password-toggle/);
+  assert.match(app, /password!==confirmation/); assert.match(app, /password\.length<12/); assert.match(app, /await authService\.updatePassword\(password\)/);
+  assert.ok(app.indexOf("await authService.establishRecovery(recovery)") < app.indexOf("history.replaceState"), "callback is exchanged before browser history is cleaned");
+  assert.match(app, /Password updated successfully\. Sign in with your new password/);
 });
 
 test("role routing covers Management, learners, managers and trainers", () => {
