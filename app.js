@@ -73,18 +73,12 @@ const WORKPLACE_ROLES = {
 
 const DEPARTMENT_SELECTION_ROLES = new Set(["pca", "cleaner", "management"]);
 
-const ROLE_NAVIGATION = {
-  management: [["overview", "Overview", "⌂"], ["staff", "Staff", "♙"], ["assignments", "Assignments", "↔"], ["approvals", "Approvals", "✓"], ["reports", "Reports", "▥"]],
-  learner: [["home", "Home", "⌂"], ["training", "Training", "▷"], ["progress", "Progress", "◷"], ["profile", "Profile", "○"]],
-  trainer: [["home", "Home", "⌂"], ["trainees", "Trainees", "♙"], ["reviews", "Reviews", "✓"], ["activity", "Activity", "◷"]]
-};
-let activeWorkspace = "overview";
-
-function navigationFor(user) {
-  if (user?.role === "management") return ROLE_NAVIGATION.management;
-  if (user?.role?.includes("trainer")) return ROLE_NAVIGATION.trainer;
-  return ROLE_NAVIGATION.learner;
-}
+const NAV_ITEMS = [
+  ["home", "Home", "⌂"],
+  ["training", "Training", "▷"],
+  ["staff", "Staff", "♙"],
+  ["reports", "Reports", "▥"]
+];
 
 function workplaceRoleLabel(role) {
   return WORKPLACE_ROLES[role] || "Staff member";
@@ -300,13 +294,13 @@ function renderShell(content) {
   const user = authenticatedContext?.appUser || state.currentUser;
   const department = DEPARTMENTS.find(item => item.id === state.selectedDepartment);
   const authenticatedWorkspace = Boolean(user && (department || user.role?.includes("trainer")));
-  const navigation = navigationFor(user).map(([id, label, icon], index) => `
-    <button class="workspace-nav-item ${(activeWorkspace === id || (!activeWorkspace && index === 0)) ? "is-active" : ""}" data-nav="${id}" aria-label="${label}" ${activeWorkspace === id ? 'aria-current="page"' : ""}>
+  const navigation = NAV_ITEMS.map(([id, label, icon], index) => `
+    <button class="workspace-nav-item ${index === 0 ? "is-active" : ""}" data-nav="${id}" aria-label="${label}">
       <span aria-hidden="true">${icon}</span><small>${label}</small>
     </button>
   `).join("");
   app.innerHTML = `
-    <div class="shell ${authenticatedWorkspace ? "authenticated-shell" : ""} ${content.includes('class="login-layout"') ? "signed-out-shell" : ""}">
+    <div class="shell ${authenticatedWorkspace ? "authenticated-shell" : ""}">
       <header class="topbar">
         <div class="brand">
           <div class="brand-mark">
@@ -323,7 +317,7 @@ function renderShell(content) {
         <div class="top-actions">
           ${authenticatedWorkspace ? `<button class="notification-button" aria-label="Notifications"><span aria-hidden="true">●</span></button>` : ""}
           ${user ? `<span class="role-pill">${workplaceRoleLabel(user.role)}</span>` : ""}
-          ${authenticatedWorkspace ? `<details class="profile-menu"><summary class="profile-button" aria-label="User profile: ${escapeHtml(user.name)}"><span>${escapeHtml(user.name).charAt(0).toUpperCase()}</span><strong>${escapeHtml(user.name)}</strong></summary><div class="profile-popover"><strong>${escapeHtml(user.name)}</strong><small>${workplaceRoleLabel(user.role)}</small>${authenticatedContext ? '<button class="link-button" id="signOutBtn">Sign Out</button>' : '<button class="link-button" id="switchRoleBtn">Leave Demo</button>'}</div></details>` : user ? `<button class="btn btn-secondary" id="switchRoleBtn">Switch role</button>` : ""}
+          ${authenticatedContext ? `<button class="btn btn-secondary" id="signOutBtn">Sign Out</button>` : ""}${authenticatedWorkspace ? `<button class="profile-button" id="switchRoleBtn" aria-label="User profile: ${escapeHtml(user.name)}"><span>${escapeHtml(user.name).charAt(0).toUpperCase()}</span><strong>${escapeHtml(user.name)}</strong></button>` : user ? `<button class="btn btn-secondary" id="switchRoleBtn">Switch role</button>` : ""}
         </div>
       </header>
       ${authenticatedWorkspace ? `<nav class="side-nav" aria-label="Primary navigation">${navigation}</nav>` : ""}
@@ -339,7 +333,7 @@ function renderShell(content) {
     </div>
   `;
 
-  document.getElementById("signOutBtn")?.addEventListener("click", async () => { await authService?.signOut(); authenticatedContext = null; state.currentUser = null; state.selectedDepartment = null; activeWorkspace="overview"; saveState(); history.replaceState({ signedOut: true }, "", location.pathname); renderLogin(); });
+  document.getElementById("signOutBtn")?.addEventListener("click", async () => { await authService?.signOut(); authenticatedContext = null; state.currentUser = null; state.selectedDepartment = null; saveState(); renderLogin(); });
 
   document.getElementById("switchRoleBtn")?.addEventListener("click", () => {
     state.currentUser = null;
@@ -356,10 +350,7 @@ function renderShell(content) {
 
   document.querySelectorAll(".workspace-nav-item").forEach(button => {
     button.addEventListener("click", () => {
-      activeWorkspace = button.dataset.nav;
-      history.pushState({ workspace: activeWorkspace }, "", `#${activeWorkspace}`);
-      if (user.role === "management") renderManagementDashboard(activeWorkspace);
-      else document.getElementById(button.dataset.nav)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document.getElementById(button.dataset.nav)?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   });
 
@@ -383,38 +374,38 @@ function authMessage(code) {
   return messages[code] || "We could not sign you in. Check your details and try again.";
 }
 
-function authenticationLayout(cardContent) {
-  return `<div class="login-layout">
-    <section class="login-intro">
-      <div class="hero-motion" aria-hidden="true"><span class="motion-orb motion-orb-one"></span><span class="motion-orb motion-orb-two"></span><span class="motion-grid"></span></div>
-      <div class="login-label hero-reveal hero-reveal-1"><span></span> Healthcare workforce enablement</div>
-      <h2 class="hero-title" aria-label="Build your confidence before your first shift"><span class="hero-line hero-reveal hero-reveal-2">Build Your Confidence</span><span class="hero-line hero-accent hero-reveal hero-reveal-3">Before Your First Shift</span></h2>
-      <p class="hero-reveal hero-reveal-4">Structured, role-based learning that turns approved procedures into confident workplace practice.</p>
-      <div class="learning-flow" aria-label="SkillWard learning process"><div><span>01</span><strong>Learn</strong><small>Role-based pathways</small></div><i aria-hidden="true"></i><div><span>02</span><strong>Validate</strong><small>Knowledge checks</small></div><i aria-hidden="true"></i><div><span>03</span><strong>Sign off</strong><small>Observed competency</small></div></div>
-      <p class="login-platform-note hero-reveal hero-reveal-5">Designed for hospital teams, trainers and frontline staff.</p>
-    </section>
-    <div class="login-flip-shell"><section class="card login-card auth-card" id="workspaceCard">${cardContent}</section></div>
-  </div>`;
-}
-
-function renderLogin(message = "", initialState = "entryOptions") {
-  renderShell(authenticationLayout(`
-          <div class="auth-wordmark" aria-label="SkillWard">Skill<span>Ward</span></div>
-          <section id="entryOptions" class="auth-state"><h2>Get Started</h2><p>Choose how you would like to continue.</p>${message ? `<p class="auth-notice" role="status" aria-live="polite">${escapeHtml(message)}</p>` : ""}<div class="entry-options"><button class="btn btn-wide" id="showSignIn">Sign in to SkillWard</button><button class="btn btn-wide btn-secondary" id="showDemo">Explore Demo</button></div></section>
-          <form id="signInForm" class="access-form auth-state" hidden novalidate><button class="auth-back backChoices" type="button">← Back</button><header><h2>Welcome back</h2><p>Sign in to continue to your workspace.</p></header><label><span>Email</span><input class="auth-control" id="emailInput" type="email" autocomplete="username" inputmode="email" required /></label><label><span>Password</span><span class="password-field"><input class="auth-control" id="passwordInput" type="password" autocomplete="current-password" required /><button type="button" id="togglePassword" aria-label="Show password">Show</button></span></label><button class="link-button forgot-link" type="button" id="forgotPassword">Forgot password?</button><p id="authError" class="auth-status" role="alert" aria-live="polite"></p><button class="btn btn-wide login-submit" type="submit">Sign In</button></form>
-          <form id="demoForm" class="access-form auth-state" hidden><button class="auth-back backChoices" type="button">← Back</button><header><h2>Explore SkillWard</h2><p><strong>Demo Mode.</strong> Sample browser data is used and never sent to Supabase.</p></header><label><span>Full Name</span><input class="auth-control" id="nameInput" type="text" autocomplete="name" required /></label><label><span>Workplace Role</span><select class="auth-control" id="roleInput"><option value="pca">PCA</option><option value="cleaner">Cleaner</option><option value="pca-trainer">PCA Trainer</option><option value="cleaner-trainer">Cleaner Trainer</option><option value="management">Management</option></select></label><button class="btn btn-wide login-submit" type="submit">Enter Demo</button></form>
-          <form id="resetForm" class="access-form auth-state" hidden><button class="auth-back" type="button" id="backToSignIn">← Back to Sign In</button><header><h2>Reset password</h2><p>Enter your email to request a recovery link.</p></header><label><span>Email</span><input class="auth-control" id="resetEmail" type="email" autocomplete="username" required /></label><button class="btn btn-wide" type="submit">Send recovery link</button></form>
-  `));
+function renderLogin(message = "") {
+  renderShell(`
+    <div class="login-layout">
+      <section class="login-intro">
+        <div class="hero-motion" aria-hidden="true"><span class="motion-orb motion-orb-one"></span><span class="motion-orb motion-orb-two"></span><span class="motion-grid"></span></div>
+        <div class="login-label hero-reveal hero-reveal-1"><span></span> Healthcare workforce enablement</div>
+        <h2 class="hero-title" aria-label="Build your confidence before your first shift"><span class="hero-line hero-reveal hero-reveal-2">Build Your Confidence</span><span class="hero-line hero-accent hero-reveal hero-reveal-3">Before Your First Shift<span class="typing-cursor" aria-hidden="true"></span></span></h2>
+        <p class="hero-reveal hero-reveal-4">Structured, role-based learning that turns approved procedures into confident workplace practice.</p>
+        <div class="learning-flow" aria-label="SkillWard learning process"><div><span>01</span><strong>Learn</strong><small>Role-based pathways</small></div><i aria-hidden="true"></i><div><span>02</span><strong>Validate</strong><small>Knowledge checks</small></div><i aria-hidden="true"></i><div><span>03</span><strong>Sign off</strong><small>Observed competency</small></div></div>
+        <p class="login-platform-note hero-reveal hero-reveal-5">Designed for hospital teams, trainers and frontline staff.</p>
+      </section>
+      <div class="login-flip-shell"><div class="login-flip" id="loginFlip">
+        <section class="card login-card login-card-front" id="welcomeCard"><div class="get-started-logo"><svg viewBox="0 0 48 54" focusable="false"><title>SkillWard</title><path class="logo-shield" d="M24 2 44 9v16c0 13-8 22-20 28C12 47 4 38 4 25V9L24 2Z" /></svg></div><h2>Get Started</h2><p class="login-card-intro">Enter your SkillWard workspace.</p><button class="btn btn-wide get-started-btn" id="getStartedBtn">Get Started <span aria-hidden="true">→</span></button></section>
+        <section class="card login-card login-card-back" id="workspaceCard" aria-hidden="true" inert>
+          <div class="access-label"><span></span> SKILLWARD ACCESS</div><h2>Enter your workspace</h2>
+          ${message ? `<p class="auth-status" role="status">${escapeHtml(message)}</p>` : ""}
+          <div class="entry-options" id="entryOptions"><button class="entry-option" id="showSignIn"><strong>Sign in to SkillWard</strong><small>Use your Management-issued account.</small></button><button class="entry-option" id="showDemo"><strong>Explore Demo Mode</strong><small>Uses sample data stored only in this browser.</small></button></div>
+          <form id="signInForm" class="access-form" hidden novalidate><h3>Sign in to SkillWard</h3><label><span>Email</span><input id="emailInput" type="email" autocomplete="username" inputmode="email" required /></label><label><span>Password</span><input id="passwordInput" type="password" autocomplete="current-password" required /></label><p id="authError" class="auth-status" role="alert"></p><button class="btn btn-wide login-submit" type="submit">Sign in <span aria-hidden="true">→</span></button><button class="link-button" type="button" id="forgotPassword">Forgot password?</button><button class="link-button backChoices" type="button">Back</button></form>
+          <form id="demoForm" class="access-form" hidden><h3>Demo Mode</h3><p class="small">Explore with sample browser data. Nothing in Demo Mode is written to Supabase.</p><label><span>Full name</span><input id="nameInput" type="text" autocomplete="name" placeholder="e.g. Alex Smith" required /></label><label><span>Workspace role</span><select id="roleInput"><option value="pca">PCA</option><option value="cleaner">Cleaner</option><option value="pca-trainer">PCA Trainer</option><option value="cleaner-trainer">Cleaner Trainer</option><option value="management">Management</option></select></label><button class="btn btn-wide login-submit" type="submit">Continue in Demo Mode <span aria-hidden="true">→</span></button><button class="link-button backChoices" type="button">Leave Demo Mode and return to sign-in</button></form>
+          <form id="resetForm" class="access-form" hidden><h3>Reset password</h3><p class="small">Enter your email. For privacy, the confirmation is always the same.</p><label><span>Email</span><input id="resetEmail" type="email" autocomplete="username" required /></label><button class="btn btn-wide" type="submit">Send recovery link</button><button class="link-button backChoices" type="button">Back</button></form>
+        </section>
+      </div></div>
+    </div>`);
+  const flip=document.getElementById("loginFlip"), welcome=document.getElementById("welcomeCard"), card=document.getElementById("workspaceCard");
+  document.getElementById("getStartedBtn").addEventListener("click",()=>{ flip.classList.add("is-flipped"); welcome.setAttribute("aria-hidden","true"); welcome.setAttribute("inert",""); card.removeAttribute("aria-hidden"); card.removeAttribute("inert"); });
   const choices=document.getElementById("entryOptions"), forms=["signInForm","demoForm","resetForm"].map(id=>document.getElementById(id));
-  const show=id=>{ choices.hidden=true; forms.forEach(form=>form.hidden=form.id!==id); if(id==="signInForm"&&!authService?.adapter?.configured)document.getElementById("authError").textContent="Sign in is unavailable in this preview. Demo Mode is still available."; };
+  const show=id=>{ choices.hidden=true; forms.forEach(form=>form.hidden=form.id!==id); };
   document.getElementById("showSignIn").addEventListener("click",()=>show("signInForm")); document.getElementById("showDemo").addEventListener("click",()=>show("demoForm")); document.getElementById("forgotPassword").addEventListener("click",()=>show("resetForm"));
-  document.querySelectorAll(".backChoices").forEach(b=>b.addEventListener("click",()=>{ document.getElementById("passwordInput").value=""; document.getElementById("authError").textContent=""; forms.forEach(f=>f.hidden=true); choices.hidden=false; }));
-  document.getElementById("backToSignIn").addEventListener("click",()=>show("signInForm"));
-  document.getElementById("togglePassword").addEventListener("click",event=>{const input=document.getElementById("passwordInput"),showing=input.type==="text";input.type=showing?"password":"text";event.currentTarget.textContent=showing?"Show":"Hide";event.currentTarget.setAttribute("aria-label",showing?"Show password":"Hide password");});
+  document.querySelectorAll(".backChoices").forEach(b=>b.addEventListener("click",()=>{ forms.forEach(f=>f.hidden=true); choices.hidden=false; }));
   document.getElementById("demoForm").addEventListener("submit",async event=>{ event.preventDefault(); const name=document.getElementById("nameInput").value.trim(); if(!name)return; await authService?.signOut(); authenticatedContext=null; state.currentUser={name,role:document.getElementById("roleInput").value,mode:"demo"}; state.selectedDepartment=null; if(state.currentUser.role==="pca")state.learnerName=name; saveState(); routeSignedInUser(); });
   document.getElementById("signInForm").addEventListener("submit",async event=>{ event.preventDefault(); const form=event.currentTarget, button=form.querySelector("button[type=submit]"), error=document.getElementById("authError"); button.disabled=true; error.textContent="Signing in securely…"; try { state.currentUser=null; state.selectedDepartment=null; saveState(); authenticatedContext=await authService.signIn(document.getElementById("emailInput").value,document.getElementById("passwordInput").value); renderAuthenticatedWorkspace(); } catch(e) { error.textContent=authMessage(e.message); if(["MISSING_PROFILE","MISSING_MEMBERSHIP"].includes(e.message)) await authService?.signOut(); } finally { button.disabled=false; }});
   document.getElementById("resetForm").addEventListener("submit",async event=>{ event.preventDefault(); const button=event.currentTarget.querySelector("button[type=submit]"); button.disabled=true; try { await authService.resetPassword(document.getElementById("resetEmail").value,`${location.origin}/skillward-training/?recovery=1`); } catch {} renderLogin("If an eligible account exists, a password recovery link has been sent."); });
-  if(initialState!=="entryOptions")show(initialState);
 }
 
 function renderAuthenticatedWorkspace() {
@@ -472,7 +463,7 @@ function renderRoleWorkspace(role) {
   `);
 }
 
-function renderManagementDashboard(workspace = activeWorkspace || "overview") {
+function renderManagementDashboard() {
   if (state.currentUser?.role !== "management") return routeSignedInUser();
   const store = managementStore(), actor = currentManager(store);
   const department = DEPARTMENTS.find(item => item.id === state.selectedDepartment);
@@ -490,18 +481,16 @@ function renderManagementDashboard(workspace = activeWorkspace || "overview") {
   const recommendations = records.filter(item => item.status === "Sent to Management").map(item => `<article class="review-card" data-id="${item.id}"><div><strong>${escapeHtml(item.name)}</strong><span>${item.role} · ${escapeHtml(item.feedback || "Trainer recommendation")}</span></div><label>Management feedback<textarea class="management-feedback" placeholder="Required when requesting reassessment"></textarea></label><div><button class="btn approve-signoff">Approve</button><button class="btn btn-danger reassess-signoff">Request reassessment</button></div></article>`).join("");
   const staffRows = visibleStaff.map(person => { const trainer=store.data.staff.find(p=>p.id===person.trainerId), manager=store.data.managers.find(p=>p.id===person.managerId), overdue=store.data.assignments.some(a=>a.staffId===person.id && a.dueDate < new Date().toISOString().slice(0,10) && a.managementApprovalStatus!=="Approved"); return `<tr class="directory-row" data-search="${escapeHtml((person.name+' '+person.id+' '+person.email).toLowerCase())}" data-role="${person.role}" data-department="${person.departments.join(' ')}" data-account="${person.accountStatus}" data-employment="${person.employmentStatus}" data-competency="${person.competencyStatus}" data-trainer="${trainer?.id||'unassigned'}" data-manager="${manager?.id||'unassigned'}" data-progress="${person.progress}" data-overdue="${overdue?'overdue':'current'}"><td><input type="checkbox" class="bulk-select" data-id="${person.id}" aria-label="Select ${escapeHtml(person.name)}"> <button class="link-button staff-profile" data-id="${person.id}">${identity(person)}</button></td><td>${person.role}</td><td>${person.departments.map(departmentName).map(escapeHtml).join(', ')}</td><td>${person.progress}%</td><td><span class="status-chip status-${person.accountStatus==='Suspended'?'danger':person.accountStatus==='Active'?'success':'warning'}">${person.accountStatus}</span></td></tr>`; }).join("");
 
-  activeWorkspace = workspace;
-  renderShell(`<div class="management-workspace workspace-${workspace}">
-    <section class="management-title"><div><span class="eyebrow">${hospitalWide ? "HOSPITAL-WIDE" : "DEPARTMENT"}</span><h2>${workspace === "overview" ? "Management Dashboard" : workspace.charAt(0).toUpperCase()+workspace.slice(1)}</h2><p class="management-subtitle">${hospitalWide ? "Hospital-wide workspace" : `${escapeHtml(department.name)} · Department workspace`}</p></div><button class="btn btn-secondary" id="changeDepartmentBtn">Switch Department</button></section>
-    <section class="management-view view-overview"><div class="stats-grid management-stats"><div class="stat-card"><span>Total staff</span><strong>${visibleStaff.length}</strong></div><div class="stat-card stat-complete"><span>Training complete</span><strong>${report.completed}</strong></div><div class="stat-card"><span>Pending sign-offs</span><strong>${records.filter(item=>item.status==="Sent to Management").length}</strong></div><div class="stat-card stat-overdue"><span>Overdue training</span><strong>${report.overdue}</strong></div></div><div class="management-grid"><section class="card"><span class="eyebrow">PRIORITY ACTIONS</span><h3>Needs attention</h3><button class="priority-link" data-open-workspace="approvals">Review pending approvals <strong>${records.filter(item=>item.status==="Sent to Management").length}</strong></button><button class="priority-link" data-open-workspace="reports">Resolve overdue training <strong>${report.overdue}</strong></button><button class="priority-link" data-open-workspace="assignments">Complete unassigned relationships <strong>${visibleStaff.filter(p=>!p.trainerId&&!p.role.includes("Trainer")).length}</strong></button></section><section class="card"><span class="eyebrow">QUICK ACTIONS</span><h3>Workforce actions</h3><div class="quick-actions"><button class="btn" data-open-workspace="staff">Invite Staff</button><button class="btn btn-secondary" data-open-workspace="assignments">Assign Staff</button><button class="btn btn-secondary" data-open-workspace="approvals">Review Sign-offs</button></div></section></div><div class="management-grid"><section class="card"><h3>Training and compliance</h3><p>${report.completed} completions recorded in the current scope. ${report.overdue} pathway${report.overdue===1?' is':'s are'} overdue.</p></section><section class="card"><h3>Recent activity</h3><p>${store.data.audit[0] ? escapeHtml(store.data.audit[0].action)+" · "+escapeHtml(store.data.audit[0].staffName) : "No recent activity."}</p></section></div></section>
-    <section class="card dashboard-card management-section management-view view-assignments" id="assignments"><div class="section-heading"><div><span class="eyebrow">WORKFORCE ASSIGNMENTS</span><h3>Assignments</h3></div><span class="small">Current assignment shown before editing</span></div><div class="workspace-tabs"><span>Staff departments</span><span>Trainer departments</span><span>Staff-to-trainer</span><span>Pathways & deadlines</span></div><div class="assignment-groups"><section><h4>Staff departments</h4><div class="assignment-list">${staffDepartmentRows}</div></section><section><h4>Trainer departments</h4><div class="assignment-list">${trainerDepartmentRows}</div></section><section><h4>Staff-to-trainer assignments</h4><p class="small">Capacity is checked before confirmation.</p><div class="assignment-list">${staffTrainerRows}</div></section></div></section>
-    <section class="card dashboard-card management-section management-view view-approvals" id="approvals"><div class="section-heading"><div><span class="eyebrow">FINAL APPROVAL</span><h3>Approvals</h3></div><span class="count-badge">${records.filter(item=>item.status==="Sent to Management").length}</span></div><div class="workspace-tabs"><span>Pending recommendations</span><span>Overdue reviews</span><span>Approved history</span><span>Reassessment</span></div><div class="review-list">${recommendations || '<div class="empty-state"><strong>Nothing awaiting approval</strong><p>Trainer recommendations will appear here.</p></div>'}</div></section>
-    <section class="card dashboard-card management-section management-view view-staff" id="staff"><div class="section-heading"><div><span class="eyebrow">STAFF DIRECTORY</span><h3>Staff</h3></div><button class="btn" id="inviteStaff">Invite Staff</button></div>
+  renderShell(`
+    <section class="management-title" id="home"><div><h2>Management Dashboard</h2><p class="management-subtitle">${hospitalWide ? "Hospital-wide workspace" : `${escapeHtml(department.name)} · Department management workspace`}</p></div><button class="btn btn-secondary" id="changeDepartmentBtn">Switch Department</button></section>
+    <div class="stats-grid management-stats"><div class="stat-card"><span>Total PCA staff</span><strong>${report.pca}</strong></div><div class="stat-card"><span>Total Cleaner staff</span><strong>${report.cleaners}</strong></div><div class="stat-card stat-complete"><span>Completed training</span><strong>${report.completed}</strong></div><div class="stat-card stat-overdue"><span>Overdue training</span><strong>${report.overdue}</strong></div></div>
+    <section class="card dashboard-card management-section" id="training"><div class="section-heading"><div><span class="eyebrow">WORKFORCE ASSIGNMENTS</span><h3>Assignments</h3></div><span class="small">Role and capacity checked</span></div><p class="readonly-note">Assign staff and trainers to departments, then connect each staff member with the appropriate trainer.</p><div class="assignment-groups"><section><h4>1. Staff department assignments</h4><div class="assignment-list">${staffDepartmentRows}</div></section><section><h4>2. Trainer department assignments</h4><div class="assignment-list">${trainerDepartmentRows}</div></section><section><h4>3. Staff-to-trainer assignments</h4><p class="small">Trainer capacity is shown before confirmation. Selecting a new trainer replaces the current assignment.</p><div class="assignment-list">${staffTrainerRows}</div></section></div></section>
+    <section class="card dashboard-card management-section" id="reports"><div class="section-heading"><div><span class="eyebrow">FINAL APPROVAL</span><h3>Sign-off recommendations</h3></div><span class="count-badge">${records.filter(item=>item.status==="Sent to Management").length}</span></div><div class="review-list">${recommendations || '<p class="empty-state">No recommendations awaiting Management.</p>'}</div></section>
+    <section class="card dashboard-card management-section" id="staff"><div class="section-heading"><div><span class="eyebrow">STAFF DIRECTORY</span><h3>Profiles and assignments</h3></div><button class="btn" id="inviteStaff">Invite staff</button></div>
       <div class="directory-filters"><label class="search-filter"><span>Name, employee ID or email</span><input id="staffSearch" type="search" placeholder="Search staff"></label>${[["roleFilter","Role","All roles",["PCA","Cleaner","PCA Trainer","Cleaner Trainer"]],["departmentFilter","Department","All departments",DEPARTMENTS.filter(d=>actor.departments.includes(d.id)).map(d=>[d.id,d.name])],["accountFilter","Account status","All account statuses",store.ACCOUNT_STATUSES],["employmentFilter","Employment status","All employment statuses",store.EMPLOYMENT_STATUSES],["competencyFilter","Competency status","All competencies",["Not Started","In Progress","Approved","Reassessment Required"]],["trainerFilter","Trainer","All trainers",visibleStaff.filter(p=>p.role.includes('Trainer')).map(p=>[p.id,p.name])],["managerFilter","Manager","All managers",store.data.managers.map(p=>[p.id,p.name])],["progressFilter","Training progress","All progress",[["0-49","0–49%"],["50-99","50–99%"],["100","100%"]]],["overdueFilter","Overdue status","All due dates",[["overdue","Overdue"],["current","Current"]]]].map(([id,label,all,values])=>`<label><span>${label}</span><select id="${id}"><option value="all">${all}</option>${values.map(v=>Array.isArray(v)?`<option value="${v[0]}">${escapeHtml(v[1])}</option>`:`<option>${v}</option>`).join('')}</select></label>`).join('')}</div>
       <div class="bulk-bar"><strong id="selectionCount">0 selected</strong><label><span class="sr-only">Bulk action</span><select id="bulkAction"><option value="">Bulk action</option><option value="Suspended">Suspend access</option><option value="Archived">Archive accounts</option></select></label><button class="btn btn-secondary" id="applyBulk" disabled>Review and apply</button></div><div class="table-wrap"><table class="staff-table"><thead><tr><th>Staff member</th><th>Role</th><th>Department</th><th>Progress</th><th>Account</th></tr></thead><tbody>${staffRows}</tbody></table></div><p id="emptyDirectory" class="empty-state" hidden>No staff match these filters.</p><div id="staffProfilePanel"></div></section>
-    <section class="management-view view-reports"><div class="report-grid"><section class="card"><h3>Training completion summary</h3><strong>${report.completed} complete</strong></section><section class="card"><h3>Overdue training</h3><strong>${report.overdue} overdue</strong></section><section class="card"><h3>Competency status</h3><p>Current status uses approved workforce data.</p></section><section class="card"><h3>Department performance</h3><p>${escapeHtml(department.name)}</p></section></div><section class="card report-export"><h3>Secure exports</h3><p>Export tools are coming soon.</p><button class="btn btn-secondary" disabled>Export report · Coming soon</button></section></section></div>`);
-
-  document.querySelectorAll('[data-open-workspace]').forEach(button=>button.addEventListener('click',()=>renderManagementDashboard(button.dataset.openWorkspace)));
+    <section class="card dashboard-card management-section" id="audit"><div class="section-heading"><div><span class="eyebrow">PERMANENT HISTORY</span><h3>Audit history</h3></div><span class="small">Read only</span></div><div class="audit-feed">${store.data.audit.slice(0,20).map(a=>`<article><strong>${escapeHtml(a.action)}</strong><span class="staff-identity"><strong>${escapeHtml(a.staffName)}</strong><small>${escapeHtml(a.staffId)}</small></span><span>By ${escapeHtml(a.actor)} (${escapeHtml(a.actorRole)})</span><small>${escapeHtml(a.at)} · ${escapeHtml(departmentName(a.department)||'Hospital-wide workspace')}</small></article>`).join('') || '<p class="empty-state">No management changes recorded yet.</p>'}</div></section>
+    <section class="card coming-soon"><h3>Training content coming soon</h3><p>Management can monitor training and approve competency, but cannot edit clinical training content.</p></section>`);
 
   const persist = () => { state.managementData=store.data; saveState(); };
   const confirmChange = (message, action) => { if (!confirm(message)) return; try { action(); persist(); renderManagementDashboard(); } catch (error) { alert(error.message); } };
@@ -512,9 +501,9 @@ function renderManagementDashboard(workspace = activeWorkspace || "overview") {
   const filterDirectory=()=>{let shown=0;document.querySelectorAll('.directory-row').forEach(row=>{const progress=document.getElementById('progressFilter').value,p=Number(row.dataset.progress),progressOK=progress==='all'||(progress==='100'?p===100:progress==='0-49'?p<50:p>=50&&p<100);const ok=row.dataset.search.includes(document.getElementById('staffSearch').value.toLowerCase())&&progressOK&&filters.every(([key,id])=>document.getElementById(id).value==='all'||row.dataset[key].includes(document.getElementById(id).value));row.hidden=!ok;if(ok)shown++;});document.getElementById('emptyDirectory').hidden=shown>0;};
   document.querySelectorAll('.directory-filters input,.directory-filters select').forEach(el=>el.addEventListener(el.tagName==='INPUT'?'input':'change',filterDirectory));
   const updateBulk=()=>{const count=document.querySelectorAll('.bulk-select:checked').length;document.getElementById('selectionCount').textContent=`${count} selected`;document.getElementById('applyBulk').disabled=!count||!document.getElementById('bulkAction').value;};
-  document.querySelectorAll('.bulk-select').forEach(el=>el.addEventListener('change',updateBulk)); document.getElementById('bulkAction')?.addEventListener('change',updateBulk);
-  document.getElementById('applyBulk')?.addEventListener('click',()=>{const ids=[...document.querySelectorAll('.bulk-select:checked')].map(el=>el.dataset.id),status=document.getElementById('bulkAction').value;confirmChange(`Apply ${status} to ${ids.map(id=>store.data.staff.find(p=>p.id===id)?.name+' · '+id).join(', ')}?`,()=>store.bulk(actor,ids,{accountStatus:status},true));});
-  document.getElementById('inviteStaff')?.addEventListener('click',async()=>{ const Service=globalThis.SkillWardServices?.InvitationService; const result=Service ? await new Service().invite({email:'',role:'PCA',departmentId:department.id}) : {message:'Staff invitations are not available in this development integration. A protected Management service must be deployed first.'}; alert(result.message); });
+  document.querySelectorAll('.bulk-select').forEach(el=>el.addEventListener('change',updateBulk)); document.getElementById('bulkAction').addEventListener('change',updateBulk);
+  document.getElementById('applyBulk').addEventListener('click',()=>{const ids=[...document.querySelectorAll('.bulk-select:checked')].map(el=>el.dataset.id),status=document.getElementById('bulkAction').value;confirmChange(`Apply ${status} to ${ids.map(id=>store.data.staff.find(p=>p.id===id)?.name+' · '+id).join(', ')}?`,()=>store.bulk(actor,ids,{accountStatus:status},true));});
+  document.getElementById('inviteStaff').addEventListener('click',async()=>{ const Service=globalThis.SkillWardServices?.InvitationService; const result=Service ? await new Service().invite({email:'',role:'PCA',departmentId:department.id}) : {message:'Staff invitations are not available in this development integration. A protected Management service must be deployed first.'}; alert(result.message); });
   document.querySelectorAll('.staff-profile').forEach(button=>button.addEventListener('click',()=>{const person=store.data.staff.find(p=>p.id===button.dataset.id),trainer=store.data.staff.find(p=>p.id===person.trainerId);document.getElementById('staffProfilePanel').innerHTML=`<article class="staff-detail"><span class="eyebrow">STAFF PROFILE</span><h3>${escapeHtml(person.name)}</h3><span class="employee-id">${person.id}</span><p>${escapeHtml(person.email)}</p><dl><div><dt>Role</dt><dd>${person.role}</dd></div><div><dt>Department</dt><dd>${person.departments.map(departmentName).join(', ')}</dd></div><div><dt>Trainer</dt><dd>${trainer?`${escapeHtml(trainer.name)}<small>${trainer.id}</small>`:'Not assigned'}</dd></div><div><dt>Account</dt><dd>${person.accountStatus}</dd></div></dl></article>`;}));
   document.querySelectorAll('.approve-signoff,.reassess-signoff').forEach(button=>button.addEventListener('click',()=>{const card=button.closest('.review-card'),record=workflowRecords().find(item=>item.id===card.dataset.id),reassess=button.classList.contains('reassess-signoff'),feedback=card.querySelector('.management-feedback').value.trim();if(reassess&&!feedback)return alert('Enter feedback for the trainer before requesting reassessment.');record.status=reassess?'Reassessment Required':'Approved';record.feedback=feedback||'Management approved final competency.';saveState();renderManagementDashboard();}));
 }
@@ -893,14 +882,13 @@ async function bootstrap() {
   const recovery = new URLSearchParams(globalThis.location?.search || "").get("recovery") === "1";
   if (recovery) return renderPasswordUpdate();
   if (state.currentUser?.mode === "demo" || (state.currentUser && !state.currentUser.mode)) return routeSignedInUser();
-  renderLogin("Checking for an existing session…");
+  renderShell('<section class="card"><h2>Loading SkillWard…</h2><p>Resolving your secure session and workplace access.</p></section>');
   authService.onChange((event) => { if (event === "SIGNED_OUT" || event === "TOKEN_REFRESHED" && !authenticatedContext) { authenticatedContext = null; renderLogin("Your session has expired. Please sign in again."); } });
   try { authenticatedContext = await authService.restore(); if (authenticatedContext) return renderAuthenticatedWorkspace(); } catch (error) { await authService.signOut(); return renderLogin(authMessage(error.message)); }
   renderLogin();
 }
 function renderPasswordUpdate() {
-  renderShell(authenticationLayout(`<div class="auth-wordmark" aria-label="SkillWard">Skill<span>Ward</span></div><form class="access-form auth-state" id="updatePasswordForm"><button class="auth-back" type="button" id="passwordBack">← Back to Sign In</button><header><h2>Choose a new password</h2><p>Use 12 or more characters with upper-case, lower-case and a number.</p></header><label><span>New Password</span><input class="auth-control" id="newPassword" type="password" autocomplete="new-password" minlength="12" required></label><label><span>Confirm Password</span><input class="auth-control" id="confirmPassword" type="password" autocomplete="new-password" minlength="12" required></label><p id="recoveryError" class="auth-status" role="alert" aria-live="polite"></p><button class="btn btn-wide" type="submit">Update password</button></form>`));
-  document.getElementById("passwordBack").addEventListener("click",()=>{document.getElementById("newPassword").value="";document.getElementById("confirmPassword").value="";history.replaceState({},"",location.pathname);renderLogin("","signInForm");});
+  renderShell(`<section class="card recovery-card"><h2>Choose a new password</h2><form id="updatePasswordForm"><label><span>New password</span><input id="newPassword" type="password" autocomplete="new-password" minlength="12" required></label><label><span>Confirm password</span><input id="confirmPassword" type="password" autocomplete="new-password" minlength="12" required></label><p id="recoveryError" role="alert"></p><button class="btn" type="submit">Update password</button></form></section>`);
   document.getElementById("updatePasswordForm").addEventListener("submit", async event => { event.preventDefault(); const password=document.getElementById("newPassword").value, confirmation=document.getElementById("confirmPassword").value, error=document.getElementById("recoveryError"); if(password.length<12 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password) || password!==confirmation){ error.textContent="Use at least 12 characters with upper-case, lower-case and a number, and make both entries match."; return; } try { await authService.updatePassword(password); await authService.signOut(); history.replaceState({},"",location.pathname); renderLogin("Password updated. Sign in with your new password."); } catch(e) { error.textContent=authMessage(e.message); } });
 }
 bootstrap();

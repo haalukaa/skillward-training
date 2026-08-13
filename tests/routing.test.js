@@ -40,7 +40,7 @@ test("an unassigned trainer URL department is replaced with an assigned departme
 
 test("management dashboard stays department scoped and provides trainer assignments and final approval", () => {
   const html = session("management", "day-surgery").html;
-  for (const text of ["Day Surgery", "Staff departments", "Trainer departments", "Staff-to-trainer assignments", "PCA Trainer", "Cleaner Trainer", "Approvals", "Approve", "Request reassessment", "Management feedback", "Export tools are coming soon"]) assert.match(html, new RegExp(text));
+  for (const text of ["Day Surgery", "Staff department assignments", "Trainer department assignments", "Staff-to-trainer assignments", "PCA Trainer", "Cleaner Trainer", "Sign-off recommendations", "Approve", "Request reassessment", "Management feedback", "Training content coming soon"]) assert.match(html, new RegExp(text));
   assert.match(html, /Hospital-wide workspace|Emergency Department/); assert.doesNotMatch(html, /open-module|Complete sign-off/);
 });
 
@@ -48,12 +48,12 @@ test("known Department Manager direct navigation is safely restricted", () => {
   const result = session("management", "gastro", "Priya Nair");
   assert.equal(result.saved().selectedDepartment, "operating-theatre");
   assert.doesNotMatch(result.html, /option value="gastro"/);
-  assert.match(result.html, /Department workspace/);
+  assert.match(result.html, /Department management workspace/);
 });
 
-test("management directory exposes filters, bulk confirmation and profiles", () => {
+test("management directory exposes filters, bulk confirmation, profiles and read-only audit", () => {
   const html = session("management", "operating-theatre").html;
-  for (const text of ["STAFF DIRECTORY", "Name, employee ID or email", "All roles", "All departments", "All account statuses", "All employment statuses", "All competencies", "Bulk action", "Review and apply"]) assert.match(html, new RegExp(text));
+  for (const text of ["STAFF DIRECTORY", "Name, employee ID or email", "All roles", "All departments", "All account statuses", "All employment statuses", "All competencies", "Bulk action", "Audit history", "Read only"]) assert.match(html, new RegExp(text));
   assert.doesNotMatch(html, /Demonstration mode/);
 });
 
@@ -82,7 +82,7 @@ test("landing content and mobile full-name field remain present", () => {
 test("authenticated navigation retains desktop and mobile destinations", () => {
   const html = session("management", "operating-theatre").html;
   assert.equal((html.match(/class="side-nav"/g) || []).length, 1); assert.equal((html.match(/class="bottom-nav"/g) || []).length, 1);
-  for (const label of ["Overview", "Staff", "Assignments", "Approvals", "Reports"]) assert.match(html, new RegExp(`>${label}<`));
+  for (const label of ["Home", "Training", "Staff", "Reports"]) assert.match(html, new RegExp(`>${label}<`));
 });
 
 test("management presentation has no fictional hospital, separates IDs, and exposes every filter", () => {
@@ -101,18 +101,8 @@ test("management presentation has no fictional hospital, separates IDs, and expo
 test("role and department headers are contextual", () => {
   assert.match(session("pca", "operating-theatre").html, /Operating Theatre &amp; Recovery · PCA Training Hub/);
   assert.match(session("cleaner", "operating-theatre").html, /Operating Theatre &amp; Recovery · Cleaner Training Hub/);
-  assert.match(session("management", "day-surgery", "Priya Nair").html, /Day Surgery · Department workspace/);
+  assert.match(session("management", "day-surgery", "Priya Nair").html, /Day Surgery · Department management workspace/);
   assert.match(session("cleaner-trainer", "gastro").html, /Gastro · Cleaner Trainer Workspace/);
-});
-
-test("management information architecture uses dedicated active workspaces", () => {
-  const { context } = session("management", "operating-theatre");
-  for (const workspace of ["overview", "staff", "assignments", "approvals", "reports"]) {
-    context.renderManagementDashboard(workspace);
-    assert.match(context.document.getElementById("app").innerHTML, new RegExp(`workspace-${workspace}`));
-  }
-  assert.match(appSource, /Priority Actions|PRIORITY ACTIONS/);
-  assert.match(appSource, /Export tools are coming soon/);
 });
 
 test("temporary text logo badges are absent while accessible shield placeholders remain", () => {
