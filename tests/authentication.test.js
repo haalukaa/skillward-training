@@ -110,6 +110,13 @@ test("authenticated learner workspace renders database assignments without Demo 
   assert.match(app, /c\.moduleProgress\.filter/);
 });
 
+test("authenticated trainer workspace uses assigned database trainees and protected writes", () => {
+  for (const text of ["traineeProfiles", "practicalObservations", "signoffRecommendations", "recordPracticalObservation", "submitSignoffRecommendation", "Assigned trainees", "Record observation", "Send to Management"]) assert.match(app + database, new RegExp(text));
+  assert.match(database, /trainerAssignments\.find/);
+  assert.match(database, /TRAINER_ACTION_INVALID/);
+  assert.match(read("supabase/migrations/202608140001_trainer_workspace_access.sql"), /trainer_user_id = auth\.uid\(\)/);
+});
+
 test("Pages workflow uses repository path, validates only public config and gates deploy", () => {
   const workflow = read(".github/workflows/pages.yml"), runtime = read("runtime-config.js");
   assert.match(workflow, /branches: \[main\]/); assert.match(workflow, /needs: test/);
