@@ -325,9 +325,17 @@ function renderShell(content) {
       ${authenticatedWorkspace ? `<nav class="bottom-nav" aria-label="Primary navigation">${navigation}</nav>` : ""}
       <footer class="site-footer">
         <div class="footer-inner">
-          <span class="footer-wordmark">SkillWard</span>
-          <span class="footer-divider" aria-hidden="true"></span>
-          <span>Co-founded by <strong>Haleluya Yilma</strong> and <strong>Abdulkader</strong></span>
+          <p class="footer-copyright">© 2026 SkillWard. All rights reserved.</p>
+          <nav class="footer-links" aria-label="Legal and support">
+            <a href="legal.html#privacy">Privacy Policy</a>
+            <span aria-hidden="true">·</span>
+            <a href="legal.html#terms">Terms of Use</a>
+            <span aria-hidden="true">·</span>
+            <a href="legal.html#accessibility">Accessibility</a>
+            <span aria-hidden="true">·</span>
+            <a href="legal.html#support">Contact &amp; Support</a>
+          </nav>
+          <p class="footer-disclaimer">SkillWard is a workforce training and competency platform. Training content does not replace workplace policies, clinical guidelines, or professional judgement.</p>
         </div>
       </footer>
     </div>
