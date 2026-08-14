@@ -9,6 +9,7 @@ const dataSource = fs.readFileSync(path.join(root, "data.js"), "utf8");
 const managementDataSource = fs.readFileSync(path.join(root, "management-data.js"), "utf8");
 const managementSource = fs.readFileSync(path.join(root, "management.js"), "utf8");
 const appSource = fs.readFileSync(path.join(root, "app.js"), "utf8");
+const stylesSource = fs.readFileSync(path.join(root, "styles.css"), "utf8");
 
 function session(role, selectedDepartment = null, name = "Test User", extra = {}) {
   const app = { innerHTML: "" };
@@ -113,4 +114,11 @@ test("temporary text logo badges are absent while accessible shield placeholders
   const html = session("management", "operating-theatre").html;
   assert.doesNotMatch(html, />SW<|logo-letters/);
   assert.match(html, /<title>SkillWard<\/title>/);
+});
+
+test("trainer workspace has phone-width containment and card-style trainee records", () => {
+  assert.match(stylesSource, /overflow-x:\s*hidden/);
+  assert.match(stylesSource, /\.authenticated-shell \.page[^}]*min-width:\s*0/);
+  assert.match(stylesSource, /\.trainer-filters\+ \.table-wrap table/);
+  for (const label of ["Trainee", "Progress", "Latest result", "Sign-off", "Due"]) assert.match(stylesSource, new RegExp(`content:'${label}'`));
 });
