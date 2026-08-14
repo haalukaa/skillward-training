@@ -18,7 +18,7 @@ test("sign-in and Demo Mode are separate and public sign-up is unavailable", () 
 });
 
 test("authenticated REST-style context loads its permitted profile, membership and routing data", async () => {
-  for (const table of ["user_profiles", "hospital_memberships", "department_memberships", "departments", "trainer_assignments", "training_assignments"]) assert.match(database, new RegExp(`"${table}"`));
+  for (const table of ["user_profiles", "hospital_memberships", "department_memberships", "departments", "trainer_assignments", "training_assignments", "module_progress", "competency_records", "notifications"]) assert.match(database, new RegExp(`"${table}"`));
   assert.match(auth, /context\.membership\.role/); assert.match(auth, /departmentDetails/);
   assert.doesNotMatch(auth, /localStorage/);
   const moduleUrl = `data:text/javascript;base64,${Buffer.from(database).toString("base64")}`;
@@ -102,6 +102,12 @@ test("recovery form validates matching strong passwords and updates only through
 test("role routing covers Management, learners, managers and trainers", () => {
   for (const role of ["Hospital Administrator", "Department Manager", "PCA", "Cleaner", "PCA Trainer", "Cleaner Trainer"]) assert.match(auth + app, new RegExp(role));
   assert.match(app, /departments\.length>1/); assert.match(app, /No assigned department/);
+});
+
+test("authenticated learner workspace renders database assignments without Demo Mode records", () => {
+  for (const text of ["Assigned pathways", "Unread notifications", "Competency records", "training_pathways", "progress_percentage", "authenticatedDepartment"]) assert.match(app + database, new RegExp(text));
+  assert.match(app, /c\.trainingAssignments\.filter/);
+  assert.match(app, /c\.moduleProgress\.filter/);
 });
 
 test("Pages workflow uses repository path, validates only public config and gates deploy", () => {

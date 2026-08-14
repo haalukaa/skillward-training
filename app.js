@@ -71,7 +71,7 @@ const WORKPLACE_ROLES = {
   management: "Management"
 };
 
-const DEPARTMENT_SELECTION_ROLES = new Set(["pca", "cleaner", "management"]);
+const DEPARTMENT_SELECTION_ROLES = new Set(["pca", "cleaner"]);
 
 const NAV_ITEMS = [
   ["home", "Home", "⌂"],
@@ -123,7 +123,7 @@ function assignedDepartmentsForCurrentTrainer() {
 }
 
 function departmentName(id) {
-  return DEPARTMENTS.find(item => item.id === id)?.name || id;
+  return DEPARTMENTS.find(item => item.id === id)?.name || authenticatedContext?.departmentDetails?.find(item => item.id === id)?.name || id;
 }
 
 function statusTone(status) {
@@ -160,6 +160,12 @@ function routeSignedInUser() {
   if (state.currentUser?.role?.includes("trainer")) {
     const assigned = assignedDepartmentsForCurrentTrainer();
     if (!assigned.includes(state.selectedDepartment)) state.selectedDepartment = assigned[0] || null;
+    saveState();
+  }
+
+  if (state.currentUser?.role === "management" && !state.selectedDepartment) {
+    const actor = currentManager();
+    state.selectedDepartment = actor?.departments?.[0] || null;
     saveState();
   }
 
@@ -292,7 +298,7 @@ function bindModuleButtons() {
 
 function renderShell(content) {
   const user = authenticatedContext?.appUser || state.currentUser;
-  const department = DEPARTMENTS.find(item => item.id === state.selectedDepartment);
+  const department = DEPARTMENTS.find(item => item.id === state.selectedDepartment) || authenticatedContext?.departmentDetails?.find(item => item.id === state.selectedDepartment);
   const authenticatedWorkspace = Boolean(user && (department || user.role?.includes("trainer")));
   const navigation = NAV_ITEMS.map(([id, label, icon], index) => `
     <button class="workspace-nav-item ${index === 0 ? "is-active" : ""}" data-nav="${id}" aria-label="${label}">
@@ -420,9 +426,17 @@ function renderAuthenticatedWorkspace() {
   const c=authenticatedContext; if(!c)return renderLogin();
   const departments=c.departmentDetails, role=c.membership.role;
   if(role!=="Hospital Administrator" && !departments.length) return renderShell('<section class="card access-blocked"><h2>No assigned department</h2><p>Contact Management to have a department assigned.</p></section>');
-  const choose=departments.length>1 && ["Department Manager","PCA Trainer","Cleaner Trainer"].includes(role);
+  if(departments.length && !departments.some(item=>item.id===state.selectedDepartment)) state.selectedDepartment=departments[0].id;
+  const choose=departments.length>1;
   const title=role==="Hospital Administrator"?"Management Dashboard":role==="Department Manager"?"Department Management Workspace":`${role} ${role.includes("Trainer")?"Workspace":"Training Workspace"}`;
-  renderShell(`<section class="dashboard-hero"><div class="dashboard-welcome"><span class="eyebrow">AUTHENTICATED WORKSPACE</span><h2>${escapeHtml(title)}</h2><p>Your role and access are loaded securely from SkillWard's database.</p></div></section>${choose?`<section class="card"><label>Permitted department<select id="authenticatedDepartment">${departments.map(d=>`<option value="${escapeHtml(d.id)}">${escapeHtml(d.name)}</option>`).join("")}</select></label></section>`:""}<section class="card"><h3>${role==="Hospital Administrator"?"Hospital-wide Management access":escapeHtml(departments[0]?.name||"Assigned access")}</h3><p>${c.trainingAssignments.length?`${c.trainingAssignments.length} assigned training pathway(s) loaded.`:"No assigned training pathways are available."}</p>${role.includes("Trainer")?`<p>${c.trainerAssignments.length} compatible trainee assignment(s) loaded.</p>`:""}<p class="small">This development integration provides safe read-only dashboard loading. Privileged changes remain unavailable.</p></section>`);
+  const selected=departments.find(item=>item.id===state.selectedDepartment)||departments[0];
+  const assignments=c.trainingAssignments.filter(item=>!selected||item.department_id===selected.id);
+  const progressFor=assignment=>c.moduleProgress.filter(item=>item.training_assignment_id===assignment.id);
+  const assignmentCards=assignments.map(assignment=>{const pathway=assignment.training_pathways||{};const progress=Math.round(Number(assignment.progress_percentage)||0);const modules=progressFor(assignment);return `<article class="card training-area-card"><div class="training-area-top"><span class="area-code">${escapeHtml(role)}</span><span class="status-chip status-${statusTone(assignment.status)}">${escapeHtml(assignment.status)}</span></div><div><h3>${escapeHtml(pathway.title||"Assigned training pathway")}</h3><p>${escapeHtml(pathway.description||"Complete the pathway assigned by Management.")}</p></div><div class="area-progress"><span style="width:${progress}%"></span></div><div class="module-meta"><span class="small">${progress}% complete · ${modules.filter(item=>item.status==="Approved"||item.status==="Ready for Trainer Review").length}/${modules.length} tracked modules</span>${assignment.due_date?`<span class="small">Due ${escapeHtml(assignment.due_date)}</span>`:""}</div></article>`;}).join("");
+  const learner=["PCA","Cleaner"].includes(role);
+  const summary=learner?`<div class="stats-grid"><div class="stat-card"><span>Assigned pathways</span><strong>${assignments.length}</strong></div><div class="stat-card"><span>Unread notifications</span><strong>${c.notifications.length}</strong></div><div class="stat-card"><span>Competency records</span><strong>${c.competencyRecords.length}</strong></div></div><div class="section-heading" id="training"><div><span class="eyebrow">YOUR TRAINING</span><h3>Assigned pathways</h3></div></div><div class="grid grid-3">${assignmentCards||'<p class="empty-state">No training pathway has been assigned for this department yet.</p>'}</div>`:`<section class="card"><h3>${role==="Hospital Administrator"?"Hospital-wide Management access":escapeHtml(selected?.name||"Assigned access")}</h3>${role.includes("Trainer")?`<p>${c.trainerAssignments.length} assigned trainee relationship(s) loaded securely.</p>`:""}<p class="small">Your permitted workspace is connected to SkillWard's secured database. Management write actions will be enabled in a later controlled phase.</p></section>`;
+  renderShell(`<section class="dashboard-hero" id="home"><div class="dashboard-welcome"><span class="eyebrow">AUTHENTICATED WORKSPACE</span><h2>${escapeHtml(title)}</h2><p>Welcome, ${escapeHtml(c.profile.full_name)}. Your role, access and training records are loaded securely from SkillWard's database.</p></div>${learner?`<div class="progress-ring" style="--progress:${Math.round(Number(assignments[0]?.progress_percentage)||0)*3.6}deg"><div><strong>${Math.round(Number(assignments[0]?.progress_percentage)||0)}%</strong><span>complete</span></div></div>`:""}</section>${choose?`<section class="card"><label>Permitted department<select id="authenticatedDepartment">${departments.map(d=>`<option value="${escapeHtml(d.id)}" ${d.id===selected?.id?"selected":""}>${escapeHtml(d.name)}</option>`).join("")}</select></label></section>`:""}${summary}`);
+  document.getElementById("authenticatedDepartment")?.addEventListener("change",event=>{state.selectedDepartment=event.target.value;renderAuthenticatedWorkspace();});
 }
 
 function routeCurrentUser() {
