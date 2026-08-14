@@ -38,6 +38,12 @@ export class SkillWardDatabaseService {
       ? await query("trainer_assignments", q => q.eq("trainer_user_id", user.id).eq("is_active", true)) : [];
     const trainingAssignments = ["PCA", "Cleaner"].includes(membership.role)
       ? await query("training_assignments", q => q.eq("user_id", user.id).select("*, training_pathways(*)")) : [];
-    return { user, profile, membership, departments, departmentDetails, trainerAssignments, trainingAssignments };
+    const assignmentIds = trainingAssignments.map(item => item.id);
+    const moduleProgress = assignmentIds.length
+      ? await query("module_progress", q => q.in("training_assignment_id", assignmentIds)) : [];
+    const competencyRecords = ["PCA", "Cleaner"].includes(membership.role)
+      ? await query("competency_records", q => q.eq("user_id", user.id)) : [];
+    const notifications = await query("notifications", q => q.eq("recipient_user_id", user.id).eq("status", "Unread"));
+    return { user, profile, membership, departments, departmentDetails, trainerAssignments, trainingAssignments, moduleProgress, competencyRecords, notifications };
   }
 }

@@ -21,8 +21,12 @@ function session(role, selectedDepartment = null, name = "Test User", extra = {}
   return { html: app.innerHTML, context, saved: () => JSON.parse(saved) };
 }
 
-test("PCA, Cleaner and Management retain department selection", () => {
-  for (const role of ["pca", "cleaner", "management"]) assert.match(session(role).html, /Choose your department/);
+test("only PCA and Cleaner retain department selection", () => {
+  for (const role of ["pca", "cleaner"]) assert.match(session(role).html, /Choose your department/);
+  const management = session("management");
+  assert.doesNotMatch(management.html, /Choose your department/);
+  assert.match(management.html, /Management Dashboard/);
+  assert.equal(management.saved().selectedDepartment, "operating-theatre");
 });
 
 test("trainer roles route to role-specific, assigned-department dashboards", () => {
