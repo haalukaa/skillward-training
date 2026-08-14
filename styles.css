@@ -155,18 +155,22 @@ textarea:focus-visible {
 .footer-inner {
   width: min(100%, 1180px);
   margin: 0 auto;
-  padding: 18px clamp(14px, 3vw, 28px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
+  padding: 22px clamp(14px, 3vw, 28px);
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  text-align: center;
   font-size: .78rem;
   letter-spacing: .01em;
 }
 
-.footer-wordmark { color: var(--navy); font-weight: 900; letter-spacing: -.01em; }
-.footer-divider { width: 1px; height: 14px; background: var(--line); }
-.footer-inner strong { color: var(--navy); font-weight: 800; }
+.footer-inner p { margin: 0; }
+.footer-copyright { color: var(--navy); font-weight: 800; }
+.footer-links { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; }
+.footer-links a { color: var(--teal-dark); font-weight: 700; text-decoration: none; }
+.footer-links a:hover { text-decoration: underline; }
+.footer-links a:focus-visible { outline: 3px solid rgba(15, 124, 123, .28); outline-offset: 3px; border-radius: 3px; }
+.footer-disclaimer { max-width: 860px; font-size: .72rem; line-height: 1.45; color: var(--muted); }
 
 .card {
   background: var(--surface);
