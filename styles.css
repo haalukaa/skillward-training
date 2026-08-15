@@ -98,6 +98,13 @@ textarea:focus-visible {
 
 .brand-mark svg { width: 100%; height: 100%; display: block; }
 .logo-shield { fill: #dff5ef; stroke: #9ce3d4; stroke-width: 2; }
+.logo-symbol {
+  fill: none;
+  stroke: var(--teal-dark);
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 .brand-copy { min-width: 0; }
 
 .brand h1 {
@@ -1459,6 +1466,7 @@ th {
 
 .welcome-emblem svg { width: 100%; height: 100%; }
 .welcome-emblem .logo-shield { fill: var(--navy); stroke: var(--teal); }
+.welcome-emblem .logo-symbol { stroke: #68e0d1; }
 
 .welcome-kicker {
   display: flex;
@@ -1869,6 +1877,8 @@ th {
   .sector-grid { grid-template-columns: 1fr; max-width: 680px; margin: 0 auto; }
   .sector-card { min-height: 230px; }
   .hospital-entry-view .login-layout { padding-top: 18px; }
+  .hospital-login-layout .login-intro { grid-row: 1; }
+  .hospital-login-layout .hospital-access-card { grid-row: 2; }
 }
 
 @media (max-width: 600px) {
