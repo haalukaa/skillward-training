@@ -347,7 +347,7 @@ function renderShell(content) {
     </div>
   `;
 
-  document.getElementById("signOutBtn")?.addEventListener("click", async () => { await authService?.signOut(); authenticatedContext = null; state.currentUser = null; state.selectedDepartment = null; saveState(); renderLogin(); });
+  document.getElementById("signOutBtn")?.addEventListener("click", async () => { await authService?.signOut(); authenticatedContext=null; state.currentUser = null; state.selectedDepartment = null; saveState(); renderLogin(); });
 
   document.getElementById("switchRoleBtn")?.addEventListener("click", () => {
     state.currentUser = null;
@@ -408,7 +408,7 @@ function renderLogin(message = "") {
           <h2>Welcome to <span>SkillWard</span></h2>
           <p class="welcome-lead">One trusted platform for training, competency and confident practice across care organisations.</p>
           <div class="welcome-actions">
-            <button class="btn welcome-primary" id="getStartedBtn">Explore SkillWard <span aria-hidden="true">→</span></button>
+            <button class="btn welcome-primary" id="getStartedBtn">Get Started <span aria-hidden="true">→</span></button>
             <a class="welcome-secondary" href="legal.html#support">For organisations <span aria-hidden="true">↗</span></a>
           </div>
           <div class="welcome-trust" aria-label="Platform capabilities"><span>Structured learning</span><i></i><span>Competency evidence</span><i></i><span>Compliance visibility</span></div>
@@ -460,13 +460,13 @@ function renderLogin(message = "") {
             <div class="learning-flow" aria-label="SkillWard learning process"><div><span>01</span><strong>Learn</strong><small>Role-based pathways</small></div><i aria-hidden="true"></i><div><span>02</span><strong>Validate</strong><small>Knowledge checks</small></div><i aria-hidden="true"></i><div><span>03</span><strong>Sign off</strong><small>Observed competency</small></div></div>
             <p class="login-platform-note hero-reveal hero-reveal-5">Designed for hospital teams, trainers and frontline staff.</p>
           </section>
-          <section class="card login-card hospital-access-card" id="workspaceCard">
+          <section class="card login-card login-flip hospital-access-card" id="workspaceCard">
             <div class="hospital-card-heading"><span class="sector-mini-icon">${sectorIcon("hospital")}</span><div><div class="access-label"><span></span> HOSPITAL ENVIRONMENT</div><h2>Enter your workspace</h2></div></div>
             <p class="login-card-intro">Sign in securely or explore SkillWard with sample data.</p>
             ${message ? `<p class="auth-status" role="status">${escapeHtml(message)}</p>` : ""}
             <div class="entry-options" id="entryOptions"><button class="entry-option" id="showSignIn"><span class="option-icon" aria-hidden="true">→</span><strong>Sign in to SkillWard</strong><small>Use your Management-issued account.</small></button><button class="entry-option" id="showDemo"><span class="option-icon" aria-hidden="true">◇</span><strong>Explore Demo Mode</strong><small>Preview workflows using sample browser data.</small></button></div>
             <form id="signInForm" class="access-form" hidden novalidate><h3>Sign in to SkillWard</h3><label><span>Email</span><input id="emailInput" type="email" autocomplete="username" inputmode="email" required /></label><label><span>Password</span><input id="passwordInput" type="password" autocomplete="current-password" required /></label><p id="authError" class="auth-status" role="alert"></p><button class="btn btn-wide login-submit" type="submit">Sign in <span aria-hidden="true">→</span></button><button class="link-button" type="button" id="forgotPassword">Forgot password?</button><button class="link-button backChoices" type="button">Back to access options</button></form>
-            <form id="demoForm" class="access-form" hidden><h3>Explore Hospital Demo</h3><p class="small">Sample information stays in this browser and is never written to the live database.</p><label><span>Full name</span><input id="nameInput" type="text" autocomplete="name" placeholder="e.g. Alex Smith" required /></label><label><span>Workspace role</span><select id="roleInput"><option value="pca">PCA</option><option value="cleaner">Cleaner</option><option value="pca-trainer">PCA Trainer</option><option value="cleaner-trainer">Cleaner Trainer</option><option value="management">Management</option></select></label><button class="btn btn-wide login-submit" type="submit">Continue in Demo Mode <span aria-hidden="true">→</span></button><button class="link-button backChoices" type="button">Back to access options</button></form>
+            <form id="demoForm" class="access-form" hidden><h3>Explore Hospital Demo</h3><p class="small">Nothing in Demo Mode is written to Supabase. Sample information stays only in this browser.</p><label><span>Full name</span><input id="nameInput" type="text" autocomplete="name" placeholder="e.g. Alex Smith" required /></label><label><span>Workspace role</span><select id="roleInput"><option value="pca">PCA</option><option value="cleaner">Cleaner</option><option value="pca-trainer">PCA Trainer</option><option value="cleaner-trainer">Cleaner Trainer</option><option value="management">Management</option></select></label><button class="btn btn-wide login-submit" type="submit">Continue in Demo Mode <span aria-hidden="true">→</span></button><button class="link-button backChoices" type="button">Back to access options</button></form>
             <form id="resetForm" class="access-form" hidden><h3>Reset password</h3><p class="small">Enter your email. For privacy, the confirmation is always the same.</p><label><span>Email</span><input id="resetEmail" type="email" autocomplete="username" required /></label><button class="btn btn-wide" type="submit">Send recovery link</button><button class="link-button backChoices" type="button">Back</button></form>
           </section>
         </div>
