@@ -2,4 +2,5 @@
   <rect width="512" height="512" fill="#112f3e"/>
   <circle cx="256" cy="256" r="188" fill="#163d4d"/>
   <path d="M256 76 404 129v119c0 96-59 166-148 210C167 414 108 344 108 248V129L256 76Z" fill="#dff5ef" stroke="#9ce3d4" stroke-width="16" stroke-linejoin="round"/>
+  <path d="m178 267 56 56 116-128" fill="none" stroke="#08726c" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
