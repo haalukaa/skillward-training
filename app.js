@@ -389,37 +389,117 @@ function authMessage(code) {
 }
 
 function renderLogin(message = "") {
+  const sectorIcon = (sector) => {
+    const icons = {
+      hospital: `<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M12 42V15a4 4 0 0 1 4-4h16a4 4 0 0 1 4 4v27M7 42h34M20 11V6h8v5M24 18v10m-5-5h10M17 42V32h14v10"/></svg>`,
+      "aged-care": `<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M8 22 24 8l16 14v20H8V22Z"/><path d="M18 42V29h12v13M17 20c2.4-3.1 5.3-3.4 7-.7 1.7-2.7 4.6-2.4 7 .7-1.2 4-4.2 6.7-7 8.5-2.8-1.8-5.8-4.5-7-8.5Z"/></svg>`,
+      disability: `<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="9" r="4"/><path d="M15 17h18M24 14v13m0 0-8 14m8-14 9 14M12 27l12-6 12 6"/></svg>`
+    };
+    return icons[sector];
+  };
+
   renderShell(`
-    <div class="login-layout">
-      <section class="login-intro">
-        <div class="hero-motion" aria-hidden="true"><span class="motion-orb motion-orb-one"></span><span class="motion-orb motion-orb-two"></span><span class="motion-grid"></span></div>
-        <div class="login-label hero-reveal hero-reveal-1"><span></span> Healthcare workforce enablement</div>
-        <h2 class="hero-title" aria-label="Build your confidence before your first shift"><span class="hero-line hero-reveal hero-reveal-2">Build Your Confidence</span><span class="hero-line hero-accent hero-reveal hero-reveal-3">Before Your First Shift<span class="typing-cursor" aria-hidden="true"></span></span></h2>
-        <p class="hero-reveal hero-reveal-4">Structured, role-based learning that turns approved procedures into confident workplace practice.</p>
-        <div class="learning-flow" aria-label="SkillWard learning process"><div><span>01</span><strong>Learn</strong><small>Role-based pathways</small></div><i aria-hidden="true"></i><div><span>02</span><strong>Validate</strong><small>Knowledge checks</small></div><i aria-hidden="true"></i><div><span>03</span><strong>Sign off</strong><small>Observed competency</small></div></div>
-        <p class="login-platform-note hero-reveal hero-reveal-5">Designed for hospital teams, trainers and frontline staff.</p>
+    <div class="entry-experience">
+      <section class="entry-view welcome-view" id="welcomeView">
+        <div class="welcome-atmosphere" aria-hidden="true"><span class="welcome-orb welcome-orb-one"></span><span class="welcome-orb welcome-orb-two"></span><span class="welcome-grid"></span></div>
+        <div class="welcome-content">
+          <div class="welcome-emblem"><svg viewBox="0 0 48 54" focusable="false"><title>SkillWard</title><path class="logo-shield" d="M24 2 44 9v16c0 13-8 22-20 28C12 47 4 38 4 25V9L24 2Z" /></svg></div>
+          <p class="welcome-kicker"><span></span> Workforce learning, built around care</p>
+          <h2>Welcome to <span>SkillWard</span></h2>
+          <p class="welcome-lead">One trusted platform for training, competency and confident practice across care organisations.</p>
+          <div class="welcome-actions">
+            <button class="btn welcome-primary" id="getStartedBtn">Explore SkillWard <span aria-hidden="true">→</span></button>
+            <a class="welcome-secondary" href="legal.html#support">For organisations <span aria-hidden="true">↗</span></a>
+          </div>
+          <div class="welcome-trust" aria-label="Platform capabilities"><span>Structured learning</span><i></i><span>Competency evidence</span><i></i><span>Compliance visibility</span></div>
+        </div>
+        <aside class="welcome-visual" aria-hidden="true">
+          <div class="visual-card visual-card-main"><small>WORKFORCE READINESS</small><strong>Learning that becomes confident practice.</strong><div class="visual-progress"><span></span></div><div class="visual-metrics"><div><b>01</b><small>Learn</small></div><div><b>02</b><small>Validate</small></div><div><b>03</b><small>Sign off</small></div></div></div>
+          <div class="visual-card visual-card-float"><span>✓</span><div><strong>Competency ready</strong><small>Visible. Structured. Accountable.</small></div></div>
+        </aside>
       </section>
-      <div class="login-flip-shell"><div class="login-flip" id="loginFlip">
-        <section class="card login-card login-card-front" id="welcomeCard"><div class="get-started-logo"><svg viewBox="0 0 48 54" focusable="false"><title>SkillWard</title><path class="logo-shield" d="M24 2 44 9v16c0 13-8 22-20 28C12 47 4 38 4 25V9L24 2Z" /></svg></div><h2>Get Started</h2><p class="login-card-intro">Enter your SkillWard workspace.</p><button class="btn btn-wide get-started-btn" id="getStartedBtn">Get Started <span aria-hidden="true">→</span></button></section>
-        <section class="card login-card login-card-back" id="workspaceCard" aria-hidden="true" inert>
-          <div class="access-label"><span></span> SKILLWARD ACCESS</div><h2>Enter your workspace</h2>
-          ${message ? `<p class="auth-status" role="status">${escapeHtml(message)}</p>` : ""}
-          <div class="entry-options" id="entryOptions"><button class="entry-option" id="showSignIn"><strong>Sign in to SkillWard</strong><small>Use your Management-issued account.</small></button><button class="entry-option" id="showDemo"><strong>Explore Demo Mode</strong><small>Uses sample data stored only in this browser.</small></button></div>
-          <form id="signInForm" class="access-form" hidden novalidate><h3>Sign in to SkillWard</h3><label><span>Email</span><input id="emailInput" type="email" autocomplete="username" inputmode="email" required /></label><label><span>Password</span><input id="passwordInput" type="password" autocomplete="current-password" required /></label><p id="authError" class="auth-status" role="alert"></p><button class="btn btn-wide login-submit" type="submit">Sign in <span aria-hidden="true">→</span></button><button class="link-button" type="button" id="forgotPassword">Forgot password?</button><button class="link-button backChoices" type="button">Back</button></form>
-          <form id="demoForm" class="access-form" hidden><h3>Demo Mode</h3><p class="small">Explore with sample browser data. Nothing in Demo Mode is written to Supabase.</p><label><span>Full name</span><input id="nameInput" type="text" autocomplete="name" placeholder="e.g. Alex Smith" required /></label><label><span>Workspace role</span><select id="roleInput"><option value="pca">PCA</option><option value="cleaner">Cleaner</option><option value="pca-trainer">PCA Trainer</option><option value="cleaner-trainer">Cleaner Trainer</option><option value="management">Management</option></select></label><button class="btn btn-wide login-submit" type="submit">Continue in Demo Mode <span aria-hidden="true">→</span></button><button class="link-button backChoices" type="button">Leave Demo Mode and return to sign-in</button></form>
-          <form id="resetForm" class="access-form" hidden><h3>Reset password</h3><p class="small">Enter your email. For privacy, the confirmation is always the same.</p><label><span>Email</span><input id="resetEmail" type="email" autocomplete="username" required /></label><button class="btn btn-wide" type="submit">Send recovery link</button><button class="link-button backChoices" type="button">Back</button></form>
-        </section>
-      </div></div>
+
+      <section class="entry-view sector-view" id="sectorView" hidden>
+        <button class="entry-back" id="backToWelcome" type="button"><span aria-hidden="true">←</span> Back</button>
+        <header class="sector-heading">
+          <p class="welcome-kicker"><span></span> SkillWard environments</p>
+          <h2>Choose your sector</h2>
+          <p>Select the care environment you want to enter. Your organisation and permissions are securely connected after sign-in.</p>
+        </header>
+        <div class="sector-grid">
+          <button class="sector-card sector-card-active" id="selectHospital" type="button">
+            <span class="sector-status sector-status-live"><i></i> Available</span>
+            <span class="sector-icon">${sectorIcon("hospital")}</span>
+            <span class="sector-copy"><strong>Hospital</strong><small>Clinical support workforce training, competency and department readiness.</small></span>
+            <span class="sector-arrow" aria-hidden="true">→</span>
+          </button>
+          <button class="sector-card" type="button" disabled aria-describedby="agedCareStatus">
+            <span class="sector-status">Coming soon</span>
+            <span class="sector-icon">${sectorIcon("aged-care")}</span>
+            <span class="sector-copy"><strong>Aged Care</strong><small>Care workforce onboarding, capability and compliance.</small></span>
+            <span class="sr-only" id="agedCareStatus">This SkillWard environment is coming soon.</span>
+          </button>
+          <button class="sector-card" type="button" disabled aria-describedby="disabilityStatus">
+            <span class="sector-status">Coming soon</span>
+            <span class="sector-icon">${sectorIcon("disability")}</span>
+            <span class="sector-copy"><strong>Disability Support</strong><small>Support-worker learning, practical capability and continuing development.</small></span>
+            <span class="sr-only" id="disabilityStatus">This SkillWard environment is coming soon.</span>
+          </button>
+        </div>
+        <p class="sector-footnote">More care environments will become available as their approved learning pathways are developed.</p>
+      </section>
+
+      <section class="entry-view hospital-entry-view" id="hospitalView" hidden>
+        <button class="entry-back hospital-back" id="backToSectors" type="button"><span aria-hidden="true">←</span> All sectors</button>
+        <div class="login-layout hospital-login-layout">
+          <section class="login-intro">
+            <div class="hero-motion" aria-hidden="true"><span class="motion-orb motion-orb-one"></span><span class="motion-orb motion-orb-two"></span><span class="motion-grid"></span></div>
+            <div class="login-label hero-reveal hero-reveal-1"><span></span> Hospital workforce enablement</div>
+            <h2 class="hero-title" aria-label="Build your confidence before your first shift"><span class="hero-line hero-reveal hero-reveal-2">Build Your Confidence</span><span class="hero-line hero-accent hero-reveal hero-reveal-3">Before Your First Shift<span class="typing-cursor" aria-hidden="true"></span></span></h2>
+            <p class="hero-reveal hero-reveal-4">Structured, role-based learning that turns approved hospital procedures into confident workplace practice.</p>
+            <div class="learning-flow" aria-label="SkillWard learning process"><div><span>01</span><strong>Learn</strong><small>Role-based pathways</small></div><i aria-hidden="true"></i><div><span>02</span><strong>Validate</strong><small>Knowledge checks</small></div><i aria-hidden="true"></i><div><span>03</span><strong>Sign off</strong><small>Observed competency</small></div></div>
+            <p class="login-platform-note hero-reveal hero-reveal-5">Designed for hospital teams, trainers and frontline staff.</p>
+          </section>
+          <section class="card login-card hospital-access-card" id="workspaceCard">
+            <div class="hospital-card-heading"><span class="sector-mini-icon">${sectorIcon("hospital")}</span><div><div class="access-label"><span></span> HOSPITAL ENVIRONMENT</div><h2>Enter your workspace</h2></div></div>
+            <p class="login-card-intro">Sign in securely or explore SkillWard with sample data.</p>
+            ${message ? `<p class="auth-status" role="status">${escapeHtml(message)}</p>` : ""}
+            <div class="entry-options" id="entryOptions"><button class="entry-option" id="showSignIn"><span class="option-icon" aria-hidden="true">→</span><strong>Sign in to SkillWard</strong><small>Use your Management-issued account.</small></button><button class="entry-option" id="showDemo"><span class="option-icon" aria-hidden="true">◇</span><strong>Explore Demo Mode</strong><small>Preview workflows using sample browser data.</small></button></div>
+            <form id="signInForm" class="access-form" hidden novalidate><h3>Sign in to SkillWard</h3><label><span>Email</span><input id="emailInput" type="email" autocomplete="username" inputmode="email" required /></label><label><span>Password</span><input id="passwordInput" type="password" autocomplete="current-password" required /></label><p id="authError" class="auth-status" role="alert"></p><button class="btn btn-wide login-submit" type="submit">Sign in <span aria-hidden="true">→</span></button><button class="link-button" type="button" id="forgotPassword">Forgot password?</button><button class="link-button backChoices" type="button">Back to access options</button></form>
+            <form id="demoForm" class="access-form" hidden><h3>Explore Hospital Demo</h3><p class="small">Sample information stays in this browser and is never written to the live database.</p><label><span>Full name</span><input id="nameInput" type="text" autocomplete="name" placeholder="e.g. Alex Smith" required /></label><label><span>Workspace role</span><select id="roleInput"><option value="pca">PCA</option><option value="cleaner">Cleaner</option><option value="pca-trainer">PCA Trainer</option><option value="cleaner-trainer">Cleaner Trainer</option><option value="management">Management</option></select></label><button class="btn btn-wide login-submit" type="submit">Continue in Demo Mode <span aria-hidden="true">→</span></button><button class="link-button backChoices" type="button">Back to access options</button></form>
+            <form id="resetForm" class="access-form" hidden><h3>Reset password</h3><p class="small">Enter your email. For privacy, the confirmation is always the same.</p><label><span>Email</span><input id="resetEmail" type="email" autocomplete="username" required /></label><button class="btn btn-wide" type="submit">Send recovery link</button><button class="link-button backChoices" type="button">Back</button></form>
+          </section>
+        </div>
+      </section>
     </div>`);
-  const flip=document.getElementById("loginFlip"), welcome=document.getElementById("welcomeCard"), card=document.getElementById("workspaceCard");
-  document.getElementById("getStartedBtn").addEventListener("click",()=>{ flip.classList.add("is-flipped"); welcome.setAttribute("aria-hidden","true"); welcome.setAttribute("inert",""); card.removeAttribute("aria-hidden"); card.removeAttribute("inert"); });
-  const choices=document.getElementById("entryOptions"), forms=["signInForm","demoForm","resetForm"].map(id=>document.getElementById(id));
-  const show=id=>{ choices.hidden=true; forms.forEach(form=>form.hidden=form.id!==id); };
-  document.getElementById("showSignIn").addEventListener("click",()=>show("signInForm")); document.getElementById("showDemo").addEventListener("click",()=>show("demoForm")); document.getElementById("forgotPassword").addEventListener("click",()=>show("resetForm"));
-  document.querySelectorAll(".backChoices").forEach(b=>b.addEventListener("click",()=>{ forms.forEach(f=>f.hidden=true); choices.hidden=false; }));
-  document.getElementById("demoForm").addEventListener("submit",async event=>{ event.preventDefault(); const name=document.getElementById("nameInput").value.trim(); if(!name)return; await authService?.signOut(); authenticatedContext=null; state.currentUser={name,role:document.getElementById("roleInput").value,mode:"demo"}; state.selectedDepartment=null; if(state.currentUser.role==="pca")state.learnerName=name; saveState(); routeSignedInUser(); });
-  document.getElementById("signInForm").addEventListener("submit",async event=>{ event.preventDefault(); const form=event.currentTarget, button=form.querySelector("button[type=submit]"), error=document.getElementById("authError"); button.disabled=true; error.textContent="Signing in securely…"; try { state.currentUser=null; state.selectedDepartment=null; saveState(); authenticatedContext=await authService.signIn(document.getElementById("emailInput").value,document.getElementById("passwordInput").value); renderAuthenticatedWorkspace(); } catch(e) { error.textContent=authMessage(e.message); if(["MISSING_PROFILE","MISSING_MEMBERSHIP"].includes(e.message)) await authService?.signOut(); } finally { button.disabled=false; }});
-  document.getElementById("resetForm").addEventListener("submit",async event=>{ event.preventDefault(); const button=event.currentTarget.querySelector("button[type=submit]"); button.disabled=true; try { await authService.resetPassword(document.getElementById("resetEmail").value,`${location.origin}/skillward-training/?recovery=1`); } catch {} renderLogin("If an eligible account exists, a password recovery link has been sent."); });
+
+  const views = {
+    welcome: document.getElementById("welcomeView"),
+    sectors: document.getElementById("sectorView"),
+    hospital: document.getElementById("hospitalView")
+  };
+  const showView = (name) => {
+    Object.entries(views).forEach(([key, view]) => { view.hidden = key !== name; });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    document.querySelector(`#${name === "welcome" ? "getStartedBtn" : name === "sectors" ? "selectHospital" : "showSignIn"}`)?.focus({ preventScroll: true });
+  };
+
+  document.getElementById("getStartedBtn").addEventListener("click", () => showView("sectors"));
+  document.getElementById("backToWelcome").addEventListener("click", () => showView("welcome"));
+  document.getElementById("selectHospital").addEventListener("click", () => showView("hospital"));
+  document.getElementById("backToSectors").addEventListener("click", () => showView("sectors"));
+
+  const choices = document.getElementById("entryOptions");
+  const forms = ["signInForm", "demoForm", "resetForm"].map(id => document.getElementById(id));
+  const show = id => { choices.hidden = true; forms.forEach(form => { form.hidden = form.id !== id; }); };
+  document.getElementById("showSignIn").addEventListener("click", () => show("signInForm"));
+  document.getElementById("showDemo").addEventListener("click", () => show("demoForm"));
+  document.getElementById("forgotPassword").addEventListener("click", () => show("resetForm"));
+  document.querySelectorAll(".backChoices").forEach(button => button.addEventListener("click", () => { forms.forEach(form => { form.hidden = true; }); choices.hidden = false; }));
+  document.getElementById("demoForm").addEventListener("submit", async event => { event.preventDefault(); const name = document.getElementById("nameInput").value.trim(); if (!name) return; await authService?.signOut(); authenticatedContext = null; state.currentUser = { name, role: document.getElementById("roleInput").value, mode: "demo", sector: "hospital" }; state.selectedDepartment = null; if (state.currentUser.role === "pca") state.learnerName = name; saveState(); routeSignedInUser(); });
+  document.getElementById("signInForm").addEventListener("submit", async event => { event.preventDefault(); const form = event.currentTarget, button = form.querySelector("button[type=submit]"), error = document.getElementById("authError"); button.disabled = true; error.textContent = "Signing in securely…"; try { state.currentUser = null; state.selectedDepartment = null; saveState(); authenticatedContext = await authService.signIn(document.getElementById("emailInput").value, document.getElementById("passwordInput").value); renderAuthenticatedWorkspace(); } catch (e) { error.textContent = authMessage(e.message); if (["MISSING_PROFILE", "MISSING_MEMBERSHIP"].includes(e.message)) await authService?.signOut(); } finally { button.disabled = false; } });
+  document.getElementById("resetForm").addEventListener("submit", async event => { event.preventDefault(); const button = event.currentTarget.querySelector("button[type=submit]"); button.disabled = true; try { await authService.resetPassword(document.getElementById("resetEmail").value, `${location.origin}/skillward-training/?recovery=1`); } catch {} renderLogin("If an eligible account exists, a password recovery link has been sent."); });
+  if (message) showView("hospital");
 }
 
 function renderAuthenticatedWorkspace() {
