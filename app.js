@@ -313,6 +313,7 @@ function renderShell(content) {
             <svg viewBox="0 0 48 54" focusable="false">
               <title>SkillWard</title>
               <path class="logo-shield" d="M24 2 44 9v16c0 13-8 22-20 28C12 47 4 38 4 25V9L24 2Z" />
+              <path class="logo-symbol" d="m14.5 27.5 6.2 6.2 13-14" />
             </svg>
           </div>
           <div class="brand-copy">
@@ -403,7 +404,7 @@ function renderLogin(message = "") {
       <section class="entry-view welcome-view" id="welcomeView">
         <div class="welcome-atmosphere" aria-hidden="true"><span class="welcome-orb welcome-orb-one"></span><span class="welcome-orb welcome-orb-two"></span><span class="welcome-grid"></span></div>
         <div class="welcome-content">
-          <div class="welcome-emblem"><svg viewBox="0 0 48 54" focusable="false"><title>SkillWard</title><path class="logo-shield" d="M24 2 44 9v16c0 13-8 22-20 28C12 47 4 38 4 25V9L24 2Z" /></svg></div>
+          <div class="welcome-emblem"><svg viewBox="0 0 48 54" focusable="false"><title>SkillWard</title><path class="logo-shield" d="M24 2 44 9v16c0 13-8 22-20 28C12 47 4 38 4 25V9L24 2Z" /><path class="logo-symbol" d="m14.5 27.5 6.2 6.2 13-14" /></svg></div>
           <p class="welcome-kicker"><span></span> Workforce learning, built around care</p>
           <h2>Welcome to <span>SkillWard</span></h2>
           <p class="welcome-lead">One trusted platform for training, competency and confident practice across care organisations.</p>
@@ -460,7 +461,7 @@ function renderLogin(message = "") {
             <div class="learning-flow" aria-label="SkillWard learning process"><div><span>01</span><strong>Learn</strong><small>Role-based pathways</small></div><i aria-hidden="true"></i><div><span>02</span><strong>Validate</strong><small>Knowledge checks</small></div><i aria-hidden="true"></i><div><span>03</span><strong>Sign off</strong><small>Observed competency</small></div></div>
             <p class="login-platform-note hero-reveal hero-reveal-5">Designed for hospital teams, trainers and frontline staff.</p>
           </section>
-          <section class="card login-card login-flip hospital-access-card" id="workspaceCard">
+          <section class="card login-card hospital-access-card" id="workspaceCard" data-entry-transition="login-flip">
             <div class="hospital-card-heading"><span class="sector-mini-icon">${sectorIcon("hospital")}</span><div><div class="access-label"><span></span> HOSPITAL ENVIRONMENT</div><h2>Enter your workspace</h2></div></div>
             <p class="login-card-intro">Sign in securely or explore SkillWard with sample data.</p>
             ${message ? `<p class="auth-status" role="status">${escapeHtml(message)}</p>` : ""}
