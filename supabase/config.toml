@@ -19,3 +19,5 @@ enabled = true
 site_url = "http://127.0.0.1:3000"
 enable_signup = false
 
+[functions.request-demo]
+verify_jwt = false

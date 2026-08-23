@@ -83,12 +83,17 @@ const NAV_ITEMS = [
   ["reports", "Reports", "▥"]
 ];
 
+function demoNavigation(role) {
+  if (["pca", "cleaner"].includes(role)) return [["home", "Home", "⌂"], ["training", "Training", "▷"]];
+  if (role?.includes("trainer")) return [["home", "Home", "⌂"], ["staff", "Trainees", "♙"], ["training", "Guidance", "▷"]];
+  if (role === "management") return NAV_ITEMS;
+  return [["home", "Home", "⌂"]];
+}
+
 const AUTHENTICATED_NAV_ITEMS = {
+  "SkillWard Super Administrator": [["home", "Home", "⌂"], ["leads", "Demo requests", "◇"]],
   "Organisation Administrator": [["home", "Home", "⌂"], ["pathways", "Pathways", "▷"], ["people", "People", "♙"], ["competency", "Competency", "✓"], ["reports", "Reports", "▥"], ["admin", "Admin", "⚙"]],
-  "Content Administrator/Educator": [["home", "Home", "⌂"], ["pathways", "Pathways", "▷"], ["people", "People", "♙"], ["reports", "Reports", "▥"]],
-  worker: [["home", "Home", "⌂"], ["pathways", "Pathways", "▷"], ["competency", "Competency", "✓"]],
-  trainer: [["home", "Home", "⌂"], ["people", "Trainees", "♙"], ["competency", "Assess", "✓"], ["reports", "Reports", "▥"]],
-  management: [["home", "Home", "⌂"], ["pathways", "Pathways", "▷"], ["people", "People", "♙"], ["competency", "Competency", "✓"], ["reports", "Reports", "▥"]]
+  worker: [["home", "Home", "⌂"]], trainer: [["home", "Home", "⌂"]], management: [["home", "Home", "⌂"]]
 };
 
 function authenticatedNavigation(role) {
@@ -186,6 +191,13 @@ function routeSignedInUser() {
     const actor = currentManager();
     state.selectedDepartment = actor?.departments?.[0] || null;
     saveState();
+  }
+  if (state.currentUser?.role === "management") {
+    const actor = currentManager();
+    if (!actor?.departments?.includes(state.selectedDepartment)) {
+      state.selectedDepartment = actor?.departments?.[0] || null;
+      saveState();
+    }
   }
 
   if (DEPARTMENT_SELECTION_ROLES.has(state.currentUser.role) && !state.selectedDepartment) {
@@ -319,7 +331,7 @@ function renderShell(content) {
   const user = authenticatedContext?.appUser || state.currentUser;
   const department = DEPARTMENTS.find(item => item.id === state.selectedDepartment) || authenticatedContext?.departmentDetails?.find(item => item.id === state.selectedDepartment);
   const authenticatedWorkspace = Boolean(authenticatedContext || (user && (department || user.role?.includes("trainer"))));
-  const navigationItems = authenticatedContext ? authenticatedNavigation(authenticatedContext.membership?.role) : NAV_ITEMS;
+  const navigationItems = authenticatedContext ? authenticatedNavigation(authenticatedContext.membership?.role) : state.currentUser?.mode === "demo" ? demoNavigation(user?.role) : NAV_ITEMS;
   const activeView = authenticatedContext ? (state.activeWorkspaceView || "home") : "home";
   if (!navigationItems.some(([id]) => id === activeView)) state.activeWorkspaceView = navigationItems[0][0];
   const navigation = navigationItems.map(([id, label, icon]) => `
@@ -357,13 +369,13 @@ function renderShell(content) {
         <div class="footer-inner">
           <p class="footer-copyright">© 2026 SkillWard. All rights reserved.</p>
           <nav class="footer-links" aria-label="Legal and support">
-            <a href="legal.html#privacy">Privacy Policy</a>
+            <a href="/legal/privacy/">Privacy Policy</a>
             <span aria-hidden="true">·</span>
-            <a href="legal.html#terms">Terms of Use</a>
+            <a href="/legal/terms/">Terms of Use</a>
             <span aria-hidden="true">·</span>
-            <a href="legal.html#accessibility">Accessibility</a>
+            <a href="/legal/accessibility/">Accessibility</a>
             <span aria-hidden="true">·</span>
-            <a href="legal.html#support">Contact &amp; Support</a>
+            <a href="/contact/">Contact &amp; Support</a>
           </nav>
           <p class="footer-disclaimer">SkillWard is a workforce training and competency platform. Training content does not replace workplace policies, clinical guidelines, or professional judgement.</p>
         </div>
@@ -439,7 +451,7 @@ function renderLogin(message = "") {
           <p class="welcome-lead">One trusted platform for training, competency and confident practice across care organisations.</p>
           <div class="welcome-actions">
             <button class="btn welcome-primary" id="getStartedBtn">Get Started <span aria-hidden="true">→</span></button>
-            <a class="welcome-secondary" href="legal.html#support">For organisations <span aria-hidden="true">↗</span></a>
+            <a class="welcome-secondary" href="/book-demo/">For organisations <span aria-hidden="true">↗</span></a>
           </div>
           <div class="welcome-trust" aria-label="Platform capabilities"><span>Structured learning</span><i></i><span>Competency evidence</span><i></i><span>Compliance visibility</span></div>
         </div>
@@ -639,6 +651,11 @@ function bindAuthenticatedWorkspace(context) {
 function renderPlatformAdministration(context) {
   const organizations = context.organizations || [];
   const usage = new Map((context.organizationUsage || []).map(item => [item.organization_id, item]));
+  if (state.activeWorkspaceView === "leads") {
+    const requests = context.demoRequests || [];
+    renderShell(`<section class="dashboard-hero"><div class="dashboard-welcome"><span class="eyebrow">SKILLWARD SALES</span><h2>Demo requests</h2><p>Business enquiries are visible only to active SkillWard Super Administrators.</p></div></section><section class="card"><div class="section-heading"><div><span class="eyebrow">PROTECTED LEADS</span><h3>Recent requests</h3></div><span class="count-badge">${requests.length}</span></div><div class="organization-register">${requests.map(item => `<article><div><strong>${escapeHtml(item.full_name)} · ${escapeHtml(item.organization_name)}</strong><small>${escapeHtml(item.work_email)} · ${escapeHtml(item.organization_type)} · ${escapeHtml(item.job_role)}</small><small>${escapeHtml(item.primary_interest)} · ${escapeHtml(item.staff_range)} staff · ${escapeHtml(new Date(item.submitted_at).toLocaleString("en-AU"))}</small>${item.message ? `<small>${escapeHtml(item.message)}</small>` : ""}</div><span class="status-chip status-${item.status === "New" ? "warning" : "success"}">${escapeHtml(item.status)}</span></article>`).join("") || '<p class="empty-state">No demo requests have been submitted.</p>'}</div></section>`);
+    return;
+  }
   renderShell(`<section class="dashboard-hero"><div class="dashboard-welcome"><span class="eyebrow">SKILLWARD CONTROL PLANE</span><h2>Platform Administration</h2><p>Create and govern organisations, subscriptions, templates and explicitly authorised support access.</p></div></section><div class="stats-grid"><div class="stat-card"><span>Organisations</span><strong>${organizations.length}</strong></div><div class="stat-card"><span>Active</span><strong>${organizations.filter(item => item.status === "Active").length}</strong></div><div class="stat-card"><span>Pilot plans</span><strong>${organizations.filter(item => item.subscription_plan === "Pilot").length}</strong></div></div><section class="admin-setup-grid"><form class="card setup-form" id="createOrganizationForm"><span class="eyebrow">NEW WORKSPACE</span><h3>Create organisation</h3><label>Name<input name="name" required></label><label>Type<select name="type"><option>Hospital</option><option>Aged Care</option><option>Disability Support</option></select></label><label>Slug<input name="slug" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" required></label><button class="btn" type="submit">Create organisation</button><p class="auth-status" role="status"></p></form><section class="card"><span class="eyebrow">SUBSCRIPTIONS &amp; USAGE</span><h3>Organisation register</h3><div class="organization-register">${organizations.map(item => { const totals = usage.get(item.id) || {}; return `<article><div><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.organization_type)} · ${escapeHtml(item.subscription_plan)} · ${escapeHtml(item.subscription_status)}</small><small>${Number(totals.active_members || 0)} members · ${Number(totals.active_facilities || 0)} facilities · ${Number(totals.active_departments || 0)} departments</small></div><span class="status-chip status-${item.status === "Active" ? "success" : "neutral"}">${escapeHtml(item.status)}</span>${item.status === "Active" ? `<button class="link-button archive-organization" data-id="${escapeHtml(item.id)}">Archive</button>` : ""}</article>`; }).join("") || '<p class="empty-state">No organisations have been created.</p>'}</div></section></section><section class="card"><span class="eyebrow">EXPLICIT SUPPORT MODE</span><h3>Authorised sessions</h3><p class="small">Support access is organisation-approved, time-limited and fully audited. Platform administration alone cannot open clinical workforce records.</p><div class="organization-register">${(context.supportSessions || []).map(item => `<article><div><strong>${escapeHtml(item.reason)}</strong><small>Expires ${escapeHtml(new Date(item.expires_at).toLocaleString("en-AU"))}</small></div><span class="status-chip status-${item.status === "Active" ? "success" : "warning"}">${escapeHtml(item.status)}</span>${item.status === "Pending" ? `<button class="link-button activate-support" data-id="${escapeHtml(item.id)}">Enter support mode</button>` : ""}</article>`).join("") || '<p class="empty-state">No organisation has authorised a support session.</p>'}</div></section><section class="card"><span class="eyebrow">SKILLWARD TEMPLATES</span><h3>Pathway template governance</h3><p class="small">Template ownership is established in Phase 1. The guided authoring and version-control tools arrive in Phase 2.</p></section>`);
   document.querySelector(".admin-setup-grid")?.insertAdjacentHTML("beforeend", `<form class="card setup-form" id="firstAdministratorForm"><span class="eyebrow">FIRST ADMINISTRATOR</span><h3>Invite organisation owner</h3><label>Organisation<select name="organizationId" required><option value="">Choose organisation</option>${organizations.filter(item => item.status === "Active").map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("")}</select></label><label>Full name<input name="fullName" required></label><label>Employee ID<input name="employeeId" required></label><label>Email<input name="email" type="email" required></label><button class="btn" type="submit">Invite first administrator</button><p class="auth-status" role="status"></p></form>`);
   document.getElementById("createOrganizationForm")?.addEventListener("submit", async event => { event.preventDefault(); const form = event.currentTarget, status = form.querySelector(".auth-status"), values = new FormData(form); status.textContent = "Creating secure workspace…"; try { await authService.database.createOrganization({ name:values.get("name"), organizationType:values.get("type"), slug:values.get("slug") }); authenticatedContext = await authService.restore(); renderAuthenticatedWorkspace(); } catch { status.textContent = "The organisation could not be created. Check the slug and try again."; } });
@@ -740,12 +757,12 @@ function renderRoleWorkspace(role) {
   }
 
   renderShell(`
-    <section class="department-heading">
+    <section class="department-heading" id="home">
       <span class="eyebrow">${escapeHtml(departmentName(state.selectedDepartment))}</span>
       <h2>${role === "cleaner" ? "Cleaner Training Hub" : title}</h2>
       <p>${description}</p>
     </section>
-    <section class="card pathway-ready-card">
+    <section class="card pathway-ready-card" id="training">
       <span class="badge badge-in-progress">Pathway ready</span>
       <h3>${workplaceRoleLabel(role)} access is now separated</h3>
       <p class="small">Approved role-specific modules can be added here next. Your existing PCA training remains unchanged.</p>
@@ -876,7 +893,7 @@ function renderLearnerDashboard() {
   }).join("");
 
   renderShell(`
-    <section class="dashboard-hero">
+    <section class="dashboard-hero" id="home">
       <div class="dashboard-welcome">
         <span class="eyebrow">${escapeHtml(departmentName(state.selectedDepartment))}</span>
         <h2>PCA Training Hub</h2>
@@ -936,7 +953,7 @@ function renderLearnerDashboard() {
       </ol>
     </section>
 
-    <div class="section-heading">
+    <div class="section-heading" id="training">
       <div><span class="eyebrow">OPERATING THEATRE & RECOVERY</span><h3>Choose a training area</h3></div>
       <span class="small">3 areas · ${TRAINING_MODULES.length} modules</span>
     </div>
@@ -1029,11 +1046,11 @@ function renderLesson(moduleId) {
         Always follow your organisation's current approved procedures. Local requirements take priority if they differ from this module.
       </div>
 
-      <h3>Training video</h3>
-      <div class="video-placeholder">
+      <h3>Planned training video</h3>
+      <div class="video-placeholder" data-planned-content="true">
         <div>
-          <strong>Training video</strong>
-          <p class="small">Approved video content will be available here.</p>
+          <strong>Approved media not yet available</strong>
+          <p class="small">This is a planned content area, not a playable video. An approved workplace training video can be added after clinical review.</p>
         </div>
       </div>
 
@@ -1171,6 +1188,14 @@ async function bootstrap() {
   authService = new globalThis.SkillWardServices.AuthService();
   const recovery = globalThis.SkillWardRecovery.parseRecoveryCallback(globalThis.location.href);
   if (recovery.requested) return processRecoveryCallback(recovery);
+  if (new URLSearchParams(location.search).get("demo") === "1") {
+    state.currentUser = null; state.selectedDepartment = null; saveState();
+    renderLogin();
+    document.getElementById("getStartedBtn")?.click();
+    document.getElementById("selectHospital")?.click();
+    document.getElementById("showDemo")?.click();
+    return;
+  }
   if (globalThis.SkillWardRecovery.isRecoveryPending(sessionStorage)) {
     const session = await authService.recoverySession();
     if (session?.user) return renderPasswordUpdate();
