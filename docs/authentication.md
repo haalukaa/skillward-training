@@ -14,7 +14,9 @@ The anon/publishable key identifies the Supabase project and is necessarily deli
 
 Add these exact URLs manually in Supabase Auth before testing; this pull request does not assume the dashboard is configured:
 
-- Site URL: `https://haalukaa.github.io/skillward-training/`
+- Site URL: `https://skillwardtraining.com/`
+- Production password recovery redirect: `https://skillwardtraining.com/?recovery=1`
+- Additional GitHub Pages redirect: `https://haalukaa.github.io/skillward-training/**`
 - Password recovery redirect: `https://haalukaa.github.io/skillward-training/?recovery=1`
 - Local development redirect: `http://localhost:8080/?recovery=1`
 
