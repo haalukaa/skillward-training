@@ -16,7 +16,8 @@ test("sign-in and Demo Mode are separate and public sign-up is unavailable", () 
   assert.match(app, /Sign in to SkillWard/); assert.match(app, /Explore Demo Mode/);
   assert.match(app, /Nothing in Demo Mode is written to Supabase/);
   assert.doesNotMatch(app + auth, /signUp\s*\(/);
-  assert.match(app, /await authService\?\.signOut\(\); authenticatedContext=null/);
+  assert.match(app, /async function signOutCurrentUser\(\)/);
+  assert.match(app, /await authService\?\.signOut\(\)/);
 });
 
 test("authenticated REST-style context loads its permitted profile, membership and routing data", async () => {
@@ -55,7 +56,7 @@ test("authenticated REST-style context loads its permitted profile, membership a
 test("organisation staff embeds the staff user relationship without manager ambiguity", () => {
   assert.match(database, /user_profiles!organization_staff_profiles_user_id_fkey\(\*\)/);
   assert.doesNotMatch(database, /organization_staff_profiles[^\n]+"\*, user_profiles\(\*\)"/);
-  assert.match(appIndex, /auth-bundle\.js\?v=20260824-public-site-1/);
+  assert.match(appIndex, /auth-bundle\.js\?v=20260824-canvas-production-1/);
 });
 
 test("account blocking, recovery, restoration and safe diagnostics are implemented", () => {
@@ -120,7 +121,7 @@ test("recovery links preserve the active deployment path without hardcoding GitH
 test("production recovers legacy cached callback paths before relative assets load", () => {
   assert.match(index, /location\.pathname\.startsWith\("\/skillward-training\/"\)/);
   assert.match(index, /location\.replace\(`\/app\/\$\{location\.search\}\$\{location\.hash\}`\)/);
-  assert.match(appIndex, /\.\.\/app\.js\?v=20260824-public-site-1/);
+  assert.match(appIndex, /\.\.\/app\.js\?v=20260824-canvas-production-1/);
   assert.ok(index.indexOf("location.replace") < index.indexOf("marketing.css"), "legacy callback redirects before public assets load");
 });
 

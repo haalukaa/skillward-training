@@ -6,6 +6,8 @@ const defaultState = {
   activeOrganizationId: null,
   activeWorkspaceView: "home",
   organizationSetupStep: "identity",
+  demoSector: "hospital",
+  demoJourneys: {},
   learnerName: "Staff Learner",
   moduleProgress: {},
   practicalSignoff: false,
@@ -69,6 +71,11 @@ const DEPARTMENTS = [
 const WORKPLACE_ROLES = {
   pca: "PCA",
   cleaner: "Cleaner",
+  "care-worker": "Personal Care Worker",
+  "aged-care-cleaner": "Environmental Services Worker",
+  "aged-care-trainer": "Clinical Educator",
+  "support-worker": "Disability Support Worker",
+  "disability-trainer": "Practice Coach",
   "pca-trainer": "PCA Trainer",
   "cleaner-trainer": "Cleaner Trainer",
   management: "Management"
@@ -84,8 +91,9 @@ const NAV_ITEMS = [
 ];
 
 function demoNavigation(role) {
-  if (["pca", "cleaner"].includes(role)) return [["home", "Home", "⌂"], ["training", "Training", "▷"]];
-  if (role?.includes("trainer")) return [["home", "Home", "⌂"], ["staff", "Trainees", "♙"], ["training", "Guidance", "▷"]];
+  const kind = demoRoleKind(role);
+  if (kind === "worker") return [["home", "Home", "⌂"], ["training", "Training", "▷"]];
+  if (kind === "trainer") return [["home", "Home", "⌂"], ["staff", "Trainees", "♙"], ["training", "Guidance", "▷"]];
   if (role === "management") return NAV_ITEMS;
   return [["home", "Home", "⌂"]];
 }
@@ -105,6 +113,45 @@ function authenticatedNavigation(role) {
 
 function workplaceRoleLabel(role) {
   return WORKPLACE_ROLES[role] || role || "Staff member";
+}
+
+function demoSector(id = state.currentUser?.sector || state.demoSector) {
+  return globalThis.SKILLWARD_DEMO_SECTORS?.[id] || globalThis.SKILLWARD_DEMO_SECTORS?.hospital;
+}
+
+function demoRoleKind(role = state.currentUser?.role, sector = demoSector()) {
+  return sector?.roles.find(item => item.value === role)?.kind
+    || (role === "management" ? "management" : role?.includes("trainer") ? "trainer" : "worker");
+}
+
+function demoJourney(sectorId = state.currentUser?.sector || state.demoSector) {
+  if (!state.demoJourneys || typeof state.demoJourneys !== "object") state.demoJourneys = {};
+  if (!state.demoJourneys[sectorId]) {
+    state.demoJourneys[sectorId] = {
+      learnedModules: [], validated: false, score: 0, observed: false,
+      observation: "", approved: false, renewalScheduled: false, renewalDate: "",
+      history: []
+    };
+  }
+  return state.demoJourneys[sectorId];
+}
+
+function recordDemoJourney(action, detail, patch = {}) {
+  const journey = demoJourney();
+  Object.assign(journey, patch);
+  journey.history.unshift({ action, detail, at: new Date().toLocaleString("en-AU") });
+  saveState();
+}
+
+function demoStageStatus(journey = demoJourney(), sector = demoSector()) {
+  const learned = journey.learnedModules.length >= sector.pathway.modules.length;
+  return [
+    ["Learn", learned, learned ? "Required modules complete" : `${journey.learnedModules.length}/${sector.pathway.modules.length} modules complete`],
+    ["Validate", journey.validated, journey.validated ? `${journey.score}% knowledge result` : "Knowledge check required"],
+    ["Observe", journey.observed, journey.observed ? "Practical observation recorded" : "Trainer observation required"],
+    ["Approve", journey.approved, journey.approved ? "Management approval recorded" : "Management decision required"],
+    ["Renew", journey.renewalScheduled, journey.renewalScheduled ? `Renewal ${journey.renewalDate}` : "Renewal date required"]
+  ];
 }
 
 function normalizeCurrentUserRole() {
@@ -146,7 +193,9 @@ function assignedDepartmentsForCurrentTrainer() {
 }
 
 function departmentName(id) {
-  return DEPARTMENTS.find(item => item.id === id)?.name || authenticatedContext?.departmentDetails?.find(item => item.id === id)?.name || id;
+  return DEPARTMENTS.find(item => item.id === id)?.name
+    || demoSector()?.departments.find(item => item.id === id)?.name
+    || authenticatedContext?.departmentDetails?.find(item => item.id === id)?.name || id;
 }
 
 function statusTone(status) {
@@ -157,6 +206,7 @@ function statusTone(status) {
 
 function workspaceHeader(user, department) {
   if (!user) return "Healthcare Workforce Training";
+  if (user.mode === "demo") return `${demoSector(user.sector)?.organization || "Guided Demo"} · ${demoSector(user.sector)?.name || "Care"}`;
   if (user.role === "platform-admin") return "Platform Administration";
   if (user.role === "management") {
     return "Healthcare Workforce Training";
@@ -172,6 +222,11 @@ function workspaceHeader(user, department) {
 
 function routeSignedInUser() {
   normalizeCurrentUserRole();
+
+  if (state.currentUser?.mode === "demo") {
+    renderDemoWorkspace();
+    return;
+  }
 
   const known = state.currentUser?.role === "management"
     ? managementStore().data.managers.find(item => item.name.toLowerCase() === state.currentUser.name.toLowerCase())
@@ -329,10 +384,12 @@ function bindModuleButtons() {
 
 function renderShell(content) {
   const user = authenticatedContext?.appUser || state.currentUser;
-  const department = DEPARTMENTS.find(item => item.id === state.selectedDepartment) || authenticatedContext?.departmentDetails?.find(item => item.id === state.selectedDepartment);
-  const authenticatedWorkspace = Boolean(authenticatedContext || (user && (department || user.role?.includes("trainer"))));
+  const department = DEPARTMENTS.find(item => item.id === state.selectedDepartment)
+    || demoSector(user?.sector)?.departments.find(item => item.id === state.selectedDepartment)
+    || authenticatedContext?.departmentDetails?.find(item => item.id === state.selectedDepartment);
+  const authenticatedWorkspace = Boolean(authenticatedContext || user?.mode === "demo" || (user && (department || user.role?.includes("trainer"))));
   const navigationItems = authenticatedContext ? authenticatedNavigation(authenticatedContext.membership?.role) : state.currentUser?.mode === "demo" ? demoNavigation(user?.role) : NAV_ITEMS;
-  const activeView = authenticatedContext ? (state.activeWorkspaceView || "home") : "home";
+  const activeView = authenticatedContext || state.currentUser?.mode === "demo" ? (state.activeWorkspaceView || "home") : "home";
   if (!navigationItems.some(([id]) => id === activeView)) state.activeWorkspaceView = navigationItems[0][0];
   const navigation = navigationItems.map(([id, label, icon]) => `
     <button class="workspace-nav-item ${id === (state.activeWorkspaceView || "home") ? "is-active" : ""}" data-nav="${id}" aria-label="${label}">
@@ -359,7 +416,7 @@ function renderShell(content) {
           ${authenticatedWorkspace ? `<button class="notification-button" aria-label="Notifications"><span aria-hidden="true">●</span></button>` : ""}
           ${user ? `<span class="role-pill">${workplaceRoleLabel(user.role)}</span>` : ""}
           ${authenticatedContext?.organization ? `<span class="workspace-organization">${escapeHtml(authenticatedContext.organization.name)}</span>` : ""}
-          ${authenticatedContext ? `<button class="btn btn-secondary" id="signOutBtn">Sign Out</button>` : ""}${authenticatedWorkspace ? `<button class="profile-button" id="switchRoleBtn" aria-label="User profile: ${escapeHtml(user.name)}"><span>${escapeHtml(user.name).charAt(0).toUpperCase()}</span><strong>${escapeHtml(user.name)}</strong></button>` : user ? `<button class="btn btn-secondary" id="switchRoleBtn">Switch role</button>` : ""}
+          ${authenticatedWorkspace ? `<div class="profile-control"><button class="profile-button" id="profileButton" aria-label="Open profile menu for ${escapeHtml(user.name)}" aria-haspopup="menu" aria-expanded="false"><span>${escapeHtml(user.name).charAt(0).toUpperCase()}</span><strong>${escapeHtml(user.name)}</strong><b aria-hidden="true">⌄</b></button><div class="profile-menu" id="profileMenu" role="menu" hidden><button type="button" role="menuitem" data-profile-action="profile"><span>○</span><div><strong>Profile</strong><small>View your identity and role</small></div></button><button type="button" role="menuitem" data-profile-action="workspace"><span>◇</span><div><strong>Workspace</strong><small>Change sector, role or organisation</small></div></button><button type="button" role="menuitem" data-profile-action="signout" class="profile-signout"><span>↪</span><div><strong>Sign Out</strong><small>End this session securely</small></div></button></div></div>` : user ? `<button class="btn btn-secondary" id="legacySwitchRoleBtn">Switch role</button>` : ""}
         </div>
       </header>
       ${authenticatedWorkspace ? `<nav class="side-nav" style="--nav-count:${navigationItems.length}" aria-label="Primary navigation">${navigation}</nav>` : ""}
@@ -380,17 +437,35 @@ function renderShell(content) {
           <p class="footer-disclaimer">SkillWard is a workforce training and competency platform. Training content does not replace workplace policies, clinical guidelines, or professional judgement.</p>
         </div>
       </footer>
+      <div class="profile-dialog-backdrop" id="profileDialog" hidden><section class="profile-dialog" role="dialog" aria-modal="true" aria-labelledby="profileDialogTitle"><button class="profile-dialog-close" id="closeProfileDialog" aria-label="Close">×</button><div id="profileDialogContent"></div></section></div>
     </div>
   `;
 
-  document.getElementById("signOutBtn")?.addEventListener("click", async () => { await authService?.signOut(); authenticatedContext=null; state.currentUser = null; state.selectedDepartment = null; state.activeOrganizationId = null; saveState(); renderLogin(); });
+  const activeLabel = navigationItems.find(([id]) => id === state.activeWorkspaceView)?.[1] || "Home";
+  const workspaceName = authenticatedContext?.organization?.name || (user?.mode === "demo" ? demoSector(user.sector)?.organization : "");
+  document.title = user ? `${activeLabel}${workspaceName ? ` | ${workspaceName}` : ""} | SkillWard` : "Sign In | SkillWard";
 
-  document.getElementById("switchRoleBtn")?.addEventListener("click", () => {
+  document.getElementById("legacySwitchRoleBtn")?.addEventListener("click", () => {
     state.currentUser = null;
     state.selectedDepartment = null;
     saveState();
     renderLogin();
   });
+
+  const profileButton = document.getElementById("profileButton");
+  const profileMenu = document.getElementById("profileMenu");
+  profileButton?.addEventListener("click", () => {
+    profileMenu.hidden = !profileMenu.hidden;
+    profileButton.setAttribute("aria-expanded", String(!profileMenu.hidden));
+  });
+  document.querySelectorAll("[data-profile-action]").forEach(button => button.addEventListener("click", async () => {
+    profileMenu.hidden = true;
+    profileButton.setAttribute("aria-expanded", "false");
+    if (button.dataset.profileAction === "signout") return signOutCurrentUser();
+    openProfileDialog(button.dataset.profileAction, user);
+  }));
+  document.getElementById("closeProfileDialog")?.addEventListener("click", closeProfileDialog);
+  document.getElementById("profileDialog")?.addEventListener("click", event => { if (event.target.id === "profileDialog") closeProfileDialog(); });
 
   document.getElementById("changeDepartmentBtn")?.addEventListener("click", () => {
     state.selectedDepartment = null;
@@ -406,10 +481,56 @@ function renderShell(content) {
         renderAuthenticatedWorkspace();
         return;
       }
+      if (state.currentUser?.mode === "demo") {
+        state.activeWorkspaceView = button.dataset.nav;
+        saveState();
+        renderDemoWorkspace();
+        return;
+      }
       document.getElementById(button.dataset.nav)?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   });
 
+}
+
+async function signOutCurrentUser() {
+  await authService?.signOut();
+  authenticatedContext = null;
+  state.currentUser = null;
+  state.selectedDepartment = null;
+  state.activeOrganizationId = null;
+  state.activeWorkspaceView = "home";
+  saveState();
+  renderLogin();
+}
+
+function closeProfileDialog() {
+  const dialog = document.getElementById("profileDialog");
+  if (dialog) dialog.hidden = true;
+}
+
+function openProfileDialog(view, user) {
+  const dialog = document.getElementById("profileDialog"), content = document.getElementById("profileDialogContent");
+  if (!dialog || !content) return;
+  if (view === "profile") {
+    const organization = authenticatedContext?.organization?.name || demoSector(user?.sector)?.organization || "SkillWard";
+    const sector = authenticatedContext?.organization?.organization_type || demoSector(user?.sector)?.name || "Healthcare";
+    content.innerHTML = `<span class="eyebrow">YOUR PROFILE</span><h2 id="profileDialogTitle">${escapeHtml(user.name)}</h2><div class="profile-summary-avatar">${escapeHtml(user.name).charAt(0).toUpperCase()}</div><dl class="profile-summary"><div><dt>Role</dt><dd>${escapeHtml(workplaceRoleLabel(user.role))}</dd></div><div><dt>Workspace</dt><dd>${escapeHtml(organization)}</dd></div><div><dt>Sector</dt><dd>${escapeHtml(sector)}</dd></div><div><dt>Session</dt><dd>${authenticatedContext ? "Secure organisation account" : "Guided Demo · sample data only"}</dd></div></dl>`;
+  } else if (state.currentUser?.mode === "demo") {
+    const sectors = Object.values(globalThis.SKILLWARD_DEMO_SECTORS || {});
+    const selected = demoSector(user.sector);
+    content.innerHTML = `<span class="eyebrow">WORKSPACE</span><h2 id="profileDialogTitle">Switch demo workspace</h2><p>Move between sectors and roles without clearing the shared competency journey.</p><form id="demoWorkspaceForm"><label>Sector<select id="demoWorkspaceSector">${sectors.map(item => `<option value="${item.id}" ${item.id === selected.id ? "selected" : ""}>${escapeHtml(item.name)} · ${escapeHtml(item.organization)}</option>`).join("")}</select></label><label>Role<select id="demoWorkspaceRole"></select></label><button class="btn" type="submit">Open workspace</button></form>`;
+    const sectorSelect = document.getElementById("demoWorkspaceSector"), roleSelect = document.getElementById("demoWorkspaceRole");
+    const populateRoles = () => { const sector = demoSector(sectorSelect.value); roleSelect.innerHTML = sector.roles.map(role => `<option value="${role.value}" ${sector.id === selected.id && role.value === user.role ? "selected" : ""}>${escapeHtml(role.label)}</option>`).join(""); };
+    populateRoles(); sectorSelect.addEventListener("change", populateRoles);
+    document.getElementById("demoWorkspaceForm").addEventListener("submit", event => { event.preventDefault(); const sector = demoSector(sectorSelect.value); state.demoSector = sector.id; state.currentUser = { ...state.currentUser, sector:sector.id, role:roleSelect.value }; state.selectedDepartment = sector.departments[0].id; state.activeWorkspaceView = "home"; saveState(); renderDemoWorkspace(); });
+  } else {
+    const memberships = authenticatedContext?.memberships || [];
+    content.innerHTML = `<span class="eyebrow">WORKSPACE</span><h2 id="profileDialogTitle">Your authorised workspaces</h2><p>Access remains limited to active organisation memberships.</p><div class="workspace-choice-list">${memberships.map(item => `<button class="workspace-choice" data-organization="${escapeHtml(item.organization_id)}"><strong>${escapeHtml(item.organizations?.name || "Organisation")}</strong><small>${escapeHtml(item.role)}</small></button>`).join("") || `<div class="workspace-choice"><strong>${escapeHtml(authenticatedContext?.organization?.name || "Current workspace")}</strong><small>${escapeHtml(authenticatedContext?.membership?.role || "Authorised access")}</small></div>`}</div>`;
+    document.querySelectorAll("[data-organization]").forEach(button => button.addEventListener("click", async () => { state.activeOrganizationId = button.dataset.organization; state.activeWorkspaceView = "home"; state.selectedDepartment = null; saveState(); authenticatedContext = await authService.switchOrganization(button.dataset.organization); renderAuthenticatedWorkspace(); }));
+  }
+  dialog.hidden = false;
+  content.querySelector("button, select")?.focus();
 }
 
 let authService = null;
@@ -469,26 +590,26 @@ function renderLogin(message = "") {
           <p>Select the care environment you want to enter. Your organisation and permissions are securely connected after sign-in.</p>
         </header>
         <div class="sector-grid">
-          <button class="sector-card sector-card-active" id="selectHospital" type="button">
+          <button class="sector-card sector-card-active demo-sector-card" id="selectHospital" data-sector="hospital" type="button">
             <span class="sector-status sector-status-live"><i></i> Available</span>
             <span class="sector-icon">${sectorIcon("hospital")}</span>
             <span class="sector-copy"><strong>Hospital</strong><small>Clinical support workforce training, competency and department readiness.</small></span>
             <span class="sector-arrow" aria-hidden="true">→</span>
           </button>
-          <button class="sector-card" type="button" disabled aria-describedby="agedCareStatus">
-            <span class="sector-status">Coming soon</span>
+          <button class="sector-card sector-card-active demo-sector-card" id="selectAgedCare" data-sector="aged-care" type="button">
+            <span class="sector-status sector-status-live"><i></i> Available</span>
             <span class="sector-icon">${sectorIcon("aged-care")}</span>
             <span class="sector-copy"><strong>Aged Care</strong><small>Care workforce onboarding, capability and compliance.</small></span>
-            <span class="sr-only" id="agedCareStatus">This SkillWard environment is coming soon.</span>
+            <span class="sector-arrow" aria-hidden="true">→</span>
           </button>
-          <button class="sector-card" type="button" disabled aria-describedby="disabilityStatus">
-            <span class="sector-status">Coming soon</span>
+          <button class="sector-card sector-card-active demo-sector-card" id="selectDisability" data-sector="disability" type="button">
+            <span class="sector-status sector-status-live"><i></i> Available</span>
             <span class="sector-icon">${sectorIcon("disability")}</span>
             <span class="sector-copy"><strong>Disability Support</strong><small>Support-worker learning, practical capability and continuing development.</small></span>
-            <span class="sr-only" id="disabilityStatus">This SkillWard environment is coming soon.</span>
+            <span class="sector-arrow" aria-hidden="true">→</span>
           </button>
         </div>
-        <p class="sector-footnote">More care environments will become available as their approved learning pathways are developed.</p>
+        <p class="sector-footnote">All environments use sample organisations and training content in Guided Demo. Production content remains organisation-controlled and subject to approval.</p>
       </section>
 
       <section class="entry-view hospital-entry-view" id="hospitalView" hidden>
@@ -496,19 +617,19 @@ function renderLogin(message = "") {
         <div class="login-layout hospital-login-layout">
           <section class="login-intro">
             <div class="hero-motion" aria-hidden="true"><span class="motion-orb motion-orb-one"></span><span class="motion-orb motion-orb-two"></span><span class="motion-grid"></span></div>
-            <div class="login-label hero-reveal hero-reveal-1"><span></span> Hospital workforce enablement</div>
-            <h2 class="hero-title" aria-label="Build your confidence before your first shift"><span class="hero-line hero-reveal hero-reveal-2">Build Your Confidence</span><span class="hero-line hero-accent hero-reveal hero-reveal-3">Before Your First Shift<span class="typing-cursor" aria-hidden="true"></span></span></h2>
-            <p class="hero-reveal hero-reveal-4">Structured, role-based learning that turns approved hospital procedures into confident workplace practice.</p>
+            <div class="login-label hero-reveal hero-reveal-1"><span></span> <b id="environmentLabel">Hospital workforce enablement</b></div>
+            <h2 class="hero-title" id="environmentTitle" aria-label="Build your confidence before your first shift"><span class="hero-line hero-reveal hero-reveal-2">Build Your Confidence</span><span class="hero-line hero-accent hero-reveal hero-reveal-3">Before Your First Shift<span class="typing-cursor" aria-hidden="true"></span></span></h2>
+            <p class="hero-reveal hero-reveal-4" id="environmentDescription">Structured, role-based learning that turns approved hospital procedures into confident workplace practice.</p>
             <div class="learning-flow" aria-label="SkillWard learning process"><div><span>01</span><strong>Learn</strong><small>Role-based pathways</small></div><i aria-hidden="true"></i><div><span>02</span><strong>Validate</strong><small>Knowledge checks</small></div><i aria-hidden="true"></i><div><span>03</span><strong>Sign off</strong><small>Observed competency</small></div></div>
-            <p class="login-platform-note hero-reveal hero-reveal-5">Designed for hospital teams, trainers and frontline staff.</p>
+            <p class="login-platform-note hero-reveal hero-reveal-5" id="environmentNote">Designed for hospital teams, trainers and frontline staff.</p>
           </section>
           <section class="card login-card hospital-access-card" id="workspaceCard" data-entry-transition="login-flip">
-            <div class="hospital-card-heading"><span class="sector-mini-icon">${sectorIcon("hospital")}</span><div><div class="access-label"><span></span> HOSPITAL ENVIRONMENT</div><h2>Enter your workspace</h2></div></div>
+            <div class="hospital-card-heading"><span class="sector-mini-icon" id="environmentIcon">${sectorIcon("hospital")}</span><div><div class="access-label"><span></span> <b id="environmentAccessLabel">HOSPITAL ENVIRONMENT</b></div><h2>Enter your workspace</h2></div></div>
             <p class="login-card-intro">Sign in securely or explore SkillWard with sample data.</p>
             ${message ? `<p class="auth-status" role="status">${escapeHtml(message)}</p>` : ""}
             <div class="entry-options" id="entryOptions"><button class="entry-option" id="showSignIn"><span class="option-icon" aria-hidden="true">→</span><strong>Sign in to SkillWard</strong><small>Use your Management-issued account.</small></button><button class="entry-option" id="showDemo"><span class="option-icon" aria-hidden="true">◇</span><strong>Explore Demo Mode</strong><small>Preview workflows using sample browser data.</small></button></div>
             <form id="signInForm" class="access-form" hidden novalidate><h3>Sign in to SkillWard</h3><label><span>Email</span><input id="emailInput" type="email" autocomplete="username" inputmode="email" required /></label><label><span>Password</span><input id="passwordInput" type="password" autocomplete="current-password" required /></label><p id="authError" class="auth-status" role="alert"></p><button class="btn btn-wide login-submit" type="submit">Sign in <span aria-hidden="true">→</span></button><button class="link-button" type="button" id="forgotPassword">Forgot password?</button><button class="link-button backChoices" type="button">Back to access options</button></form>
-            <form id="demoForm" class="access-form" hidden><h3>Explore Hospital Demo</h3><p class="small">Nothing in Demo Mode is written to Supabase. Sample information stays only in this browser.</p><label><span>Full name</span><input id="nameInput" type="text" autocomplete="name" placeholder="e.g. Alex Smith" required /></label><label><span>Workspace role</span><select id="roleInput"><option value="pca">PCA</option><option value="cleaner">Cleaner</option><option value="pca-trainer">PCA Trainer</option><option value="cleaner-trainer">Cleaner Trainer</option><option value="management">Management</option></select></label><button class="btn btn-wide login-submit" type="submit">Continue in Demo Mode <span aria-hidden="true">→</span></button><button class="link-button backChoices" type="button">Back to access options</button></form>
+            <form id="demoForm" class="access-form" hidden><h3 id="demoFormTitle">Explore Hospital Demo</h3><p class="small">Nothing in Demo Mode is written to Supabase. Sample information stays only in this browser.</p><label><span>Full name</span><input id="nameInput" type="text" autocomplete="name" placeholder="e.g. Alex Smith" required /></label><label><span>Workspace role</span><select id="roleInput"></select></label><button class="btn btn-wide login-submit" type="submit">Continue in Demo Mode <span aria-hidden="true">→</span></button><button class="link-button backChoices" type="button">Back to access options</button></form>
             <form id="resetForm" class="access-form" hidden><h3>Reset password</h3><p class="small">Enter your email. For privacy, the confirmation is always the same.</p><label><span>Email</span><input id="resetEmail" type="email" autocomplete="username" required /></label><button class="btn btn-wide" type="submit">Send recovery link</button><button class="link-button backChoices" type="button">Back</button></form>
           </section>
         </div>
@@ -528,7 +649,21 @@ function renderLogin(message = "") {
 
   document.getElementById("getStartedBtn").addEventListener("click", () => showView("sectors"));
   document.getElementById("backToWelcome").addEventListener("click", () => showView("welcome"));
-  document.getElementById("selectHospital").addEventListener("click", () => showView("hospital"));
+  let selectedSector = demoSector(state.demoSector);
+  const configureEnvironment = sectorId => {
+    selectedSector = demoSector(sectorId);
+    state.demoSector = selectedSector.id;
+    saveState();
+    document.getElementById("environmentLabel").textContent = `${selectedSector.name} workforce enablement`;
+    document.getElementById("environmentDescription").textContent = selectedSector.description;
+    document.getElementById("environmentNote").textContent = `Sample organisation: ${selectedSector.organization} · ${selectedSector.facility}`;
+    document.getElementById("environmentIcon").innerHTML = sectorIcon(selectedSector.id);
+    document.getElementById("environmentAccessLabel").textContent = `${selectedSector.name.toUpperCase()} ENVIRONMENT`;
+    document.getElementById("demoFormTitle").textContent = `Explore ${selectedSector.name} Demo`;
+    document.getElementById("roleInput").innerHTML = selectedSector.roles.map(role => `<option value="${role.value}">${escapeHtml(role.label)}</option>`).join("");
+    showView("hospital");
+  };
+  document.querySelectorAll(".demo-sector-card").forEach(button => button.addEventListener("click", () => configureEnvironment(button.dataset.sector)));
   document.getElementById("backToSectors").addEventListener("click", () => showView("sectors"));
 
   const choices = document.getElementById("entryOptions");
@@ -538,10 +673,10 @@ function renderLogin(message = "") {
   document.getElementById("showDemo").addEventListener("click", () => show("demoForm"));
   document.getElementById("forgotPassword").addEventListener("click", () => show("resetForm"));
   document.querySelectorAll(".backChoices").forEach(button => button.addEventListener("click", () => { forms.forEach(form => { form.hidden = true; }); choices.hidden = false; }));
-  document.getElementById("demoForm").addEventListener("submit", async event => { event.preventDefault(); const name = document.getElementById("nameInput").value.trim(); if (!name) return; await authService?.signOut(); authenticatedContext = null; state.currentUser = { name, role: document.getElementById("roleInput").value, mode: "demo", sector: "hospital" }; state.selectedDepartment = null; if (state.currentUser.role === "pca") state.learnerName = name; saveState(); routeSignedInUser(); });
+  document.getElementById("demoForm").addEventListener("submit", async event => { event.preventDefault(); const name = document.getElementById("nameInput").value.trim(); if (!name) return; await authService?.signOut(); authenticatedContext = null; state.currentUser = { name, role: document.getElementById("roleInput").value, mode: "demo", sector: selectedSector.id }; state.demoSector = selectedSector.id; state.selectedDepartment = selectedSector.departments[0].id; state.activeWorkspaceView = "home"; if (state.currentUser.role === "pca") state.learnerName = name; demoJourney(selectedSector.id); saveState(); renderDemoWorkspace(); });
   document.getElementById("signInForm").addEventListener("submit", async event => { event.preventDefault(); const form = event.currentTarget, button = form.querySelector("button[type=submit]"), error = document.getElementById("authError"); button.disabled = true; error.textContent = "Signing in securely…"; try { state.currentUser = null; state.selectedDepartment = null; saveState(); authenticatedContext = await authService.signIn(document.getElementById("emailInput").value, document.getElementById("passwordInput").value); state.activeOrganizationId = authenticatedContext.organization?.id || null; saveState(); renderAuthenticatedWorkspace(); } catch (e) { error.textContent = authMessage(e.message); if (["MISSING_PROFILE", "MISSING_MEMBERSHIP"].includes(e.message)) await authService?.signOut(); } finally { button.disabled = false; } });
   document.getElementById("resetForm").addEventListener("submit", async event => { event.preventDefault(); const button = event.currentTarget.querySelector("button[type=submit]"); button.disabled = true; const recoveryUrl = new URL(location.href); recoveryUrl.search = ""; recoveryUrl.hash = ""; recoveryUrl.searchParams.set("recovery", "1"); try { await authService.resetPassword(document.getElementById("resetEmail").value, recoveryUrl.toString()); } catch {} renderLogin("If an eligible account exists, a password recovery link has been sent."); });
-  if (message) showView("hospital");
+  if (message) configureEnvironment(state.demoSector || "hospital");
 }
 
 function renderLegacyAuthenticatedWorkspace() {
@@ -724,9 +859,100 @@ function bindSetupForm(id, submit) {
   document.getElementById(id)?.addEventListener("submit", async event => { event.preventDefault(); const form = event.currentTarget, status = form.querySelector(".auth-status"); status.textContent = "Saving…"; try { await submit(new FormData(form)); authenticatedContext = await authService.restore(state.activeOrganizationId); renderAuthenticatedWorkspace(); } catch { status.textContent = "This change could not be saved. Check your authorised scope and the entered details."; } });
 }
 
+function demoWorkflowHtml(sector = demoSector(), journey = demoJourney()) {
+  return `<section class="card demo-workflow-card"><div class="section-heading"><div><span class="eyebrow">COMPETENCY JOURNEY</span><h3>Learn → Validate → Observe → Approve → Renew</h3></div><span class="status-chip ${journey.renewalScheduled ? "status-success" : "status-warning"}">${journey.renewalScheduled ? "Cycle complete" : "In progress"}</span></div><ol class="demo-workflow-steps">${demoStageStatus(journey, sector).map(([label, done, detail], index) => `<li class="${done ? "is-complete" : ""}"><span>${done ? "✓" : index + 1}</span><div><strong>${label}</strong><small>${escapeHtml(detail)}</small></div></li>`).join("")}</ol></section>`;
+}
+
+function demoWorkspaceHero(eyebrow, title, description, sector = demoSector()) {
+  return `<section class="dashboard-hero demo-workspace-hero"><div class="dashboard-welcome"><span class="eyebrow">${escapeHtml(eyebrow)}</span><h2>${escapeHtml(title)}</h2><p>${escapeHtml(description)}</p><div class="demo-context"><span>${escapeHtml(sector.organization)}</span><span>${escapeHtml(sector.facility)}</span><span>${escapeHtml(departmentName(state.selectedDepartment))}</span></div></div><span class="demo-mode-badge">GUIDED DEMO · SAMPLE DATA</span></section>`;
+}
+
+function renderDemoWorkspace() {
+  if (state.currentUser?.mode !== "demo") return routeSignedInUser();
+  const sector = demoSector(state.currentUser.sector);
+  if (!sector) return renderLogin();
+  state.demoSector = sector.id;
+  state.currentUser.sector = sector.id;
+  if (!sector.departments.some(item => item.id === state.selectedDepartment)) state.selectedDepartment = sector.departments[0].id;
+  const allowedViews = demoNavigation(state.currentUser.role).map(([id]) => id);
+  if (!allowedViews.includes(state.activeWorkspaceView)) state.activeWorkspaceView = "home";
+  saveState();
+  const kind = demoRoleKind(state.currentUser.role, sector);
+  if (kind === "management") return renderDemoManagementWorkspace(sector);
+  if (kind === "trainer") return renderDemoTrainerWorkspace(sector);
+  renderDemoWorkerWorkspace(sector);
+}
+
+function renderDemoWorkerWorkspace(sector) {
+  const journey = demoJourney(sector.id), view = state.activeWorkspaceView || "home";
+  const role = sector.roles.find(item => item.value === state.currentUser.role)?.label || workplaceRoleLabel(state.currentUser.role);
+  const learned = journey.learnedModules.length >= sector.pathway.modules.length;
+  let content;
+  if (view === "training") {
+    const modules = sector.pathway.modules.map((module, index) => { const complete = journey.learnedModules.includes(module.id); return `<article class="card demo-module-card"><div class="module-card-head"><span class="module-number">${String(index + 1).padStart(2, "0")}</span><span class="module-duration">${escapeHtml(module.duration)}</span></div><span class="eyebrow">${escapeHtml(module.type)}</span><h3>${escapeHtml(module.title)}</h3><p>This sample module demonstrates the Canvas-style sequence. Local approved content always replaces demonstration text.</p><div class="module-meta"><span class="badge ${complete ? "badge-complete" : "badge-not-started"}">${complete ? "Learned" : "Not started"}</span><button class="btn ${complete ? "btn-secondary" : ""} complete-demo-module" data-module="${escapeHtml(module.id)}" ${complete ? "disabled" : ""}>${complete ? "Complete" : "Mark learning complete"}</button></div></article>`; }).join("");
+    content = `${demoWorkspaceHero("YOUR LEARNING", sector.pathway.title, `${role} pathway · ${sector.pathway.description}`, sector)}<section class="demo-action-bar"><div><strong>${journey.learnedModules.length}/${sector.pathway.modules.length} modules learned</strong><small>Complete learning before knowledge validation.</small></div><button class="btn" id="completeAllLearning" ${learned ? "disabled" : ""}>Complete required learning</button></section><div class="grid grid-2 demo-module-grid">${modules}</div><section class="card demo-validation-card"><span class="eyebrow">VALIDATE</span><h3>Knowledge check</h3><p>Confirm understanding before the pathway can move to practical observation.</p><button class="btn" id="validateDemoKnowledge" ${!learned || journey.validated ? "disabled" : ""}>${journey.validated ? `Passed · ${journey.score}%` : "Complete knowledge check"}</button>${!learned ? '<p class="form-guidance">Finish every required module first.</p>' : ""}</section>${sector.id === "hospital" && state.currentUser.role === "pca" ? '<section class="card hospital-detail-link"><span class="eyebrow">HOSPITAL DETAIL</span><h3>Existing Operating Theatre pathway</h3><p>The original six Hospital modules, lessons and quizzes remain available.</p><button class="btn btn-secondary" id="openDetailedHospitalPathway">Open detailed pathway</button></section>' : ""}${demoWorkflowHtml(sector, journey)}`;
+  } else {
+    content = `${demoWorkspaceHero("WORKER HOME", `Welcome, ${state.currentUser.name}`, `${role} · Your assigned learning, due work and competency status in one place.`, sector)}<div class="stats-grid demo-stats"><div class="stat-card"><span>Assigned pathways</span><strong>1</strong></div><div class="stat-card"><span>Learning progress</span><strong>${Math.round(journey.learnedModules.length / sector.pathway.modules.length * 100)}%</strong></div><div class="stat-card"><span>Knowledge result</span><strong>${journey.validated ? `${journey.score}%` : "—"}</strong></div><div class="stat-card"><span>Competency</span><strong>${journey.approved ? "Current" : "Pending"}</strong></div></div><section class="card assigned-pathway-card"><div><span class="eyebrow">ASSIGNED PATHWAY</span><h3>${escapeHtml(sector.pathway.title)}</h3><p>${escapeHtml(sector.pathway.description)}</p><div class="area-progress"><span style="width:${Math.round(journey.learnedModules.length / sector.pathway.modules.length * 100)}%"></span></div><small>Due 30 September 2026 · Published sample version 1.0</small></div><button class="btn demo-route" data-demo-view="training">Open pathway</button></section>${demoWorkflowHtml(sector, journey)}`;
+  }
+  renderShell(content);
+  bindDemoCommonActions();
+  document.querySelectorAll(".complete-demo-module").forEach(button => button.addEventListener("click", () => { const modules = new Set(journey.learnedModules); modules.add(button.dataset.module); recordDemoJourney("Learning completed", `${sector.pathway.modules.find(item => item.id === button.dataset.module)?.title} completed by ${state.currentUser.name}.`, { learnedModules:[...modules] }); renderDemoWorkerWorkspace(sector); }));
+  document.getElementById("completeAllLearning")?.addEventListener("click", () => { recordDemoJourney("Learning completed", `All required ${sector.pathway.title} modules completed.`, { learnedModules:sector.pathway.modules.map(item => item.id) }); renderDemoWorkerWorkspace(sector); });
+  document.getElementById("validateDemoKnowledge")?.addEventListener("click", () => { recordDemoJourney("Knowledge validated", "Knowledge check passed at 90% and pathway released for observation.", { validated:true, score:90 }); renderDemoWorkerWorkspace(sector); });
+  document.getElementById("openDetailedHospitalPathway")?.addEventListener("click", () => { state.selectedDepartment = "operating-theatre"; saveState(); renderLearnerDashboard(); });
+}
+
+function renderDemoTrainerWorkspace(sector) {
+  const journey = demoJourney(sector.id), view = state.activeWorkspaceView || "home";
+  const role = sector.roles.find(item => item.value === state.currentUser.role)?.label || "Trainer";
+  const worker = sector.people.find(item => !/Trainer|Educator|Coach|Manager/.test(item.role)) || sector.people[0];
+  let content;
+  if (view === "staff") {
+    content = `${demoWorkspaceHero("TRAINEES", "Assigned workers", `${role} access is limited to assigned people and departments.`, sector)}<section class="card trainee-profile demo-trainee-card"><div class="section-heading"><div><span class="eyebrow">${escapeHtml(worker.id)}</span><h3>${escapeHtml(worker.name)}</h3><p>${escapeHtml(worker.role)} · ${escapeHtml(worker.department)}</p></div><span class="status-chip ${journey.validated ? "status-warning" : "status-neutral"}">${journey.observed ? "Observed" : journey.validated ? "Ready for observation" : "Learning in progress"}</span></div>${demoWorkflowHtml(sector, journey)}<div class="profile-actions"><button class="btn demo-route" data-demo-view="training">Open assessment guidance</button></div></section>`;
+  } else if (view === "training") {
+    content = `${demoWorkspaceHero("PRACTICAL ASSESSMENT", "Observation and recommendation", `Record observable evidence for ${worker.name}, then send the recommendation to Management.`, sector)}<section class="card demo-observation-card"><span class="eyebrow">OBSERVE</span><h3>${escapeHtml(sector.pathway.title)}</h3><p>Knowledge validation: <strong>${journey.validated ? `Passed · ${journey.score}%` : "Not ready"}</strong></p>${!journey.validated ? '<button class="btn btn-secondary" id="prepareObservationDemo">Complete sample learning and validation</button>' : ""}<label>Practical observation<textarea id="demoObservationNote" placeholder="Record specific, observable workplace evidence">${escapeHtml(journey.observation || "")}</textarea></label><label>Outcome<select id="demoObservationOutcome"><option>Competent</option><option>Needs Development</option><option>Not Observed</option></select></label><button class="btn" id="recordDemoObservation" ${!journey.validated || journey.observed ? "disabled" : ""}>${journey.observed ? "Recommendation sent to Management" : "Record observation and recommend"}</button><p class="trust-note">Trainers can recommend; Management retains final approval.</p></section>${demoWorkflowHtml(sector, journey)}`;
+  } else {
+    content = `${demoWorkspaceHero("TRAINER HOME", `Welcome, ${state.currentUser.name}`, `${role} · Monitor assigned learners and complete practical assessment.`, sector)}<div class="stats-grid demo-stats"><div class="stat-card"><span>Assigned workers</span><strong>2</strong></div><div class="stat-card"><span>Ready to observe</span><strong>${journey.validated && !journey.observed ? 1 : 0}</strong></div><div class="stat-card"><span>Sent to Management</span><strong>${journey.observed && !journey.approved ? 1 : 0}</strong></div><div class="stat-card"><span>Current competency</span><strong>${journey.approved ? 1 : 0}</strong></div></div><section class="card assigned-pathway-card"><div><span class="eyebrow">NEXT ASSESSMENT</span><h3>${escapeHtml(worker.name)}</h3><p>${escapeHtml(sector.pathway.title)} · ${journey.validated ? "Knowledge validated" : "Waiting for learning"}</p></div><button class="btn demo-route" data-demo-view="staff">View trainee</button></section>${demoWorkflowHtml(sector, journey)}`;
+  }
+  renderShell(content);
+  bindDemoCommonActions();
+  document.getElementById("prepareObservationDemo")?.addEventListener("click", () => { recordDemoJourney("Learning and validation prepared", "Sample learner completed every module and passed the knowledge check at 90%.", { learnedModules:sector.pathway.modules.map(item => item.id), validated:true, score:90 }); renderDemoTrainerWorkspace(sector); });
+  document.getElementById("recordDemoObservation")?.addEventListener("click", () => { const note = document.getElementById("demoObservationNote").value.trim(); if (!note) return alert("Record observable evidence before submitting the recommendation."); recordDemoJourney("Practical observation recorded", `${document.getElementById("demoObservationOutcome").value}: ${note}`, { observed:true, observation:note }); renderDemoTrainerWorkspace(sector); });
+}
+
+function renderDemoManagementWorkspace(sector) {
+  const journey = demoJourney(sector.id), view = state.activeWorkspaceView || "home";
+  const worker = sector.people.find(item => !/Trainer|Educator|Coach|Manager/.test(item.role)) || sector.people[0];
+  const pending = journey.observed && !journey.approved ? 1 : 0;
+  let content;
+  if (view === "training") {
+    content = `${demoWorkspaceHero("TRAINING", "Pathways and competency decisions", "Assign published pathways, review trainer evidence, approve competency and schedule renewal.", sector)}<section class="workspace-home-grid"><article class="card"><span class="eyebrow">PUBLISHED PATHWAY</span><h3>${escapeHtml(sector.pathway.title)}</h3><p>${escapeHtml(sector.pathway.description)}</p><dl class="demo-pathway-meta"><div><dt>Modules</dt><dd>${sector.pathway.modules.length}</dd></div><div><dt>Assigned workers</dt><dd>2</dd></div><div><dt>Version</dt><dd>1.0</dd></div></dl><button class="btn btn-secondary" id="assignDemoPathway">Assign to sample worker</button></article><article class="card approval-card"><span class="eyebrow">MANAGEMENT APPROVAL</span><h3>${escapeHtml(worker.name)}</h3><p>${journey.observed ? escapeHtml(journey.observation) : "Waiting for the trainer's practical observation and recommendation."}</p><button class="btn" id="approveDemoCompetency" ${!journey.observed || journey.approved ? "disabled" : ""}>${journey.approved ? "Competency approved" : "Approve competency"}</button><button class="btn btn-secondary" id="scheduleDemoRenewal" ${!journey.approved || journey.renewalScheduled ? "disabled" : ""}>${journey.renewalScheduled ? `Renewal ${journey.renewalDate}` : "Schedule 12-month renewal"}</button></article></section>${demoWorkflowHtml(sector, journey)}`;
+  } else if (view === "staff") {
+    const rows = sector.people.map(person => `<tr class="demo-staff-row" data-search="${escapeHtml(`${person.name} ${person.id} ${person.role} ${person.department}`.toLowerCase())}"><td><span class="staff-identity"><strong>${escapeHtml(person.name)}</strong><small>${escapeHtml(person.id)}</small></span></td><td>${escapeHtml(person.role)}</td><td>${escapeHtml(person.department)}</td><td>${person.progress}%</td><td><span class="status-chip ${person.status === "Active" ? "status-success" : "status-warning"}">${escapeHtml(person.status)}</span></td></tr>`).join("");
+    content = `${demoWorkspaceHero("STAFF", "People and permissions", "Search the sample directory and review role, department, training and account status.", sector)}<section class="card"><div class="section-heading"><div><span class="eyebrow">ORGANISATION DIRECTORY</span><h3>${sector.people.length} sample people</h3></div><button class="btn" id="demoInviteStaff">Invite staff</button></div><label class="search-filter">Search people<input id="demoStaffSearch" type="search" placeholder="Name, employee ID, role or department"></label><div class="table-wrap"><table class="staff-table"><thead><tr><th>Staff member</th><th>Role</th><th>Department</th><th>Progress</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div><p id="demoStaffEmpty" class="empty-state" hidden>No people match this search.</p></section>`;
+  } else if (view === "reports") {
+    content = `${demoWorkspaceHero("REPORTS", "Readiness and compliance", "Monitor pathway completion, pending decisions, current competency and renewal status.", sector)}<div class="stats-grid demo-stats"><div class="stat-card"><span>Assigned staff</span><strong>${sector.people.length}</strong></div><div class="stat-card"><span>Learning complete</span><strong>${journey.learnedModules.length >= sector.pathway.modules.length ? 1 : 0}</strong></div><div class="stat-card"><span>Pending approval</span><strong>${pending}</strong></div><div class="stat-card"><span>Renewals scheduled</span><strong>${journey.renewalScheduled ? 1 : 0}</strong></div></div><section class="reports-grid"><article class="card report-panel"><span class="eyebrow">PATHWAY READINESS</span><h3>${escapeHtml(sector.pathway.title)}</h3><ul>${demoStageStatus(journey, sector).map(([label, done, detail]) => `<li><span>${done ? "✓" : "○"}</span>${label}<strong>${escapeHtml(detail)}</strong></li>`).join("")}</ul></article><article class="card report-panel"><span class="eyebrow">AUDIT HISTORY</span><h3>Lifecycle activity</h3><div class="audit-feed">${journey.history.map(item => `<article><strong>${escapeHtml(item.action)}</strong><span>${escapeHtml(item.detail)}</span><small>${escapeHtml(item.at)}</small></article>`).join("") || '<p class="empty-state">Complete a workflow action to create an audit entry.</p>'}</div></article></section>${demoWorkflowHtml(sector, journey)}`;
+  } else {
+    content = `${demoWorkspaceHero("MANAGEMENT HOME", `${sector.organization} workspace`, "Review priorities, workforce readiness and the actions that need a Management decision.", sector)}<div class="stats-grid demo-stats"><div class="stat-card"><span>Active staff</span><strong>${sector.people.length}</strong></div><div class="stat-card"><span>Published pathways</span><strong>1</strong></div><div class="stat-card"><span>Awaiting approval</span><strong>${pending}</strong></div><div class="stat-card"><span>Compliance alerts</span><strong>${journey.renewalScheduled ? 0 : 1}</strong></div></div><section class="workspace-home-grid"><section class="card"><span class="eyebrow">PRIORITY ACTIONS</span><h3>What needs attention</h3><button class="workspace-route demo-route" data-demo-view="training"><span>✓</span><div><strong>${pending ? "Competency ready for approval" : "Training and competency"}</strong><small>${pending ? `${worker.name} has trainer evidence ready` : "Review pathway and workflow status"}</small></div><b>→</b></button><button class="workspace-route demo-route" data-demo-view="staff"><span>♙</span><div><strong>People and permissions</strong><small>${sector.people.length} sample staff profiles</small></div><b>→</b></button><button class="workspace-route demo-route" data-demo-view="reports"><span>▥</span><div><strong>Compliance report</strong><small>Learning, approval and renewal evidence</small></div><b>→</b></button></section><section class="card"><span class="eyebrow">SAMPLE ORGANISATION</span><h3>${escapeHtml(sector.facility)}</h3><p>${escapeHtml(sector.description)}</p><dl class="demo-pathway-meta"><div><dt>Sector</dt><dd>${escapeHtml(sector.name)}</dd></div><div><dt>Departments</dt><dd>${sector.departments.length}</dd></div><div><dt>Roles</dt><dd>${sector.roles.length}</dd></div></dl></section></section>${demoWorkflowHtml(sector, journey)}`;
+  }
+  renderShell(content);
+  bindDemoCommonActions();
+  document.getElementById("assignDemoPathway")?.addEventListener("click", () => alert(`${sector.pathway.title} is assigned to ${worker.name} in this sample workspace.`));
+  document.getElementById("approveDemoCompetency")?.addEventListener("click", () => { recordDemoJourney("Competency approved", `Management approved ${worker.name} after reviewing learning, validation and observation evidence.`, { approved:true }); renderDemoManagementWorkspace(sector); });
+  document.getElementById("scheduleDemoRenewal")?.addEventListener("click", () => { const renewal = new Date(); renewal.setFullYear(renewal.getFullYear() + 1); const date = renewal.toLocaleDateString("en-AU", { day:"numeric", month:"short", year:"numeric" }); recordDemoJourney("Renewal scheduled", `Competency renewal scheduled for ${date}.`, { renewalScheduled:true, renewalDate:date }); renderDemoManagementWorkspace(sector); });
+  document.getElementById("demoStaffSearch")?.addEventListener("input", event => { let visible = 0; document.querySelectorAll(".demo-staff-row").forEach(row => { row.hidden = !row.dataset.search.includes(event.target.value.toLowerCase()); if (!row.hidden) visible++; }); document.getElementById("demoStaffEmpty").hidden = visible > 0; });
+  document.getElementById("demoInviteStaff")?.addEventListener("click", () => alert("Guided Demo keeps invitations local. Authenticated organisation invitations use the protected Supabase service and RLS policies."));
+}
+
+function bindDemoCommonActions() {
+  document.querySelectorAll(".demo-route").forEach(button => button.addEventListener("click", () => { state.activeWorkspaceView = button.dataset.demoView; saveState(); renderDemoWorkspace(); }));
+}
+
 function routeCurrentUser() {
   normalizeCurrentUserRole();
   const role = state.currentUser?.role;
+
+  if (state.currentUser?.mode === "demo") return renderDemoWorkspace();
 
   if (role === "pca") {
     renderLearnerDashboard();
@@ -1192,8 +1418,6 @@ async function bootstrap() {
     state.currentUser = null; state.selectedDepartment = null; saveState();
     renderLogin();
     document.getElementById("getStartedBtn")?.click();
-    document.getElementById("selectHospital")?.click();
-    document.getElementById("showDemo")?.click();
     return;
   }
   if (globalThis.SkillWardRecovery.isRecoveryPending(sessionStorage)) {

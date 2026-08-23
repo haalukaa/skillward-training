@@ -2,7 +2,13 @@ begin;
 create extension if not exists pgtap;
 set local role postgres;
 
-select plan(39);
+select plan(40);
+
+select ok(
+  array['Hospital','Aged Care','Disability Support']::text[]
+    <@ enum_range(null::public.organization_type)::text[],
+  'shared learning domain supports every SkillWard sector'
+);
 
 select is(
   (select count(*)::int
