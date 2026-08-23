@@ -460,13 +460,14 @@ language plpgsql set search_path = ''
 as $function$
 begin
   if current_user not in ('postgres','supabase_admin') and (select auth.uid()) is not null then
-    if tg_table_name = 'learning_pathway_versions'
-      and old.lifecycle is distinct from new.lifecycle then
-      raise exception using errcode = '42501', message = 'Content lifecycle changes require the protected review workflow';
-    end if;
-    if tg_table_name = 'learning_pathways'
-      and old.current_version_id is distinct from new.current_version_id then
-      raise exception using errcode = '42501', message = 'Current version changes require the protected publication workflow';
+    if tg_table_name = 'learning_pathway_versions' then
+      if old.lifecycle is distinct from new.lifecycle then
+        raise exception using errcode = '42501', message = 'Content lifecycle changes require the protected review workflow';
+      end if;
+    elsif tg_table_name = 'learning_pathways' then
+      if old.current_version_id is distinct from new.current_version_id then
+        raise exception using errcode = '42501', message = 'Current version changes require the protected publication workflow';
+      end if;
     end if;
   end if;
   return new;
@@ -510,14 +511,15 @@ begin
     from public.learning_pathway_versions
     where id = case when tg_op = 'INSERT' then new.pathway_version_id else old.pathway_version_id end;
   end if;
-  if tg_table_name = 'learning_pathway_versions'
-    and tg_op = 'UPDATE'
-    and old.lifecycle = 'Published'
-    and new.lifecycle = 'Retired'
-    and new.retired_at is not null
-    and (to_jsonb(new) - array['lifecycle','retired_at','updated_at'])
-      = (to_jsonb(old) - array['lifecycle','retired_at','updated_at']) then
-    return new;
+  if tg_table_name = 'learning_pathway_versions' then
+    if tg_op = 'UPDATE'
+      and old.lifecycle = 'Published'
+      and new.lifecycle = 'Retired'
+      and new.retired_at is not null
+      and (to_jsonb(new) - array['lifecycle','retired_at','updated_at'])
+        = (to_jsonb(old) - array['lifecycle','retired_at','updated_at']) then
+      return new;
+    end if;
   end if;
   if version_lifecycle in ('Published','Retired') then
     raise exception using errcode = '42501', message = 'Published pathway content is immutable; create a new draft version';
