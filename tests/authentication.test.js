@@ -51,6 +51,12 @@ test("authenticated REST-style context loads its permitted profile, membership a
   assert.equal(context.memberships.length, 1);
 });
 
+test("organisation staff embeds the staff user relationship without manager ambiguity", () => {
+  assert.match(database, /user_profiles!organization_staff_profiles_user_id_fkey\(\*\)/);
+  assert.doesNotMatch(database, /organization_staff_profiles[^\n]+"\*, user_profiles\(\*\)"/);
+  assert.match(index, /auth-bundle\.js\?v=20260823-workplace-1/);
+});
+
 test("account blocking, recovery, restoration and safe diagnostics are implemented", () => {
   assert.match(database, /error\?\.code === "42501"/);
   assert.match(database, /CONTEXT_TABLE_PERMISSION/);

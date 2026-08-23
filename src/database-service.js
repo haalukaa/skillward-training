@@ -93,7 +93,7 @@ export class SkillWardDatabaseService {
       ? await this.query("signoff_recommendations", q => q.eq("organization_id", organizationId).in("training_assignment_id", assignmentIds).eq("trainer_id", user.id)) : [];
     const notifications = await this.query("notifications", q => q.eq("organization_id", organizationId).eq("recipient_user_id", user.id).eq("status", "Unread"));
     const organizationStaff = ["SkillWard Super Administrator", "Organisation Administrator"].includes(membership.role)
-      ? await this.query("organization_staff_profiles", q => q.eq("organization_id", organizationId), "*, user_profiles(*)") : [];
+      ? await this.query("organization_staff_profiles", q => q.eq("organization_id", organizationId), "*, user_profiles!organization_staff_profiles_user_id_fkey(*)") : [];
 
     return {
       user, profile, platformAdministrator, memberships, membership, organization,
