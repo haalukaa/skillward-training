@@ -18,23 +18,24 @@ test("sign-in and Demo Mode are separate and public sign-up is unavailable", () 
 });
 
 test("authenticated REST-style context loads its permitted profile, membership and routing data", async () => {
-  for (const table of ["user_profiles", "hospital_memberships", "department_memberships", "departments", "trainer_assignments", "training_assignments", "module_progress", "competency_records", "notifications"]) assert.match(database, new RegExp(`"${table}"`));
+  for (const table of ["user_profiles", "organizations", "organization_memberships", "facilities", "facility_assignments", "department_assignments", "departments", "trainer_assignments", "training_assignments", "module_progress", "competency_records", "notifications"]) assert.match(database, new RegExp(`"${table}"`));
   assert.match(auth, /context\.membership\.role/); assert.match(auth, /departmentDetails/);
   assert.doesNotMatch(auth, /localStorage/);
   const moduleUrl = `data:text/javascript;base64,${Buffer.from(database).toString("base64")}`;
   const { SkillWardDatabaseService } = await import(moduleUrl);
   const user = { id: "admin-user" };
   const rows = {
-    user_profiles: { user_id: user.id, full_name: "Development Administrator", account_status: "Active" },
-    hospital_memberships: { user_id: user.id, role: "Hospital Administrator", account_status: "Active" },
-    department_memberships: [],
+    user_profiles: { user_id: user.id, full_name: "Development Administrator", account_status: "Active", active_organization_id: "org-a" },
+    skillward_administrators: null,
+    organization_memberships: [{ user_id: user.id, organization_id: "org-a", role: "Organisation Administrator", membership_status: "Active", organizations: { id: "org-a", name: "Development Organisation" } }],
+    facilities: [], facility_assignments: [], department_assignments: [], departments: [], notifications: [], organization_staff_profiles: []
   };
   const client = {
     from(table) {
       const result = () => ({ data: rows[table] ?? [], error: null });
       const query = {
-        select() { return query; }, eq() { return query; }, in() { return query; },
-        maybeSingle() { return Promise.resolve(result()); },
+        select() { return query; }, eq() { return query; }, in() { return query; }, order() { return query; }, gt() { return query; },
+        maybeSingle() { return Promise.resolve(result()); }, single() { return Promise.resolve(result()); },
         then(resolve) { return Promise.resolve(result()).then(resolve); },
       };
       return query;
@@ -44,7 +45,9 @@ test("authenticated REST-style context loads its permitted profile, membership a
   const context = await new SkillWardDatabaseService(client).loadSessionContext(user);
   assert.equal(context.profile.user_id, user.id);
   assert.equal(context.membership.user_id, user.id);
-  assert.equal(context.membership.role, "Hospital Administrator");
+  assert.equal(context.membership.role, "Organisation Administrator");
+  assert.equal(context.organization.id, "org-a");
+  assert.equal(context.memberships.length, 1);
 });
 
 test("account blocking, recovery, restoration and safe diagnostics are implemented", () => {
@@ -100,8 +103,39 @@ test("recovery form validates matching strong passwords and updates only through
 });
 
 test("role routing covers Management, learners, managers and trainers", () => {
-  for (const role of ["Hospital Administrator", "Department Manager", "PCA", "Cleaner", "PCA Trainer", "Cleaner Trainer"]) assert.match(auth + app, new RegExp(role));
+  for (const role of ["SkillWard Super Administrator", "Organisation Administrator", "Facility Administrator", "Department Manager", "Content Administrator/Educator", "PCA", "Cleaner", "Support Worker", "PCA Trainer", "Cleaner Trainer"]) assert.match(auth + app, new RegExp(role));
   assert.match(app, /departments\.length>1/); assert.match(app, /No assigned department/);
+});
+
+test("multi-organisation workspace switching never derives authorization from browser state", () => {
+  for (const text of ["organizationWorkspace", "switchOrganization", "organization_id", "Each workspace has separate facilities, departments and records"]) assert.match(app + auth + database, new RegExp(text));
+  assert.doesNotMatch(auth, /user_metadata|raw_user_meta_data|localStorage/);
+  assert.match(database, /memberships\.find\(item => item\.organization_id === requestedOrganizationId\)/);
+});
+
+test("database context selects only an active requested membership", async () => {
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(database).toString("base64")}#workspace`;
+  const { SkillWardDatabaseService } = await import(moduleUrl);
+  const user = { id: "multi-user" };
+  const rows = {
+    user_profiles: { user_id:user.id, full_name:"Multi Member", account_status:"Active", active_organization_id:"org-a" },
+    skillward_administrators: null,
+    organization_memberships: [
+      { user_id:user.id, organization_id:"org-a", role:"PCA", membership_status:"Active", organizations:{ id:"org-a", name:"Organisation A" } },
+      { user_id:user.id, organization_id:"org-b", role:"Cleaner", membership_status:"Active", organizations:{ id:"org-b", name:"Organisation B" } }
+    ],
+    facility_assignments: [], department_assignments: [], facilities: [], departments: [], training_assignments: [], competency_records: [], notifications: []
+  };
+  const client = { from(table) { const query = { select() { return query; }, eq() { return query; }, in() { return query; }, order() { return query; }, gt() { return query; }, maybeSingle() { return Promise.resolve({ data: rows[table] ?? null, error:null }); }, then(resolve) { return Promise.resolve({ data: rows[table] ?? [], error:null }).then(resolve); } }; return query; } };
+  const context = await new SkillWardDatabaseService(client).loadSessionContext(user, "org-b");
+  assert.equal(context.organization.id, "org-b");
+  assert.equal(context.membership.role, "Cleaner");
+  assert.equal(context.memberships.length, 2);
+});
+
+test("organisation and platform setup writes remain behind the RLS database boundary", () => {
+  for (const action of ["createOrganization", "archiveOrganization", "updateOrganizationBranding", "createFacility", "createDepartment", "inviteOrganizationMember", "authorizeSupportAccess", "activateSupportSession"]) assert.match(app + database, new RegExp(action));
+  assert.doesNotMatch(app + database, /service_role|auth\.admin/);
 });
 
 test("authenticated learner workspace renders database assignments without Demo Mode records", () => {

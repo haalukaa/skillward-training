@@ -411,6 +411,69 @@ textarea:focus-visible {
   .login-flip { transition-duration: .01ms; }
 }
 
+/* Phase 1 organisation administration extends the existing design system. */
+.workspace-organization {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: .78rem;
+  font-weight: 700;
+}
+
+.organization-switcher {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+  padding: 16px 20px;
+}
+
+.organization-switcher label { flex: 1; margin: 0; }
+.organization-switcher small { max-width: 360px; color: var(--muted); }
+
+.admin-setup-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 22px;
+}
+
+.setup-form { display: grid; align-content: start; gap: 14px; }
+.setup-form h3 { margin: 0 0 4px; }
+.setup-form label { margin: 0; }
+.colour-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.colour-fields input[type="color"] { min-height: 48px; padding: 5px; }
+
+.organization-register { display: grid; gap: 10px; margin-top: 16px; }
+.organization-register article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--line);
+}
+.organization-register article:last-child { border-bottom: 0; }
+.organization-register strong, .organization-register small { display: block; }
+.organization-register small { margin-top: 3px; color: var(--muted); }
+
+@media (max-width: 800px) {
+  .admin-setup-grid { grid-template-columns: 1fr; }
+  .organization-switcher { align-items: stretch; flex-direction: column; }
+  .organization-register article { grid-template-columns: minmax(0, 1fr) auto; }
+  .organization-register .link-button { grid-column: 1 / -1; justify-self: start; }
+}
+
+@media (max-width: 600px) {
+  .workspace-organization { display: none; }
+  .admin-setup-grid { gap: 14px; }
+  .setup-form { padding: 20px; }
+  .colour-fields { grid-template-columns: 1fr; }
+}
+
 .login-flip-shell {
   width: 100%;
   max-width: 520px;

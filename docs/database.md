@@ -1,16 +1,17 @@
 # Supabase database foundation
 
-This foundation is **not connected to any hosted project**. The static demonstration login and browser sample data remain unchanged. It models workforce training only: **patient names, records, diagnoses, clinical data, and patient documents are prohibited**.
+This foundation is version controlled and is **not automatically applied to a hosted project**. The static Demo Mode and browser sample data remain separate. It models workforce training only: **patient names, records, diagnoses, clinical data, and patient documents are prohibited**.
 
 ## Architecture and relationships
 
-All application identifiers are UUIDs and timestamps are `timestamptz` (UTC instants). `auth.users` owns identity; `user_profiles` deliberately contains no password data. Hospital and department membership establish tenant scope. Assignments preserve history, while partial unique indexes prevent duplicate current relationships. Competencies are appendable historical records rather than overwritten certificates. Audit rows are append-only.
+All application identifiers are UUIDs and timestamps are `timestamptz` (UTC instants). `auth.users` owns identity; `user_profiles` deliberately contains no password or organisation authorization data. Organisations are the tenant boundary; facilities and departments provide operational scope. `organization_staff_profiles` holds organisation-specific employment data so one identity can belong to multiple organisations. Assignments preserve history, while partial unique indexes prevent duplicate current relationships. Competencies are appendable historical records rather than overwritten certificates. Audit rows are append-only.
 
 ```mermaid
 erDiagram
   AUTH_USERS ||--|| USER_PROFILES : identity
-  HOSPITALS ||--o{ DEPARTMENTS : contains
-  HOSPITALS ||--o{ HOSPITAL_MEMBERSHIPS : authorizes
+  ORGANIZATIONS ||--o{ FACILITIES : contains
+  ORGANIZATIONS ||--o{ ORGANIZATION_MEMBERSHIPS : authorizes
+  FACILITIES ||--o{ DEPARTMENTS : contains
   DEPARTMENTS ||--o{ DEPARTMENT_MEMBERSHIPS : scopes
   USER_PROFILES ||--o{ TRAINER_ASSIGNMENTS : participates
   TRAINING_PATHWAYS ||--o{ TRAINING_MODULES : contains
@@ -24,7 +25,7 @@ erDiagram
 
 ## Authorization model
 
-Every application table has RLS enabled and forced. Anonymous access has no policies. Membership helpers evaluate `auth.uid()` on the server and reject suspended/archived profiles. Hospital Administrators are tenant-bound; Department Managers are explicitly department-bound; learners see their own records; trainers see compatible, assigned trainees. Correct-answer rows have no authenticated read policy. Trainers can recommend but Management alone can decide. Audit logs have no client mutation policy and an append-only trigger. A final-active-administrator trigger prevents suspension, archive, deletion, or demotion.
+Every application table has RLS enabled and forced. Anonymous access has no policies. Private membership helpers evaluate `auth.uid()` on the server and reject suspended/archived profiles. Organisation Administrators are tenant-bound; Facility Administrators and Department Managers are explicitly assignment-bound; learners see their own records; trainers see compatible, assigned trainees. Correct-answer rows have no authenticated read policy. Trainers can recommend but Management alone can decide. Audit logs have no client mutation policy and an append-only trigger. A final-active-administrator trigger prevents suspension, archive, deletion, or demotion. See [multi-organization-foundation.md](multi-organization-foundation.md) for the complete Phase 1 model.
 
 PostgreSQL base privileges are intentionally separate from row authorization. The `authenticated` API role receives schema usage and only the table operations for which an RLS policy exists; RLS then decides which rows each request may affect. The migration explicitly withholds all protected-table access from `anon`, all browser access to knowledge-answer options, and every authenticated audit-log mutation. Projects created with automatic table exposure disabled therefore work without relying on permissive Dashboard defaults.
 
@@ -62,4 +63,4 @@ This schema is preparation, not production readiness. Deployment still requires:
 - Australian legal and hospital-governance review; and
 - a decision on the appropriate Supabase production plan and contractual requirements.
 
-Storage buckets are intentionally not created yet. Future training documents/videos and competency evidence must use private buckets with hospital/department/role policies; staff evidence must never be public. Large media belongs in object storage, not PostgreSQL. Patient-document storage is out of scope and prohibited.
+Private buckets now exist for organisation branding, training content and competency evidence. The first object-path segment must be the organisation UUID and Storage RLS checks active organisation authorization. Large media belongs in object storage, not PostgreSQL. Patient-document storage is out of scope and prohibited.

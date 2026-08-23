@@ -11,6 +11,7 @@ on:
       - "scripts/validate_database_foundation.py"
       - "scripts/scan_secrets.sh"
       - "scripts/bootstrap-development-admin.sql"
+      - "scripts/bootstrap-skillward-super-admin.sql"
       - "docs/development-admin-bootstrap.md"
       - ".github/workflows/supabase-database.yml"
   workflow_dispatch:
@@ -33,6 +34,12 @@ jobs:
         with:
           version: latest
 
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+
+      - name: Install application dependencies
+        run: npm install --ignore-scripts
+
       - name: Validate migration and repository structure
         run: python3 scripts/validate_database_foundation.py
 
@@ -45,11 +52,14 @@ jobs:
       - name: Apply clean migrations and test-only development seed
         run: supabase db reset
 
-      - name: Run all 39 database assertions
+      - name: Run all 79 database assertions
         run: supabase test db
 
       - name: Run existing JavaScript tests
-        run: node --test tests/*.test.js
+        run: npm test
+
+      - name: Build the browser application
+        run: npm run build
 
       - name: Show local service status on failure
         if: failure()

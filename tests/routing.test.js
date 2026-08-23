@@ -122,3 +122,10 @@ test("trainer workspace has phone-width containment and card-style trainee recor
   assert.match(stylesSource, /\.trainer-filters\+ \.table-wrap table/);
   for (const label of ["Trainee", "Progress", "Latest result", "Sign-off", "Due"]) assert.match(stylesSource, new RegExp(`content:'${label}'`));
 });
+
+test("Phase 1 administration layouts retain desktop grids and phone-width stacking", () => {
+  for (const text of ["ORGANISATION SETUP", "Platform Administration", "Organisation workspace", "Create organisation", "Add facility", "Add department", "Authorise support mode"]) assert.match(appSource, new RegExp(text));
+  assert.match(stylesSource, /\.admin-setup-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,/s);
+  assert.match(stylesSource, /@media \(max-width: 800px\)[\s\S]*?\.admin-setup-grid\s*\{\s*grid-template-columns:\s*1fr/);
+  assert.match(stylesSource, /@media \(max-width: 600px\)[\s\S]*?\.setup-form\s*\{\s*padding:/);
+});
