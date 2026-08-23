@@ -9,6 +9,11 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="SkillWard" />
   <title>SkillWard | Training. Competency. Confidence.</title>
+  <script>
+    if (location.hostname === "skillwardtraining.com" && location.pathname.startsWith("/skillward-training/")) {
+      location.replace(`${location.origin}/${location.search}${location.hash}`);
+    }
+  </script>
   <link rel="icon" type="image/svg+xml" href="skillward-app-icon.svg" />
   <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
   <link rel="manifest" href="manifest.webmanifest" />
@@ -21,6 +26,6 @@
   <script src="management.js"></script>
   <script src="runtime-config.js"></script>
   <script src="auth-bundle.js"></script>
-  <script src="app.js"></script>
+  <script src="app.js?v=20260823-recovery-2"></script>
 </body>
 </html>

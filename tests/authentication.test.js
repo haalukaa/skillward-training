@@ -5,6 +5,7 @@ const test = require("node:test");
 const read = file => fs.readFileSync(file, "utf8");
 const app = read("app.js"), auth = read("src/auth-service.js"), database = read("src/database-service.js");
 const recoverySource = read("src/recovery-service.js");
+const index = read("index.html");
 
 async function loadRecoveryModule() {
   return import(`data:text/javascript;base64,${Buffer.from(recoverySource).toString("base64")}#${Math.random()}`);
@@ -107,6 +108,14 @@ test("recovery links preserve the active deployment path without hardcoding GitH
   assert.match(app, /recoveryUrl\.searchParams\.set\("recovery", "1"\)/);
   assert.match(app, /resetPassword[^\n]+recoveryUrl\.toString\(\)/);
   assert.doesNotMatch(app, /location\.origin\}\/skillward-training\/\?recovery=1/);
+});
+
+test("production recovers legacy cached callback paths before relative assets load", () => {
+  assert.match(index, /location\.hostname === "skillwardtraining\.com"/);
+  assert.match(index, /location\.pathname\.startsWith\("\/skillward-training\/"\)/);
+  assert.match(index, /location\.replace\(`\$\{location\.origin\}\/\$\{location\.search\}\$\{location\.hash\}`\)/);
+  assert.match(index, /app\.js\?v=20260823-recovery-2/);
+  assert.ok(index.indexOf("location.replace") < index.indexOf("data.js"), "legacy callback redirects before relative scripts load");
 });
 
 test("role routing covers Management, learners, managers and trainers", () => {
