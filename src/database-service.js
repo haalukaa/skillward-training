@@ -26,6 +26,14 @@ export class SkillWardDatabaseService {
     return data;
   }
 
+  async optionalQuery(table, configure = request => request, columns = "*") {
+    let request = this.client.from(table).select(columns); request = configure(request);
+    const { data, error } = await request;
+    if (error?.code === "42P01" || error?.code === "PGRST205" || error?.code === "42501") return [];
+    if (error) throw this.contextError(error);
+    return data || [];
+  }
+
   async loadSessionContext(user, requestedOrganizationId = null) {
     const profile = await this.one("user_profiles", user.id);
     if (!profile) throw new Error("MISSING_PROFILE");
@@ -42,10 +50,11 @@ export class SkillWardDatabaseService {
     if (!memberships.length && platformAdministrator?.is_active) {
       const organizations = await this.query("organizations", q => q.order("created_at", { ascending: false }));
       const supportSessions = await this.query("support_access_sessions", q => q.eq("support_user_id", user.id).in("status", ["Pending", "Active"]));
+      const demoRequests = await this.optionalQuery("demo_requests", q => q.order("submitted_at", { ascending: false }).limit(100));
       const usageResult = this.client.rpc ? await this.client.rpc("skillward_organization_usage") : { data: [], error: null };
       if (usageResult.error) throw this.contextError(usageResult.error);
       return {
-        user, profile, platformAdministrator, memberships, organizations, supportSessions, organizationUsage: usageResult.data || [],
+        user, profile, platformAdministrator, memberships, organizations, supportSessions, demoRequests, organizationUsage: usageResult.data || [],
         membership: { role: "SkillWard Super Administrator", membership_status: "Active", organization_id: null },
         organization: null, facilities: [], departments: [], departmentDetails: [],
         departmentAssignments: [], facilityAssignments: [], trainerAssignments: [], traineeProfiles: [],

@@ -6,6 +6,7 @@ const read = file => fs.readFileSync(file, "utf8");
 const app = read("app.js"), auth = read("src/auth-service.js"), database = read("src/database-service.js");
 const recoverySource = read("src/recovery-service.js");
 const index = read("index.html");
+const appIndex = read("app/index.html");
 
 async function loadRecoveryModule() {
   return import(`data:text/javascript;base64,${Buffer.from(recoverySource).toString("base64")}#${Math.random()}`);
@@ -54,7 +55,7 @@ test("authenticated REST-style context loads its permitted profile, membership a
 test("organisation staff embeds the staff user relationship without manager ambiguity", () => {
   assert.match(database, /user_profiles!organization_staff_profiles_user_id_fkey\(\*\)/);
   assert.doesNotMatch(database, /organization_staff_profiles[^\n]+"\*, user_profiles\(\*\)"/);
-  assert.match(index, /auth-bundle\.js\?v=20260823-workplace-1/);
+  assert.match(appIndex, /auth-bundle\.js\?v=20260824-public-site-1/);
 });
 
 test("account blocking, recovery, restoration and safe diagnostics are implemented", () => {
@@ -117,11 +118,10 @@ test("recovery links preserve the active deployment path without hardcoding GitH
 });
 
 test("production recovers legacy cached callback paths before relative assets load", () => {
-  assert.match(index, /location\.hostname === "skillwardtraining\.com"/);
   assert.match(index, /location\.pathname\.startsWith\("\/skillward-training\/"\)/);
-  assert.match(index, /location\.replace\(`\$\{location\.origin\}\/\$\{location\.search\}\$\{location\.hash\}`\)/);
-  assert.match(index, /app\.js\?v=20260823-canvas-shell-1/);
-  assert.ok(index.indexOf("location.replace") < index.indexOf("data.js"), "legacy callback redirects before relative scripts load");
+  assert.match(index, /location\.replace\(`\/app\/\$\{location\.search\}\$\{location\.hash\}`\)/);
+  assert.match(appIndex, /\.\.\/app\.js\?v=20260824-public-site-1/);
+  assert.ok(index.indexOf("location.replace") < index.indexOf("marketing.css"), "legacy callback redirects before public assets load");
 });
 
 test("role routing covers Management, learners, managers and trainers", () => {
