@@ -734,7 +734,12 @@ $$;
 create function private.protect_platform_organization_fields() returns trigger
 language plpgsql set search_path = '' as $$
 begin
-  if not private.is_skillward_administrator() and (
+  -- Migrations and the explicitly development-only seed execute as the database
+  -- owner. Browser/API calls execute as authenticated and must still satisfy
+  -- the SkillWard administrator check below.
+  if current_user not in ('postgres', 'supabase_admin')
+    and not private.is_skillward_administrator()
+    and (
     old.organization_type <> new.organization_type
     or old.slug <> new.slug
     or old.subscription_plan <> new.subscription_plan
