@@ -14,6 +14,21 @@ update public.user_profiles
 set onboarding_completed_at = coalesce(onboarding_completed_at, created_at)
 where account_status = 'Active';
 
+create function private.mark_active_profile_onboarded() returns trigger
+language plpgsql set search_path = ''
+as $function$
+begin
+  if new.account_status = 'Active' and new.onboarding_completed_at is null then
+    new.onboarding_completed_at := coalesce(new.created_at, now());
+  end if;
+  return new;
+end
+$function$;
+
+create trigger mark_active_profile_onboarded
+before insert or update of account_status, onboarding_completed_at on public.user_profiles
+for each row execute function private.mark_active_profile_onboarded();
+
 alter table public.organization_memberships
   add column membership_expires_at timestamptz;
 
@@ -293,6 +308,63 @@ as $function$
   )
 $function$;
 
+-- The original self-authorization trigger remains the final guard against a
+-- browser user changing their own role or scope. Invitation completion is the
+-- only self-change permitted: it may activate rows already provisioned for the
+-- exact organisation and role stored in a live, server-issued invitation.
+create or replace function private.protect_self_authorization_change() returns trigger
+language plpgsql set search_path = ''
+as $function$
+declare source_row jsonb;
+declare previous_row jsonb;
+declare target_user uuid;
+declare invitation_allows_activation boolean := false;
+begin
+  if (select auth.uid()) is null then
+    return case when tg_op = 'DELETE' then old else new end;
+  end if;
+  source_row := case when tg_op = 'DELETE' then to_jsonb(old) else to_jsonb(new) end;
+  previous_row := case when tg_op = 'INSERT' then '{}'::jsonb else to_jsonb(old) end;
+  target_user := nullif(source_row ->> 'user_id', '')::uuid;
+  if target_user = (select auth.uid()) then
+    if tg_op = 'UPDATE' and tg_table_name in (
+      'organization_memberships','facility_assignments','department_assignments'
+    ) then
+      select exists (
+        select 1
+        from public.organization_invitations invitation
+        where invitation.organization_id = nullif(source_row ->> 'organization_id', '')::uuid
+          and invitation.intended_role::text = source_row ->> 'role'
+          and invitation.auth_invitation_reference = (select auth.uid())::text
+          and invitation.invitation_state in ('Pending','Delivered')
+          and invitation.expires_at > now()
+      ) into invitation_allows_activation;
+    end if;
+
+    if invitation_allows_activation and (
+      (
+        tg_table_name = 'organization_memberships'
+        and previous_row ->> 'membership_status' = 'Invited'
+        and source_row ->> 'membership_status' = 'Active'
+        and previous_row ->> 'organization_id' = source_row ->> 'organization_id'
+        and previous_row ->> 'role' = source_row ->> 'role'
+      )
+      or (
+        tg_table_name in ('facility_assignments','department_assignments')
+        and (previous_row ->> 'is_active')::boolean = false
+        and (source_row ->> 'is_active')::boolean = true
+        and previous_row ->> 'organization_id' = source_row ->> 'organization_id'
+        and previous_row ->> 'role' = source_row ->> 'role'
+      )
+    ) then
+      return new;
+    end if;
+    raise exception using errcode = '42501', message = 'Users cannot change their own organisation authorization';
+  end if;
+  return case when tg_op = 'DELETE' then old else new end;
+end
+$function$;
+
 create function public.record_authentication_event(
   requested_event text,
   target_organization uuid default null,
@@ -470,6 +542,7 @@ grant all on table public.skillward_feature_flags, public.organization_auth_sett
 
 revoke all on table private.legacy_content_mappings, private.migration_validation_counts from public, anon, authenticated;
 
+revoke all on function private.mark_active_profile_onboarded() from public, anon, authenticated;
 revoke all on function private.create_default_organization_auth_settings() from public, anon, authenticated;
 grant execute on function private.create_default_organization_auth_settings() to service_role;
 revoke all on function public.record_authentication_event(text, uuid, jsonb) from public, anon;

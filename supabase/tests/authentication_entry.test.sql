@@ -2,7 +2,7 @@ begin;
 create extension if not exists pgtap;
 set local role postgres;
 
-select plan(38);
+select plan(40);
 
 select is(
   (select count(*)::int
@@ -232,6 +232,25 @@ insert into public.organization_memberships(
   '50000000-0000-0000-0000-000000000001','Support Worker','Invited',
   '10000000-0000-0000-0000-000000000001'
 );
+insert into public.facility_assignments(
+  id,organization_id,facility_id,user_id,role,is_active,assigned_by,ended_at
+) values(
+  'ef000000-0000-0000-0000-000000000001',
+  'a0000000-0000-0000-0000-000000000001',
+  'a0000000-0000-0000-0000-000000000001',
+  '50000000-0000-0000-0000-000000000001','Support Worker',false,
+  '10000000-0000-0000-0000-000000000001',now()
+);
+insert into public.department_assignments(
+  id,organization_id,facility_id,department_id,user_id,role,is_active,assigned_by,ended_at
+) values(
+  'ef000000-0000-0000-0000-000000000002',
+  'a0000000-0000-0000-0000-000000000001',
+  'a0000000-0000-0000-0000-000000000001',
+  'a1000000-0000-0000-0000-000000000001',
+  '50000000-0000-0000-0000-000000000001','Support Worker',false,
+  '10000000-0000-0000-0000-000000000001',now()
+);
 insert into public.organization_invitations(
   id,organization_id,email,full_name,employee_id,intended_role,status,invited_by,
   expires_at,invitation_state,auth_invitation_reference,last_sent_at
@@ -277,6 +296,16 @@ select is(
   (select full_name from public.user_profiles where user_id='50000000-0000-0000-0000-000000000001'),
   'Taylor Invitee',
   'invitation completion persists the confirmed profile name'
+);
+select is(
+  (select is_active from public.facility_assignments where id='ef000000-0000-0000-0000-000000000001'),
+  true,
+  'invitation completion activates only the pre-provisioned facility assignment'
+);
+select is(
+  (select is_active from public.department_assignments where id='ef000000-0000-0000-0000-000000000002'),
+  true,
+  'invitation completion activates only the pre-provisioned department assignment'
 );
 select throws_ok(
   $$select public.complete_organization_invitation('e0000000-0000-0000-0000-000000000003','Taylor Invitee')$$,
