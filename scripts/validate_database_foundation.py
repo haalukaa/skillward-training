@@ -57,8 +57,8 @@ shared_domain_test_sql = (
 shared_domain_plan = re.search(
     r"select\s+plan\((\d+)\)", shared_domain_test_sql, re.IGNORECASE
 )
-assert shared_domain_plan and int(shared_domain_plan.group(1)) == 39, (
-    "Shared-domain pgTAP plan must contain exactly 39 assertions"
+assert shared_domain_plan and int(shared_domain_plan.group(1)) == 40, (
+    "Shared-domain pgTAP plan must contain exactly 40 assertions"
 )
 
 env_lines = (ROOT / ".env.example").read_text(encoding="utf-8").splitlines()
@@ -114,5 +114,11 @@ for path in automatic_files:
         f"Platform bootstrap must not be automatically executed: {path}"
     )
 
+test_plans = [
+    re.search(r"select\s+plan\((\d+)\)", path.read_text(encoding="utf-8"), re.IGNORECASE)
+    for path in sorted((ROOT / "supabase" / "tests").glob("*.sql"))
+]
+assert all(test_plans), "Every pgTAP test file must declare an assertion plan"
+assertion_total = sum(int(match.group(1)) for match in test_plans)
 print(f"Validated {len(files)} ordered migrations, {len(TABLES)} RLS tables, "
-      "118 pgTAP assertions, and the manual bootstrap safety contract.")
+      f"{assertion_total} pgTAP assertions, and the manual bootstrap safety contract.")

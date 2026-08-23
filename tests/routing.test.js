@@ -100,7 +100,7 @@ test("management presentation has no fictional hospital, separates IDs, and expo
   assert.match(html, /Alex Morgan<\/strong><small>EMP-1001/);
   assert.doesNotMatch(html, /Alex MorganEMP-1001/);
   for (const text of ["Trainer", "Manager", "Training progress", "Overdue status", "Review and apply"]) assert.match(html, new RegExp(text));
-  assert.match(html, /User profile: Unusual Demo Name/);
+  assert.match(html, /Open profile menu for Unusual Demo Name/);
 });
 
 test("role and department headers are contextual", () => {
@@ -147,8 +147,8 @@ test("authenticated organisation administration uses separated Canvas-style dest
 test("Canvas workspace assets use a production cache version", () => {
   const indexSource = fs.readFileSync(path.join(root, "index.html"), "utf8");
   const appIndexSource = fs.readFileSync(path.join(root, "app", "index.html"), "utf8");
-  assert.match(indexSource, /marketing\.css\?v=20260824-public-site-1/);
-  assert.match(indexSource, /marketing\.js\?v=20260824-public-site-1/);
-  assert.match(appIndexSource, /\.\.\/styles\.css\?v=20260824-public-site-1/);
-  assert.match(appIndexSource, /\.\.\/app\.js\?v=20260824-public-site-1/);
+  assert.match(indexSource, /marketing\.css\?v=20260824-canvas-production-1/);
+  assert.match(indexSource, /marketing\.js\?v=20260824-canvas-production-1/);
+  assert.match(appIndexSource, /\.\.\/styles\.css\?v=20260824-canvas-production-1/);
+  assert.match(appIndexSource, /\.\.\/app\.js\?v=20260824-canvas-production-1/);
 });
