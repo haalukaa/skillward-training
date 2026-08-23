@@ -34,11 +34,32 @@ export class SkillWardDatabaseService {
     return data || [];
   }
 
-  async loadSessionContext(user, requestedOrganizationId = null) {
+  async loadEntryContext(user) {
     const profile = await this.one("user_profiles", user.id);
     if (!profile) throw new Error("MISSING_PROFILE");
     const platformAdministrator = await this.one("skillward_administrators", user.id);
-    let memberships = await this.query("organization_memberships", q => q.eq("user_id", user.id).eq("membership_status", "Active"), "*, organizations(*)");
+    const memberships = await this.query(
+      "organization_memberships",
+      request => request.eq("user_id", user.id),
+      "*, organizations(*)"
+    );
+    const invitations = user.email ? await this.optionalQuery(
+      "organization_invitations",
+      request => request.eq("email", user.email.toLowerCase()).in("invitation_state", ["Pending", "Delivered", "Accepted"]),
+      "*, organizations(*), facilities(name), departments(name)"
+    ) : [];
+    return { user, profile, platformAdministrator, memberships, invitations };
+  }
+
+  async loadSessionContext(user, requestedOrganizationId = null, entryContext = null) {
+    const entry = entryContext || await this.loadEntryContext(user);
+    const { profile, platformAdministrator } = entry;
+    const now = Date.now();
+    let memberships = entry.memberships.filter(membership =>
+      membership.membership_status === "Active"
+      && (!membership.membership_expires_at || new Date(membership.membership_expires_at).getTime() > now)
+      && membership.organizations?.status !== "Archived"
+    );
     if (platformAdministrator?.is_active && requestedOrganizationId) {
       const authorizedSupport = await this.query("support_access_sessions", q => q.eq("support_user_id", user.id).eq("organization_id", requestedOrganizationId).eq("status", "Active").gt("expires_at", new Date().toISOString()));
       if (authorizedSupport.length) {
@@ -67,6 +88,7 @@ export class SkillWardDatabaseService {
     const membership = memberships.find(item => item.organization_id === requestedOrganizationId)
       || memberships.find(item => item.organization_id === profile.active_organization_id)
       || memberships[0];
+    if (requestedOrganizationId && membership.organization_id !== requestedOrganizationId) throw new Error("ACCESS_DENIED");
     const organizationId = membership.organization_id;
     const organization = membership.organizations || (await this.query("organizations", q => q.eq("id", organizationId))).at(0);
     const administrative = ["SkillWard Super Administrator", "Organisation Administrator", "Content Administrator/Educator"].includes(membership.role);
@@ -101,16 +123,42 @@ export class SkillWardDatabaseService {
     const signoffRecommendations = membership.role.includes("Trainer") && assignmentIds.length
       ? await this.query("signoff_recommendations", q => q.eq("organization_id", organizationId).in("training_assignment_id", assignmentIds).eq("trainer_id", user.id)) : [];
     const notifications = await this.query("notifications", q => q.eq("organization_id", organizationId).eq("recipient_user_id", user.id).eq("status", "Unread"));
+    const authSettings = (await this.optionalQuery("organization_auth_settings", q => q.eq("organization_id", organizationId))).at(0) || null;
+    const featureFlags = await this.optionalQuery("skillward_feature_flags", q => q.order("feature_key", { ascending: true }));
     const organizationStaff = ["SkillWard Super Administrator", "Organisation Administrator"].includes(membership.role)
       ? await this.query("organization_staff_profiles", q => q.eq("organization_id", organizationId), "*, user_profiles!organization_staff_profiles_user_id_fkey(*)") : [];
+    const organizationInvitations = membership.role === "Organisation Administrator"
+      ? await this.optionalQuery("organization_invitations", q => q.eq("organization_id", organizationId).order("created_at", { ascending: false })) : [];
+    const learningPathways = administrative
+      ? await this.optionalQuery("learning_pathways", q => q.eq("organization_id", organizationId).order("updated_at", { ascending: false })) : [];
 
     return {
       user, profile, platformAdministrator, memberships, membership, organization,
       facilities, facilityAssignments, departments: departmentAssignments,
       departmentAssignments, departmentDetails, trainerAssignments, traineeProfiles,
       trainingAssignments, moduleProgress, competencyRecords, practicalObservations,
-      signoffRecommendations, notifications, organizationStaff
+      signoffRecommendations, notifications, organizationStaff, organizationInvitations, learningPathways, authSettings, featureFlags
     };
+  }
+
+  async completeInvitation(invitationId, fullName) {
+    const { data, error } = await this.client.rpc("complete_organization_invitation", {
+      invitation_id: invitationId,
+      confirmed_full_name: fullName.trim()
+    });
+    if (error) throw new Error(error.code === "23505" ? "INVITATION_USED" : "INVITATION_INVALID");
+    return data;
+  }
+
+  async recordAuthenticationEvent(eventName, organizationId = null, metadata = {}) {
+    if (!this.client.rpc) return null;
+    const { data, error } = await this.client.rpc("record_authentication_event", {
+      requested_event: eventName,
+      target_organization: organizationId,
+      event_metadata: metadata
+    });
+    if (error) return null;
+    return data;
   }
 
   async insert(table, row) {
@@ -160,6 +208,15 @@ export class SkillWardDatabaseService {
     const { error } = await this.client.functions.invoke("invite-organization-member", { body: { invitationId: invitation.id } });
     if (error) throw new Error("INVITATION_DELIVERY_FAILED");
     return invitation;
+  }
+
+  async manageOrganizationInvitation(invitationId, action) {
+    if (!this.client.functions?.invoke || !["resend", "revoke"].includes(action)) throw new Error("INVITATION_ACTION_INVALID");
+    const { data, error } = await this.client.functions.invoke("invite-organization-member", {
+      body: { invitationId, action }
+    });
+    if (error) throw new Error("INVITATION_ACTION_FAILED");
+    return data;
   }
 
   async recordPracticalObservation(context, input) {

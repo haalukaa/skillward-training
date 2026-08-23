@@ -5,6 +5,9 @@ const test = require("node:test");
 const read = file => fs.readFileSync(file, "utf8");
 const app = read("app.js"), auth = read("src/auth-service.js"), database = read("src/database-service.js");
 const recoverySource = read("src/recovery-service.js");
+const invitationSource = read("src/invitation-service.js");
+const invitationFunction = read("supabase/functions/invite-organization-member/index.ts");
+const authMigration = read("supabase/migrations/20260823210000_authentication_entry_rebuild.sql");
 const index = read("index.html");
 const appIndex = read("app/index.html");
 
@@ -12,9 +15,13 @@ async function loadRecoveryModule() {
   return import(`data:text/javascript;base64,${Buffer.from(recoverySource).toString("base64")}#${Math.random()}`);
 }
 
+async function loadInvitationModule() {
+  return import(`data:text/javascript;base64,${Buffer.from(invitationSource).toString("base64")}#${Math.random()}`);
+}
+
 test("sign-in and Demo Mode are separate and public sign-up is unavailable", () => {
-  assert.match(app, /Sign in to SkillWard/); assert.match(app, /Explore Demo Mode/);
-  assert.match(app, /Nothing in Demo Mode is written to Supabase/);
+  assert.match(app, /auth-entry-v2/); assert.match(app, /href="\/demo\/"/);
+  assert.match(app, /renderGuidedDemoEntry/); assert.match(app, /never writes to authenticated organisation tables/);
   assert.doesNotMatch(app + auth, /signUp\s*\(/);
   assert.match(app, /async function signOutCurrentUser\(\)/);
   assert.match(app, /await authService\?\.signOut\(\)/);
@@ -56,7 +63,7 @@ test("authenticated REST-style context loads its permitted profile, membership a
 test("organisation staff embeds the staff user relationship without manager ambiguity", () => {
   assert.match(database, /user_profiles!organization_staff_profiles_user_id_fkey\(\*\)/);
   assert.doesNotMatch(database, /organization_staff_profiles[^\n]+"\*, user_profiles\(\*\)"/);
-  assert.match(appIndex, /auth-bundle\.js\?v=20260824-canvas-production-1/);
+  assert.match(appIndex, /auth-bundle\.js\?v=20260823-auth-entry-1/);
 });
 
 test("account blocking, recovery, restoration and safe diagnostics are implemented", () => {
@@ -107,12 +114,13 @@ test("legacy recovery establishes a session and invalid or expired links remain 
 test("recovery form validates matching strong passwords and updates only through the recovery session", () => {
   assert.match(app, /Create new password/); assert.match(app, /Confirm new password/); assert.match(app, /password-toggle/);
   assert.match(app, /password!==confirmation/); assert.match(app, /password\.length<12/); assert.match(app, /await authService\.updatePassword\(password\)/);
-  assert.ok(app.indexOf("await authService.establishRecovery(recovery)") < app.indexOf("history.replaceState"), "callback is exchanged before browser history is cleaned");
+  const recoveryHandler = app.slice(app.indexOf("async function processRecoveryCallback"), app.indexOf("function renderRecoveryInvalid"));
+  assert.ok(recoveryHandler.indexOf("await authService.establishRecovery(recovery)") < recoveryHandler.indexOf("history.replaceState"), "callback is exchanged before browser history is cleaned");
   assert.match(app, /Password updated successfully\. Sign in with your new password/);
 });
 
 test("recovery links preserve the active deployment path without hardcoding GitHub Pages", () => {
-  assert.match(app, /const recoveryUrl = new URL\(location\.href\)/);
+  assert.match(app, /const recoveryUrl = new URL\("\/app\/", location\.origin\)/);
   assert.match(app, /recoveryUrl\.searchParams\.set\("recovery", "1"\)/);
   assert.match(app, /resetPassword[^\n]+recoveryUrl\.toString\(\)/);
   assert.doesNotMatch(app, /location\.origin\}\/skillward-training\/\?recovery=1/);
@@ -121,7 +129,7 @@ test("recovery links preserve the active deployment path without hardcoding GitH
 test("production recovers legacy cached callback paths before relative assets load", () => {
   assert.match(index, /location\.pathname\.startsWith\("\/skillward-training\/"\)/);
   assert.match(index, /location\.replace\(`\/app\/\$\{location\.search\}\$\{location\.hash\}`\)/);
-  assert.match(appIndex, /\.\.\/app\.js\?v=20260824-canvas-production-1/);
+  assert.match(appIndex, /\.\.\/app\.js\?v=20260823-auth-entry-1/);
   assert.ok(index.indexOf("location.replace") < index.indexOf("marketing.css"), "legacy callback redirects before public assets load");
 });
 
@@ -182,8 +190,41 @@ test("Pages workflow uses repository path, validates only public config and gate
   assert.doesNotMatch(runtime + read("src/supabase-client.js"), /service.role|service_role|postgres(?:ql)?:\/\//i);
 });
 
-test("invitation UI uses a protected-service boundary rather than Admin Auth", () => {
-  const invitation = read("src/invitation-service.js");
-  assert.match(app, /InvitationService/); assert.match(invitation, /protected Management service/);
-  assert.doesNotMatch(app + invitation, /auth\.admin|inviteUserByEmail/);
+test("invitation UI uses a protected Edge Function boundary rather than browser Admin Auth", () => {
+  assert.match(app + database, /invite-organization-member/);
+  assert.match(invitationFunction, /callerClient\.auth\.getUser/);
+  assert.match(invitationFunction, /serviceClient\.auth\.admin\.inviteUserByEmail/);
+  assert.doesNotMatch(app + invitationSource + database, /auth\.admin|inviteUserByEmail/);
+});
+
+test("invitation callbacks support PKCE, legacy links and neutral invalid states", async () => {
+  const { parseInvitationCallback, establishInvitationSession } = await loadInvitationModule();
+  const pkce = parseInvitationCallback("https://example.test/app/?invitation=1&code=one-time");
+  assert.equal(pkce.requested, true); assert.equal(pkce.code, "one-time");
+  const legacy = parseInvitationCallback("https://example.test/app/?invitation=1#access_token=a&refresh_token=r&type=invite");
+  assert.equal(legacy.legacy, true);
+  const existing = parseInvitationCallback("https://example.test/app/?invitation=1#access_token=a&refresh_token=r&type=magiclink");
+  assert.equal(existing.requested, true); assert.equal(existing.legacy, true);
+  const client = { auth: { async exchangeCodeForSession(code) { return { data:{ session:{ user:{ id:code } } }, error:null }; } } };
+  assert.equal((await establishInvitationSession(client, pkce)).user.id, "one-time");
+  await assert.rejects(establishInvitationSession(client, { requested:true, errorCode:"otp_expired" }), { message:"INVITATION_INVALID" });
+});
+
+test("automatic entry resolution excludes expired memberships and requires a chooser for multiple organisations", () => {
+  assert.match(auth, /membership_expires_at/);
+  assert.match(auth, /entryState: "workspace-choice"/);
+  assert.match(auth, /entryState: "invitation"/);
+  assert.match(auth, /setupInvitation\.invitation_state !== "Accepted"/);
+  assert.match(auth, /currentMemberships\.length > 1/);
+  assert.doesNotMatch(auth, /user_metadata|raw_user_meta_data/);
+});
+
+test("authentication migration forces RLS and exposes only controlled RPCs", () => {
+  for (const table of ["skillward_feature_flags", "organization_auth_settings", "authentication_audit_events"]) {
+    assert.match(authMigration, new RegExp(`alter table public\\.${table} force row level security`));
+  }
+  assert.match(authMigration, /alter table private\.legacy_content_mappings force row level security/);
+  assert.match(authMigration, /membership_expires_at > now\(\)/);
+  assert.match(authMigration, /revoke all on function public\.complete_organization_invitation/);
+  assert.match(authMigration, /grant execute on function public\.complete_organization_invitation[^;]+to authenticated/);
 });
