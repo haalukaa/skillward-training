@@ -14,6 +14,11 @@ erDiagram
   FACILITIES ||--o{ DEPARTMENTS : contains
   DEPARTMENTS ||--o{ DEPARTMENT_MEMBERSHIPS : scopes
   USER_PROFILES ||--o{ TRAINER_ASSIGNMENTS : participates
+  ORGANIZATIONS ||--o{ ORGANIZATION_ROLE_PROFILES : titles
+  ORGANIZATION_ROLE_PROFILES ||--o{ ORGANIZATION_MEMBERSHIPS : authorizes
+  LEARNING_PATHWAYS ||--o{ LEARNING_PATHWAY_VERSIONS : versions
+  LEARNING_PATHWAY_VERSIONS ||--o{ LEARNING_MODULES : contains
+  LEARNING_MODULES ||--o{ LEARNING_MODULE_ITEMS : orders
   TRAINING_PATHWAYS ||--o{ TRAINING_MODULES : contains
   TRAINING_MODULES ||--o{ LESSONS : contains
   TRAINING_PATHWAYS ||--o{ TRAINING_ASSIGNMENTS : assigned
@@ -26,6 +31,8 @@ erDiagram
 ## Authorization model
 
 Every application table has RLS enabled and forced. Anonymous access has no policies. Private membership helpers evaluate `auth.uid()` on the server and reject suspended/archived profiles. Organisation Administrators are tenant-bound; Facility Administrators and Department Managers are explicitly assignment-bound; learners see their own records; trainers see compatible, assigned trainees. Correct-answer rows have no authenticated read policy. Trainers can recommend but Management alone can decide. Audit logs have no client mutation policy and an append-only trigger. A final-active-administrator trigger prevents suspension, archive, deletion, or demotion. See [multi-organization-foundation.md](multi-organization-foundation.md) for the complete Phase 1 model.
+
+The additive Canvas-style learning layer is documented in [shared-domain-model.md](shared-domain-model.md). The existing `training_*` tables remain authoritative until the later verified migration phase; the shared-domain migration does not move production assignments or progress.
 
 PostgreSQL base privileges are intentionally separate from row authorization. The `authenticated` API role receives schema usage and only the table operations for which an RLS policy exists; RLS then decides which rows each request may affect. The migration explicitly withholds all protected-table access from `anon`, all browser access to knowledge-answer options, and every authenticated audit-log mutation. Projects created with automatic table exposure disabled therefore work without relying on permissive Dashboard defaults.
 

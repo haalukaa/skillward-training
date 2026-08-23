@@ -52,7 +52,7 @@ jobs:
       - name: Apply clean migrations and test-only development seed
         run: supabase db reset
 
-      - name: Run all 79 database assertions
+      - name: Run all database assertions
         run: supabase test db
 
       - name: Run existing JavaScript tests

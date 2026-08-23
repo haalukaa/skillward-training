@@ -19,6 +19,9 @@ TABLES = (
     "organization_staff_profiles", "facility_assignments",
     "department_assignments", "organization_invitations",
     "skillward_administrators", "support_access_sessions",
+    "permission_roles", "organization_role_profiles", "learning_pathways",
+    "learning_pathway_versions", "learning_modules",
+    "learning_module_items", "content_audit_events",
 )
 
 files = sorted(MIGRATIONS.glob("*.sql"))
@@ -46,6 +49,16 @@ phase_one_test_sql = (ROOT / "supabase" / "tests" / "multi_organization.test.sql
 phase_one_plan = re.search(r"select\s+plan\((\d+)\)", phase_one_test_sql, re.IGNORECASE)
 assert phase_one_plan and int(phase_one_plan.group(1)) == 40, (
     "Phase 1 pgTAP plan must contain exactly 40 assertions"
+)
+
+shared_domain_test_sql = (
+    ROOT / "supabase" / "tests" / "shared_domain_model.test.sql"
+).read_text(encoding="utf-8")
+shared_domain_plan = re.search(
+    r"select\s+plan\((\d+)\)", shared_domain_test_sql, re.IGNORECASE
+)
+assert shared_domain_plan and int(shared_domain_plan.group(1)) == 39, (
+    "Shared-domain pgTAP plan must contain exactly 39 assertions"
 )
 
 env_lines = (ROOT / ".env.example").read_text(encoding="utf-8").splitlines()
@@ -102,4 +115,4 @@ for path in automatic_files:
     )
 
 print(f"Validated {len(files)} ordered migrations, {len(TABLES)} RLS tables, "
-      "79 pgTAP assertions, and the manual bootstrap safety contract.")
+      "118 pgTAP assertions, and the manual bootstrap safety contract.")
