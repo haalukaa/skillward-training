@@ -135,7 +135,7 @@ select throws_ok(
   'P0001','Cannot remove, suspend, archive, or demote the final active Organisation Administrator',
   'final organisation administrator is protected'
 );
-select ok(has_trigger('public','audit_logs','audit_append_only'),'audit history remains append-only');
+select has_trigger('public','audit_logs','audit_append_only','audit history remains append-only');
 select has_function('private','can_read_training_content',array['uuid','uuid'],'training storage authorization helper exists');
 select has_function('private','can_read_competency_evidence',array['uuid','uuid','uuid'],'evidence storage authorization helper exists');
 select ok(

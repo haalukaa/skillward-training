@@ -857,7 +857,13 @@ using (private.has_organization_role(organization_id, array['Organisation Admini
 with check (private.has_organization_role(organization_id, array['Organisation Administrator']::public.organization_role[]) and role <> 'Organisation Administrator');
 
 create policy department_assignment_read on public.department_assignments for select to authenticated
-using (user_id = (select auth.uid()) or private.has_department_access(organization_id, department_id) or private.has_support_access(organization_id));
+using (
+  user_id = (select auth.uid())
+  or private.has_organization_role(organization_id, array['Organisation Administrator']::public.organization_role[])
+  or private.has_facility_access(organization_id, facility_id, array['Facility Administrator']::public.organization_role[])
+  or private.has_department_access(organization_id, department_id, array['Department Manager']::public.organization_role[])
+  or private.has_support_access(organization_id)
+);
 create policy department_assignment_admin_write on public.department_assignments for all to authenticated
 using (
   private.has_organization_role(organization_id, array['Organisation Administrator']::public.organization_role[])
