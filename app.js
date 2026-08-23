@@ -3,6 +3,7 @@ const app = document.getElementById("app");
 const defaultState = {
   currentUser: null,
   selectedDepartment: null,
+  activeOrganizationId: null,
   learnerName: "Staff Learner",
   moduleProgress: {},
   practicalSignoff: false,
@@ -134,6 +135,7 @@ function statusTone(status) {
 
 function workspaceHeader(user, department) {
   if (!user) return "Healthcare Workforce Training";
+  if (user.role === "platform-admin") return "Platform Administration";
   if (user.role === "management") {
     return "Healthcare Workforce Training";
   }
@@ -299,7 +301,7 @@ function bindModuleButtons() {
 function renderShell(content) {
   const user = authenticatedContext?.appUser || state.currentUser;
   const department = DEPARTMENTS.find(item => item.id === state.selectedDepartment) || authenticatedContext?.departmentDetails?.find(item => item.id === state.selectedDepartment);
-  const authenticatedWorkspace = Boolean(user && (department || user.role?.includes("trainer")));
+  const authenticatedWorkspace = Boolean(authenticatedContext || (user && (department || user.role?.includes("trainer"))));
   const navigation = NAV_ITEMS.map(([id, label, icon], index) => `
     <button class="workspace-nav-item ${index === 0 ? "is-active" : ""}" data-nav="${id}" aria-label="${label}">
       <span aria-hidden="true">${icon}</span><small>${label}</small>
@@ -324,6 +326,7 @@ function renderShell(content) {
         <div class="top-actions">
           ${authenticatedWorkspace ? `<button class="notification-button" aria-label="Notifications"><span aria-hidden="true">●</span></button>` : ""}
           ${user ? `<span class="role-pill">${workplaceRoleLabel(user.role)}</span>` : ""}
+          ${authenticatedContext?.organization ? `<span class="workspace-organization">${escapeHtml(authenticatedContext.organization.name)}</span>` : ""}
           ${authenticatedContext ? `<button class="btn btn-secondary" id="signOutBtn">Sign Out</button>` : ""}${authenticatedWorkspace ? `<button class="profile-button" id="switchRoleBtn" aria-label="User profile: ${escapeHtml(user.name)}"><span>${escapeHtml(user.name).charAt(0).toUpperCase()}</span><strong>${escapeHtml(user.name)}</strong></button>` : user ? `<button class="btn btn-secondary" id="switchRoleBtn">Switch role</button>` : ""}
         </div>
       </header>
@@ -348,7 +351,7 @@ function renderShell(content) {
     </div>
   `;
 
-  document.getElementById("signOutBtn")?.addEventListener("click", async () => { await authService?.signOut(); authenticatedContext=null; state.currentUser = null; state.selectedDepartment = null; saveState(); renderLogin(); });
+  document.getElementById("signOutBtn")?.addEventListener("click", async () => { await authService?.signOut(); authenticatedContext=null; state.currentUser = null; state.selectedDepartment = null; state.activeOrganizationId = null; saveState(); renderLogin(); });
 
   document.getElementById("switchRoleBtn")?.addEventListener("click", () => {
     state.currentUser = null;
@@ -498,12 +501,12 @@ function renderLogin(message = "") {
   document.getElementById("forgotPassword").addEventListener("click", () => show("resetForm"));
   document.querySelectorAll(".backChoices").forEach(button => button.addEventListener("click", () => { forms.forEach(form => { form.hidden = true; }); choices.hidden = false; }));
   document.getElementById("demoForm").addEventListener("submit", async event => { event.preventDefault(); const name = document.getElementById("nameInput").value.trim(); if (!name) return; await authService?.signOut(); authenticatedContext = null; state.currentUser = { name, role: document.getElementById("roleInput").value, mode: "demo", sector: "hospital" }; state.selectedDepartment = null; if (state.currentUser.role === "pca") state.learnerName = name; saveState(); routeSignedInUser(); });
-  document.getElementById("signInForm").addEventListener("submit", async event => { event.preventDefault(); const form = event.currentTarget, button = form.querySelector("button[type=submit]"), error = document.getElementById("authError"); button.disabled = true; error.textContent = "Signing in securely…"; try { state.currentUser = null; state.selectedDepartment = null; saveState(); authenticatedContext = await authService.signIn(document.getElementById("emailInput").value, document.getElementById("passwordInput").value); renderAuthenticatedWorkspace(); } catch (e) { error.textContent = authMessage(e.message); if (["MISSING_PROFILE", "MISSING_MEMBERSHIP"].includes(e.message)) await authService?.signOut(); } finally { button.disabled = false; } });
+  document.getElementById("signInForm").addEventListener("submit", async event => { event.preventDefault(); const form = event.currentTarget, button = form.querySelector("button[type=submit]"), error = document.getElementById("authError"); button.disabled = true; error.textContent = "Signing in securely…"; try { state.currentUser = null; state.selectedDepartment = null; saveState(); authenticatedContext = await authService.signIn(document.getElementById("emailInput").value, document.getElementById("passwordInput").value); state.activeOrganizationId = authenticatedContext.organization?.id || null; saveState(); renderAuthenticatedWorkspace(); } catch (e) { error.textContent = authMessage(e.message); if (["MISSING_PROFILE", "MISSING_MEMBERSHIP"].includes(e.message)) await authService?.signOut(); } finally { button.disabled = false; } });
   document.getElementById("resetForm").addEventListener("submit", async event => { event.preventDefault(); const button = event.currentTarget.querySelector("button[type=submit]"); button.disabled = true; try { await authService.resetPassword(document.getElementById("resetEmail").value, `${location.origin}/skillward-training/?recovery=1`); } catch {} renderLogin("If an eligible account exists, a password recovery link has been sent."); });
   if (message) showView("hospital");
 }
 
-function renderAuthenticatedWorkspace() {
+function renderLegacyAuthenticatedWorkspace() {
   const c=authenticatedContext; if(!c)return renderLogin();
   const departments=c.departmentDetails, role=c.membership.role;
   if(role!=="Hospital Administrator" && !departments.length) return renderShell('<section class="card access-blocked"><h2>No assigned department</h2><p>Contact Management to have a department assigned.</p></section>');
@@ -524,6 +527,115 @@ function renderAuthenticatedWorkspace() {
   document.getElementById("authenticatedDepartment")?.addEventListener("change",event=>{state.selectedDepartment=event.target.value;renderAuthenticatedWorkspace();});
   document.querySelectorAll(".save-real-observation").forEach(button=>button.addEventListener("click",async()=>{const id=button.dataset.assignment,status=document.getElementById(`trainer-status-${id}`),note=document.querySelector(`.trainer-observation[data-assignment="${id}"]`),outcome=document.querySelector(`.trainer-outcome[data-assignment="${id}"]`);button.disabled=true;status.textContent="Saving observation…";try{await authService.database.recordPracticalObservation(c,{trainingAssignmentId:id,traineeUserId:button.dataset.trainee,departmentId:button.dataset.department,observationText:note.value,outcome:outcome.value});authenticatedContext=await authService.restore();renderAuthenticatedWorkspace();}catch{status.textContent="Observation could not be saved. Add evidence and try again.";button.disabled=false;}}));
   document.querySelectorAll(".send-real-recommendation").forEach(button=>button.addEventListener("click",async()=>{const id=button.dataset.assignment,status=document.getElementById(`trainer-status-${id}`);if(!confirm("Send this competency recommendation to Management?"))return;button.disabled=true;status.textContent="Sending recommendation…";try{await authService.database.submitSignoffRecommendation(c,{trainingAssignmentId:id,recommendationStatus:"Sent to Management",recommendationText:"Trainer recommends competency approval based on completed training and practical observation."});authenticatedContext=await authService.restore();renderAuthenticatedWorkspace();}catch{status.textContent="Recommendation could not be sent.";button.disabled=false;}}));
+}
+
+// Phase 1 authenticated workspace. This declaration intentionally supersedes
+// the compatibility renderer above while Demo Mode continues to use its
+// established route and sample-data dashboards.
+function renderAuthenticatedWorkspace() {
+  const c = authenticatedContext;
+  if (!c) return renderLogin();
+  if (c.membership.role === "SkillWard Super Administrator" && !c.organization) return renderPlatformAdministration(c);
+
+  const departments = c.departmentDetails;
+  const role = c.membership.role;
+  const unrestrictedRoles = new Set(["Organisation Administrator", "Content Administrator/Educator"]);
+  if (!unrestrictedRoles.has(role) && !departments.length) {
+    return renderShell(`${organizationSwitcher(c)}<section class="card access-blocked"><h2>No assigned department</h2><p>Contact your Organisation Administrator to request authorised department access.</p></section>`);
+  }
+  if (departments.length && !departments.some(item => item.id === state.selectedDepartment)) state.selectedDepartment = departments[0].id;
+  const selected = departments.find(item => item.id === state.selectedDepartment) || departments[0];
+  const assignments = c.trainingAssignments.filter(item => !selected || item.department_id === selected.id);
+  const learner = ["PCA", "Cleaner", "Support Worker"].includes(role);
+  const trainer = role.includes("Trainer");
+  const title = role === "Organisation Administrator" ? "Organisation Administration"
+    : role === "Facility Administrator" ? "Facility Administration"
+      : role === "Department Manager" ? "Department Management Workspace"
+        : `${role} ${trainer ? "Workspace" : "Training Workspace"}`;
+
+  if (role === "Organisation Administrator") return renderOrganizationAdministration(c);
+
+  const assignmentCards = assignments.map(assignment => {
+    const pathway = assignment.training_pathways || {};
+    const progress = Math.round(Number(assignment.progress_percentage) || 0);
+    const modules = c.moduleProgress.filter(item => item.training_assignment_id === assignment.id);
+    return `<article class="card training-area-card"><div class="training-area-top"><span class="area-code">${escapeHtml(role)}</span><span class="status-chip status-${statusTone(assignment.status)}">${escapeHtml(assignment.status)}</span></div><div><h3>${escapeHtml(pathway.title || "Assigned training pathway")}</h3><p>${escapeHtml(pathway.description || "Complete the pathway assigned by Management.")}</p></div><div class="area-progress"><span style="width:${progress}%"></span></div><div class="module-meta"><span class="small">${progress}% complete · ${modules.length} tracked modules</span>${assignment.due_date ? `<span class="small">Due ${escapeHtml(assignment.due_date)}</span>` : ""}</div></article>`;
+  }).join("");
+  const trainerRelationships = c.trainerAssignments.filter(item => !selected || item.department_id === selected.id);
+  const traineeRows = trainerRelationships.map(relationship => {
+    const profile = c.traineeProfiles.find(item => item.user_id === relationship.trainee_user_id);
+    const assignment = c.trainingAssignments.find(item => item.user_id === relationship.trainee_user_id && item.department_id === relationship.department_id);
+    if (!profile) return "";
+    const progress = Math.round(Number(assignment?.progress_percentage) || 0);
+    return `<article class="card trainee-profile"><div class="section-heading"><div><span class="eyebrow">ASSIGNED TRAINEE</span><h3>${escapeHtml(profile.full_name)}</h3><p>${escapeHtml(assignment?.training_pathways?.title || "No pathway assigned")}</p></div><span class="status-chip status-${statusTone(assignment?.status || "Not Started")}">${escapeHtml(assignment?.status || "Not Started")}</span></div><div class="area-progress"><span style="width:${progress}%"></span></div>${assignment ? `<label>Practical observation<textarea class="trainer-observation" data-assignment="${escapeHtml(assignment.id)}" placeholder="Record observable competency evidence"></textarea></label><label>Outcome<select class="trainer-outcome" data-assignment="${escapeHtml(assignment.id)}"><option>Competent</option><option>Needs Development</option><option>Not Observed</option></select></label><div class="profile-actions"><button class="btn save-real-observation" data-assignment="${escapeHtml(assignment.id)}" data-trainee="${escapeHtml(profile.user_id)}" data-department="${escapeHtml(relationship.department_id)}">Record observation</button><button class="btn send-real-recommendation" data-assignment="${escapeHtml(assignment.id)}">Send to Management</button></div><p class="auth-status" id="trainer-status-${escapeHtml(assignment.id)}" role="status"></p>` : '<p class="empty-state">Management has not assigned a pathway.</p>'}</article>`;
+  }).join("");
+  const summary = learner
+    ? `<div class="stats-grid"><div class="stat-card"><span>Assigned pathways</span><strong>${assignments.length}</strong></div><div class="stat-card"><span>Unread notifications</span><strong>${c.notifications.length}</strong></div><div class="stat-card"><span>Competency records</span><strong>${c.competencyRecords.length}</strong></div></div><div class="section-heading" id="training"><div><span class="eyebrow">YOUR TRAINING</span><h3>Assigned pathways</h3></div></div><div class="grid grid-3">${assignmentCards || '<p class="empty-state">No pathway has been assigned in this workspace.</p>'}</div>`
+    : trainer
+      ? `<div class="stats-grid"><div class="stat-card"><span>Assigned trainees</span><strong>${trainerRelationships.length}</strong></div><div class="stat-card"><span>Pending reviews</span><strong>${c.trainingAssignments.filter(item => item.status === "Ready for Trainer Review").length}</strong></div><div class="stat-card"><span>Unread notifications</span><strong>${c.notifications.length}</strong></div></div><div class="section-heading" id="staff"><div><span class="eyebrow">ASSIGNED TRAINEES</span><h3>Training and competency</h3></div></div><div class="grid grid-2">${traineeRows || '<p class="empty-state">No trainees are assigned in this department.</p>'}</div>`
+      : `<section class="card"><h3>${escapeHtml(selected?.name || "Authorised workspace")}</h3><p class="small">Access is limited to your assigned facility and departments.</p></section>`;
+
+  renderShell(`${organizationSwitcher(c)}<section class="dashboard-hero" id="home"><div class="dashboard-welcome"><span class="eyebrow">${escapeHtml(c.organization.name)}</span><h2>${escapeHtml(title)}</h2><p>Welcome, ${escapeHtml(c.profile.full_name)}. Records are scoped to this organisation workspace.</p></div></section>${departments.length > 1 ? `<section class="card workspace-filter"><label>Permitted department<select id="authenticatedDepartment">${departments.map(d => `<option value="${escapeHtml(d.id)}" ${d.id === selected?.id ? "selected" : ""}>${escapeHtml(d.name)}</option>`).join("")}</select></label></section>` : ""}${summary}`);
+  bindAuthenticatedWorkspace(c);
+}
+
+function organizationSwitcher(context) {
+  const platformOption = context.platformAdministrator?.is_active ? '<option value="">SkillWard Platform Administration</option>' : "";
+  if (context.memberships.length < 2 && !platformOption) return "";
+  return `<section class="card organization-switcher"><label><span>Organisation workspace</span><select id="organizationWorkspace">${platformOption}${context.memberships.map(item => `<option value="${escapeHtml(item.organization_id)}" ${item.organization_id === context.organization?.id ? "selected" : ""}>${escapeHtml(item.organizations?.name || "Organisation")} · ${escapeHtml(item.role)}</option>`).join("")}</select></label><small>Each workspace has separate facilities, departments and records.</small></section>`;
+}
+
+function bindAuthenticatedWorkspace(context) {
+  document.getElementById("organizationWorkspace")?.addEventListener("change", async event => {
+    event.target.disabled = true;
+    state.activeOrganizationId = event.target.value;
+    state.selectedDepartment = null;
+    saveState();
+    authenticatedContext = event.target.value ? await authService.switchOrganization(event.target.value) : await authService.restore();
+    renderAuthenticatedWorkspace();
+  });
+  document.getElementById("authenticatedDepartment")?.addEventListener("change", event => { state.selectedDepartment = event.target.value; saveState(); renderAuthenticatedWorkspace(); });
+  document.querySelectorAll(".save-real-observation").forEach(button => button.addEventListener("click", async () => {
+    const id = button.dataset.assignment, status = document.getElementById(`trainer-status-${id}`), note = document.querySelector(`.trainer-observation[data-assignment="${id}"]`), outcome = document.querySelector(`.trainer-outcome[data-assignment="${id}"]`);
+    button.disabled = true; status.textContent = "Saving observation…";
+    try { await authService.database.recordPracticalObservation(context, { trainingAssignmentId:id, traineeUserId:button.dataset.trainee, departmentId:button.dataset.department, observationText:note.value, outcome:outcome.value }); authenticatedContext = await authService.restore(state.activeOrganizationId); renderAuthenticatedWorkspace(); }
+    catch { status.textContent = "Observation could not be saved. Add evidence and try again."; button.disabled = false; }
+  }));
+  document.querySelectorAll(".send-real-recommendation").forEach(button => button.addEventListener("click", async () => {
+    const status = document.getElementById(`trainer-status-${button.dataset.assignment}`);
+    if (!confirm("Send this competency recommendation to Management?")) return;
+    button.disabled = true; status.textContent = "Sending recommendation…";
+    try { await authService.database.submitSignoffRecommendation(context, { trainingAssignmentId:button.dataset.assignment, recommendationStatus:"Sent to Management", recommendationText:"Trainer recommends competency approval based on completed training and practical observation." }); authenticatedContext = await authService.restore(state.activeOrganizationId); renderAuthenticatedWorkspace(); }
+    catch { status.textContent = "Recommendation could not be sent."; button.disabled = false; }
+  }));
+}
+
+function renderPlatformAdministration(context) {
+  const organizations = context.organizations || [];
+  const usage = new Map((context.organizationUsage || []).map(item => [item.organization_id, item]));
+  renderShell(`<section class="dashboard-hero"><div class="dashboard-welcome"><span class="eyebrow">SKILLWARD CONTROL PLANE</span><h2>Platform Administration</h2><p>Create and govern organisations, subscriptions, templates and explicitly authorised support access.</p></div></section><div class="stats-grid"><div class="stat-card"><span>Organisations</span><strong>${organizations.length}</strong></div><div class="stat-card"><span>Active</span><strong>${organizations.filter(item => item.status === "Active").length}</strong></div><div class="stat-card"><span>Pilot plans</span><strong>${organizations.filter(item => item.subscription_plan === "Pilot").length}</strong></div></div><section class="admin-setup-grid"><form class="card setup-form" id="createOrganizationForm"><span class="eyebrow">NEW WORKSPACE</span><h3>Create organisation</h3><label>Name<input name="name" required></label><label>Type<select name="type"><option>Hospital</option><option>Aged Care</option><option>Disability Support</option></select></label><label>Slug<input name="slug" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" required></label><button class="btn" type="submit">Create organisation</button><p class="auth-status" role="status"></p></form><section class="card"><span class="eyebrow">SUBSCRIPTIONS &amp; USAGE</span><h3>Organisation register</h3><div class="organization-register">${organizations.map(item => { const totals = usage.get(item.id) || {}; return `<article><div><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.organization_type)} · ${escapeHtml(item.subscription_plan)} · ${escapeHtml(item.subscription_status)}</small><small>${Number(totals.active_members || 0)} members · ${Number(totals.active_facilities || 0)} facilities · ${Number(totals.active_departments || 0)} departments</small></div><span class="status-chip status-${item.status === "Active" ? "success" : "neutral"}">${escapeHtml(item.status)}</span>${item.status === "Active" ? `<button class="link-button archive-organization" data-id="${escapeHtml(item.id)}">Archive</button>` : ""}</article>`; }).join("") || '<p class="empty-state">No organisations have been created.</p>'}</div></section></section><section class="card"><span class="eyebrow">EXPLICIT SUPPORT MODE</span><h3>Authorised sessions</h3><p class="small">Support access is organisation-approved, time-limited and fully audited. Platform administration alone cannot open clinical workforce records.</p><div class="organization-register">${(context.supportSessions || []).map(item => `<article><div><strong>${escapeHtml(item.reason)}</strong><small>Expires ${escapeHtml(new Date(item.expires_at).toLocaleString("en-AU"))}</small></div><span class="status-chip status-${item.status === "Active" ? "success" : "warning"}">${escapeHtml(item.status)}</span>${item.status === "Pending" ? `<button class="link-button activate-support" data-id="${escapeHtml(item.id)}">Enter support mode</button>` : ""}</article>`).join("") || '<p class="empty-state">No organisation has authorised a support session.</p>'}</div></section><section class="card"><span class="eyebrow">SKILLWARD TEMPLATES</span><h3>Pathway template governance</h3><p class="small">Template ownership is established in Phase 1. The guided authoring and version-control tools arrive in Phase 2.</p></section>`);
+  document.querySelector(".admin-setup-grid")?.insertAdjacentHTML("beforeend", `<form class="card setup-form" id="firstAdministratorForm"><span class="eyebrow">FIRST ADMINISTRATOR</span><h3>Invite organisation owner</h3><label>Organisation<select name="organizationId" required><option value="">Choose organisation</option>${organizations.filter(item => item.status === "Active").map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("")}</select></label><label>Full name<input name="fullName" required></label><label>Employee ID<input name="employeeId" required></label><label>Email<input name="email" type="email" required></label><button class="btn" type="submit">Invite first administrator</button><p class="auth-status" role="status"></p></form>`);
+  document.getElementById("createOrganizationForm")?.addEventListener("submit", async event => { event.preventDefault(); const form = event.currentTarget, status = form.querySelector(".auth-status"), values = new FormData(form); status.textContent = "Creating secure workspace…"; try { await authService.database.createOrganization({ name:values.get("name"), organizationType:values.get("type"), slug:values.get("slug") }); authenticatedContext = await authService.restore(); renderAuthenticatedWorkspace(); } catch { status.textContent = "The organisation could not be created. Check the slug and try again."; } });
+  document.getElementById("firstAdministratorForm")?.addEventListener("submit", async event => { event.preventDefault(); const form = event.currentTarget, status = form.querySelector(".auth-status"), values = new FormData(form); status.textContent = "Creating protected invitation…"; try { await authService.database.inviteOrganizationMember(context, { organizationId:values.get("organizationId"), fullName:values.get("fullName"), employeeId:values.get("employeeId"), email:values.get("email"), role:"Organisation Administrator" }); status.textContent = "Invitation created and submitted for delivery."; form.reset(); } catch { status.textContent = "The first-administrator invitation could not be delivered."; } });
+  document.querySelectorAll(".archive-organization").forEach(button => button.addEventListener("click", async () => { if (!confirm("Archive this organisation? Its records will be retained and access will stop.")) return; await authService.database.archiveOrganization(button.dataset.id); authenticatedContext = await authService.restore(); renderAuthenticatedWorkspace(); }));
+  document.querySelectorAll(".activate-support").forEach(button => button.addEventListener("click", async () => { if (!confirm("Enter this time-limited support session? The action and all access will be audited.")) return; const session = (context.supportSessions || []).find(item => item.id === button.dataset.id); await authService.database.activateSupportSession(button.dataset.id); state.activeOrganizationId = session.organization_id; saveState(); authenticatedContext = await authService.switchOrganization(session.organization_id); renderAuthenticatedWorkspace(); }));
+}
+
+function renderOrganizationAdministration(context) {
+  const facilities = context.facilities || [], departments = context.departmentDetails || [], settings = context.organization.branding_settings || {};
+  const roleOptions = ["Organisation Administrator","Facility Administrator","Department Manager","Content Administrator/Educator","PCA Trainer","Cleaner Trainer","PCA","Cleaner","Support Worker"];
+  renderShell(`${organizationSwitcher(context)}<section class="dashboard-hero"><div class="dashboard-welcome"><span class="eyebrow">ORGANISATION SETUP</span><h2>${escapeHtml(context.organization.name)}</h2><p>Configure branding, facilities, departments and controlled membership invitations.</p></div></section><div class="stats-grid"><div class="stat-card"><span>Facilities</span><strong>${facilities.length}</strong></div><div class="stat-card"><span>Departments</span><strong>${departments.length}</strong></div><div class="stat-card"><span>Staff profiles</span><strong>${context.organizationStaff.length}</strong></div></div><section class="admin-setup-grid"><form class="card setup-form" id="brandingForm"><span class="eyebrow">1 · BRANDING</span><h3>Organisation identity</h3><label>Logo storage path<input name="logoPath" value="${escapeHtml(context.organization.logo_path || "")}" placeholder="${escapeHtml(context.organization.id)}/logo.svg"></label><div class="colour-fields"><label>Primary colour<input name="primaryColor" type="color" value="${escapeHtml(settings.primaryColor || "#0b4051")}"></label><label>Accent colour<input name="accentColor" type="color" value="${escapeHtml(settings.accentColor || "#20b8ad")}"></label></div><button class="btn" type="submit">Save branding</button><p class="auth-status" role="status"></p></form><form class="card setup-form" id="facilityForm"><span class="eyebrow">2 · FACILITIES</span><h3>Add facility</h3><label>Name<input name="name" required></label><label>Location<input name="location"></label><button class="btn" type="submit">Add facility</button><p class="auth-status" role="status"></p></form><form class="card setup-form" id="departmentForm"><span class="eyebrow">3 · DEPARTMENTS</span><h3>Add department</h3><label>Facility<select name="facilityId" required><option value="">Choose facility</option>${facilities.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("")}</select></label><label>Code<input name="code" maxlength="30" required></label><label>Name<input name="name" required></label><label>Description<textarea name="description"></textarea></label><button class="btn" type="submit">Add department</button><p class="auth-status" role="status"></p></form><form class="card setup-form" id="organizationInviteForm"><span class="eyebrow">4 · MEMBERSHIP</span><h3>Create invitation</h3><label>Email<input name="email" type="email" required></label><label>Role<select name="role">${roleOptions.map(role => `<option>${escapeHtml(role)}</option>`).join("")}</select></label><label>Facility<select name="facilityId"><option value="">Organisation-wide</option>${facilities.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("")}</select></label><label>Department<select name="departmentId"><option value="">No department yet</option>${departments.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("")}</select></label><button class="btn" type="submit">Create invitation</button><p class="small">The protected invitation delivery service must be deployed before an email is sent.</p><p class="auth-status" role="status"></p></form><form class="card setup-form" id="supportAuthorizationForm"><span class="eyebrow">5 · SUPPORT ACCESS</span><h3>Authorise support mode</h3><label>SkillWard support user ID<input name="supportUserId" type="text" required></label><label>Reason<textarea name="reason" minlength="10" required></textarea></label><label>Hours (maximum 24)<input name="hours" type="number" min="1" max="24" value="1" required></label><button class="btn" type="submit">Authorise time-limited access</button><p class="small">The support user must separately activate the session. Every change is written to the immutable audit history.</p><p class="auth-status" role="status"></p></form></section>`);
+  document.querySelector('#organizationInviteForm label')?.insertAdjacentHTML("beforebegin", '<label>Full name<input name="fullName" required></label><label>Employee ID<input name="employeeId" required></label>');
+  bindAuthenticatedWorkspace(context);
+  bindSetupForm("brandingForm", values => authService.database.updateOrganizationBranding(context, { logoPath:values.get("logoPath"), primaryColor:values.get("primaryColor"), accentColor:values.get("accentColor") }));
+  bindSetupForm("facilityForm", values => authService.database.createFacility(context, { name:values.get("name"), location:values.get("location") }));
+  bindSetupForm("departmentForm", values => authService.database.createDepartment(context, { facilityId:values.get("facilityId"), code:values.get("code"), name:values.get("name"), description:values.get("description") }));
+  bindSetupForm("organizationInviteForm", values => authService.database.inviteOrganizationMember(context, { fullName:values.get("fullName"), employeeId:values.get("employeeId"), email:values.get("email"), role:values.get("role"), facilityId:values.get("facilityId"), departmentId:values.get("departmentId") }));
+  bindSetupForm("supportAuthorizationForm", values => authService.database.authorizeSupportAccess(context, { supportUserId:values.get("supportUserId"), reason:values.get("reason"), hours:values.get("hours") }));
+}
+
+function bindSetupForm(id, submit) {
+  document.getElementById(id)?.addEventListener("submit", async event => { event.preventDefault(); const form = event.currentTarget, status = form.querySelector(".auth-status"); status.textContent = "Saving…"; try { await submit(new FormData(form)); authenticatedContext = await authService.restore(state.activeOrganizationId); renderAuthenticatedWorkspace(); } catch { status.textContent = "This change could not be saved. Check your authorised scope and the entered details."; } });
 }
 
 function routeCurrentUser() {
@@ -999,7 +1111,7 @@ async function bootstrap() {
   if (state.currentUser?.mode === "demo" || (state.currentUser && !state.currentUser.mode)) return routeSignedInUser();
   renderShell('<section class="card"><h2>Loading SkillWard…</h2><p>Resolving your secure session and workplace access.</p></section>');
   authService.onChange((event) => { if (event === "SIGNED_OUT" || event === "TOKEN_REFRESHED" && !authenticatedContext) { authenticatedContext = null; renderLogin("Your session has expired. Please sign in again."); } });
-  try { authenticatedContext = await authService.restore(); if (authenticatedContext) return renderAuthenticatedWorkspace(); } catch (error) { await authService.signOut(); return renderLogin(authMessage(error.message)); }
+  try { authenticatedContext = await authService.restore(state.activeOrganizationId); if (authenticatedContext) { state.activeOrganizationId = authenticatedContext.organization?.id || null; saveState(); return renderAuthenticatedWorkspace(); } } catch (error) { await authService.signOut(); return renderLogin(authMessage(error.message)); }
   renderLogin();
 }
 async function processRecoveryCallback(recovery) {

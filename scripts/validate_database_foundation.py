@@ -15,6 +15,10 @@ TABLES = (
     "knowledge_check_attempts", "practical_observations",
     "signoff_recommendations", "competency_records", "notifications",
     "staff_invitations", "transfer_history", "audit_logs",
+    "organizations", "facilities", "organization_memberships",
+    "organization_staff_profiles", "facility_assignments",
+    "department_assignments", "organization_invitations",
+    "skillward_administrators", "support_access_sessions",
 )
 
 files = sorted(MIGRATIONS.glob("*.sql"))
@@ -36,6 +40,14 @@ test_sql = (ROOT / "supabase" / "tests" / "database.test.sql").read_text(
 plan = re.search(r"select\s+plan\((\d+)\)", test_sql, re.IGNORECASE)
 assert plan and int(plan.group(1)) == 39, "pgTAP plan must contain exactly 39 assertions"
 
+phase_one_test_sql = (ROOT / "supabase" / "tests" / "multi_organization.test.sql").read_text(
+    encoding="utf-8"
+)
+phase_one_plan = re.search(r"select\s+plan\((\d+)\)", phase_one_test_sql, re.IGNORECASE)
+assert phase_one_plan and int(phase_one_plan.group(1)) == 40, (
+    "Phase 1 pgTAP plan must contain exactly 40 assertions"
+)
+
 env_lines = (ROOT / ".env.example").read_text(encoding="utf-8").splitlines()
 values = {
     key: value
@@ -56,10 +68,10 @@ bootstrap_lower = bootstrap.lower()
 assert "begin;" in bootstrap_lower and "commit;" in bootstrap_lower
 assert "from auth.users" in bootstrap_lower and "email_confirmed_at" in bootstrap_lower
 assert "matched_auth_count <> 1" in bootstrap
-assert "'hospital administrator'::public.workplace_role" in bootstrap_lower
-assert "'active'::public.account_status" in bootstrap_lower
-assert "public.user_profiles%rowtype" in bootstrap_lower
-assert "public.hospital_memberships%rowtype" in bootstrap_lower
+assert "'organisation administrator'" in bootstrap_lower
+assert "public.organization_memberships" in bootstrap_lower
+assert "public.organization_staff_profiles" in bootstrap_lower
+assert "active_organization_id" in bootstrap_lower
 assert "count(*)" in bootstrap_lower and "<> 1" in bootstrap
 for forbidden in (
     "disable row level security", "grant execute", "grant all", "service_role",
@@ -78,5 +90,16 @@ for path in automatic_files:
         f"Bootstrap must not be referenced by automatic execution path: {path}"
     )
 
+platform_bootstrap = ROOT / "scripts" / "bootstrap-skillward-super-admin.sql"
+platform_sql = platform_bootstrap.read_text(encoding="utf-8").lower()
+assert "begin;" in platform_sql and "commit;" in platform_sql
+assert "from auth.users" in platform_sql and "public.skillward_administrators" in platform_sql
+for forbidden in ("disable row level security", "grant all", "service_role", "create function"):
+    assert forbidden not in platform_sql, f"Unsafe platform bootstrap SQL: {forbidden}"
+for path in automatic_files:
+    assert platform_bootstrap.name not in path.read_text(encoding="utf-8"), (
+        f"Platform bootstrap must not be automatically executed: {path}"
+    )
+
 print(f"Validated {len(files)} ordered migrations, {len(TABLES)} RLS tables, "
-      "39 pgTAP assertions, and the manual bootstrap safety contract.")
+      "79 pgTAP assertions, and the manual bootstrap safety contract.")

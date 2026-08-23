@@ -1,4 +1,4 @@
-SkillWard — Healthcare Workforce Training Platform — Front-end MVP v2.8
+SkillWard — Healthcare Learning, Competency and Compliance Platform
 
 HOW TO OPEN
 1. Unzip the downloaded file.
@@ -39,10 +39,9 @@ WHAT IS INCLUDED
 - Responsive patient-journey visual from ward pickup through PRA, theatre, Recovery and return to ward
 
 IMPORTANT LIMITATIONS
-- This is a front-end preview.
-- Data is saved only in the browser.
-- There is no real user authentication.
-- There is no secure database.
+- Demo Mode is a front-end preview and saves sample progress only in the browser.
+- Authenticated workspaces use Supabase Auth, PostgreSQL RLS and organisation-scoped records.
+- The Phase 1 multi-organisation foundation is not yet approved for production hospital use.
 - There are no hospital integrations.
 - Preview procedures must not be treated as final clinical or workplace instructions.
 - All content must be reviewed and approved by the hospital, infection-control team, education team and relevant managers.
@@ -51,13 +50,13 @@ NEXT DEVELOPMENT STAGE
 1. Confirm the complete module list with the trainer.
 2. Replace preview text with approved procedures.
 3. Add approved photos and videos.
-4. Add real accounts and a secure database.
-5. Connect trainer permissions and audit history to secure server APIs.
+4. Review and stabilise the Phase 1 organisation/security migration.
+5. Build the Phase 2 pathway authoring and clinical approval workflow.
 6. Add certificates, refresher dates and reporting.
 7. Pilot with a small number of staff.
 
 DATABASE FOUNDATION
-See docs/database.md for the version-controlled, local-only Supabase schema, security model, tests and setup. The current demonstration application does not import or depend on it.
+See docs/database.md and docs/multi-organization-foundation.md for the version-controlled Supabase schema, permission model, tests and setup. Demo Mode remains deliberately independent of Supabase.
 
 SUPABASE AUTHENTICATION DEVELOPMENT INTEGRATION
 See docs/authentication.md for the authentication architecture, Demo Mode separation, GitHub Pages configuration, exact redirect URLs, invitation limitation, troubleshooting, and production requirements. Public sign-up is not provided. Authenticated role and department access come only from RLS-protected database records.
