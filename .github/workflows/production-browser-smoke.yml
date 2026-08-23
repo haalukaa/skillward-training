@@ -1,0 +1,47 @@
+name: Production browser smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - app.js
+      - demo-data.js
+      - styles.css
+      - app/**
+      - scripts/production-smoke.mjs
+      - .github/workflows/production-browser-smoke.yml
+
+permissions:
+  contents: read
+
+jobs:
+  production-browser-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the deployed commit
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install pinned browser test runtime
+        run: npm install --no-save --ignore-scripts playwright@1.55.0
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Test live desktop and mobile production
+        run: node scripts/production-smoke.mjs
+
+      - name: Upload production screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: skillward-production-browser-screenshots
+          path: artifacts/*.png
+          if-no-files-found: warn
+          retention-days: 14
