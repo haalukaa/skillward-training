@@ -164,3 +164,15 @@ test("invitation UI uses a protected-service boundary rather than Admin Auth", (
   assert.match(app, /InvitationService/); assert.match(invitation, /protected Management service/);
   assert.doesNotMatch(app + invitation, /auth\.admin|inviteUserByEmail/);
 });
+
+test("production invitations default to the canonical SkillWard origin", () => {
+  const edgeFunction = read("supabase/functions/invite-organization-member/index.ts");
+  assert.match(edgeFunction, /PUBLIC_SITE_ORIGIN[^\n]+https:\/\/skillwardtraining\.com/);
+  assert.match(edgeFunction, /PUBLIC_SITE_URL[^\n]+publicSiteOrigin/);
+  assert.match(edgeFunction, /"Vary": "Origin"/);
+});
+
+test("production hardening blocks direct browser execution of the RLS event trigger", () => {
+  const hardening = read("supabase/migrations/202608230002_production_security_hardening.sql");
+  assert.match(hardening, /revoke all on function public\.rls_auto_enable\(\) from public, anon, authenticated/i);
+});

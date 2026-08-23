@@ -65,10 +65,10 @@ The Edge Function is the only Phase 1 component permitted to use the Supabase se
 3. Run locally with `supabase start`, `supabase db reset`, and `supabase test db`.
 4. Link the intended non-production project and apply the ordered migration with `supabase db push`.
 5. Set function secrets/configuration:
-   - `PUBLIC_SITE_ORIGIN=https://haalukaa.github.io`
-   - `PUBLIC_SITE_URL=https://haalukaa.github.io/skillward-training/`
+   - `PUBLIC_SITE_ORIGIN=https://skillwardtraining.com`
+   - `PUBLIC_SITE_URL=https://skillwardtraining.com`
    - Supabase automatically provides its URL, anon key and service key to hosted Edge Functions.
-6. Deploy with `supabase functions deploy invite-organization-member`.
+6. Deploy with `supabase functions deploy invite-organization-member`. The function uses the canonical production domain as a safe fallback when the optional site settings are unavailable.
 7. Keep GitHub Pages secrets limited to `SUPABASE_URL` and `SUPABASE_ANON_KEY`.
 8. Create a confirmed Auth user for the first SkillWard operator, complete a private copy of `scripts/bootstrap-skillward-super-admin.sql`, review it, and run it manually once.
 9. Sign in as that operator, create an organisation, and invite its first Organisation Administrator.
@@ -79,5 +79,7 @@ For a development-only Organisation Administrator without the platform flow, use
 ## Verification and remaining risks
 
 Automated JavaScript tests protect the existing landing/demo/routing behavior and verify the organisation-aware service boundary. pgTAP exercises RLS, cross-organisation denials, self-authorization protection, support-mode gating and audit immutability.
+
+The `knowledge_answer_options` RLS-without-policy advisor notice is intentional: authenticated and anonymous roles have no table privileges because correct answers are never a browser-readable surface. The legacy public role helpers are narrowly scoped, actor-aware compatibility functions used by existing RLS policies; authenticated execution is required until those legacy policies are retired. The production hardening migration removes direct browser execution from the platform-managed `rls_auto_enable` event-trigger function. Password leak protection is an Auth project setting and must be enabled in the Supabase dashboard when the project plan supports it.
 
 Before a hospital pilot, still complete: MFA policy and enforcement, transactional invitation retry/idempotency hardening, email-provider configuration, scheduled support-session expiry, backup/restore rehearsal, monitoring and alerting, load/performance tests, penetration testing, privacy/legal review, clinical governance approval, and production Supabase plan/contract review.
