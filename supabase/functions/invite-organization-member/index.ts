@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.55.0";
 
-const jsonHeaders = { "Content-Type": "application/json", "Access-Control-Allow-Origin": Deno.env.get("PUBLIC_SITE_ORIGIN") || "http://localhost:8080", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" };
+const publicSiteOrigin = Deno.env.get("PUBLIC_SITE_ORIGIN") || "https://skillwardtraining.com";
+const jsonHeaders = { "Content-Type": "application/json", "Access-Control-Allow-Origin": publicSiteOrigin, "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS", "Vary": "Origin" };
 const response = (status: number, body: Record<string, unknown>) => new Response(JSON.stringify(body), { status, headers: jsonHeaders });
 
 Deno.serve(async request => {
@@ -48,7 +49,7 @@ Deno.serve(async request => {
   }
 
   if (!invitedUserId) {
-    const redirectTo = Deno.env.get("PUBLIC_SITE_URL") || undefined;
+    const redirectTo = Deno.env.get("PUBLIC_SITE_URL") || publicSiteOrigin;
     const { data, error } = await serviceClient.auth.admin.inviteUserByEmail(invitation.email, { redirectTo });
     if (error || !data.user) return response(502, { error: "INVITATION_DELIVERY_FAILED" });
     invitedUserId = data.user.id;
