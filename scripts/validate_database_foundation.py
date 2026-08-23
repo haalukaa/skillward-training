@@ -71,8 +71,8 @@ authentication_test_sql = (
 authentication_plan = re.search(
     r"select\s+plan\((\d+)\)", authentication_test_sql, re.IGNORECASE
 )
-assert authentication_plan and int(authentication_plan.group(1)) == 40, (
-    "Authentication-entry pgTAP plan must contain exactly 40 assertions"
+assert authentication_plan and int(authentication_plan.group(1)) == 41, (
+    "Authentication-entry pgTAP plan must contain exactly 41 assertions"
 )
 
 env_lines = (ROOT / ".env.example").read_text(encoding="utf-8").splitlines()

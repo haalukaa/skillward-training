@@ -2,7 +2,7 @@ begin;
 create extension if not exists pgtap;
 set local role postgres;
 
-select plan(40);
+select plan(41);
 
 select is(
   (select count(*)::int

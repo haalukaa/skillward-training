@@ -26,7 +26,7 @@ This review replaces the real-user sector/role chooser with direct organisation 
 ## Verification
 
 - 60 application tests.
-- 169 pgTAP assertions declared across 41 RLS tables, including 40 authentication-entry assertions.
+- 170 pgTAP assertions declared across 41 RLS tables, including 41 authentication-entry assertions.
 - Production build and Edge Function parse/bundle check.
 - Tracked-file secret scan and whitespace validation.
 - Desktop and phone browser verification is required on the hosted review deployment before merge.
