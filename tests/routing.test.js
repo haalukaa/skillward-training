@@ -123,9 +123,29 @@ test("trainer workspace has phone-width containment and card-style trainee recor
   for (const label of ["Trainee", "Progress", "Latest result", "Sign-off", "Due"]) assert.match(stylesSource, new RegExp(`content:'${label}'`));
 });
 
-test("Phase 1 administration layouts retain desktop grids and phone-width stacking", () => {
-  for (const text of ["ORGANISATION SETUP", "Platform Administration", "Organisation workspace", "Create organisation", "Add facility", "Add department", "Authorise support mode"]) assert.match(appSource, new RegExp(text));
+test("Phase 1 administration retains protected setup actions and phone-width stacking", () => {
+  for (const text of ["Platform Administration", "Organisation workspace", "Create organisation", "Add a care location", "Add a department", "Authorise a verified support request"]) assert.match(appSource, new RegExp(text));
   assert.match(stylesSource, /\.admin-setup-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,/s);
   assert.match(stylesSource, /@media \(max-width: 800px\)[\s\S]*?\.admin-setup-grid\s*\{\s*grid-template-columns:\s*1fr/);
   assert.match(stylesSource, /@media \(max-width: 600px\)[\s\S]*?\.setup-form\s*\{\s*padding:/);
+});
+
+test("authenticated organisation administration uses separated Canvas-style destinations", () => {
+  for (const destination of ["Home", "Pathways", "People", "Competency", "Reports", "Admin"]) {
+    assert.match(appSource, new RegExp(`\\[\"[^\"]+\", \"${destination}\"`));
+  }
+  for (const heading of ["Training pathways", "People and permissions", "Assessment and assurance", "Readiness and compliance", "Organisation settings"]) {
+    assert.match(appSource, new RegExp(heading));
+  }
+  assert.match(appSource, /class="admin-stepper"/);
+  assert.match(appSource, /organizationSetupStep:\s*"identity"/);
+  assert.match(stylesSource, /\.database-workspace \.side-nav\s*\{[^}]*width:\s*204px/s);
+  assert.match(stylesSource, /\.database-workspace \.bottom-nav\s*\{[^}]*repeat\(var\(--nav-count\)/s);
+  assert.match(stylesSource, /\.focused-form input:not\(\[type="color"\]\)[^}]*font-size:\s*16px/s);
+});
+
+test("Canvas workspace assets use a production cache version", () => {
+  const indexSource = fs.readFileSync(path.join(root, "index.html"), "utf8");
+  assert.match(indexSource, /styles\.css\?v=20260823-canvas-shell-1/);
+  assert.match(indexSource, /app\.js\?v=20260823-canvas-shell-1/);
 });

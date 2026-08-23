@@ -120,7 +120,7 @@ test("production recovers legacy cached callback paths before relative assets lo
   assert.match(index, /location\.hostname === "skillwardtraining\.com"/);
   assert.match(index, /location\.pathname\.startsWith\("\/skillward-training\/"\)/);
   assert.match(index, /location\.replace\(`\$\{location\.origin\}\/\$\{location\.search\}\$\{location\.hash\}`\)/);
-  assert.match(index, /app\.js\?v=20260823-recovery-2/);
+  assert.match(index, /app\.js\?v=20260823-canvas-shell-1/);
   assert.ok(index.indexOf("location.replace") < index.indexOf("data.js"), "legacy callback redirects before relative scripts load");
 });
 

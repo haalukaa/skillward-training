@@ -4,6 +4,8 @@ const defaultState = {
   currentUser: null,
   selectedDepartment: null,
   activeOrganizationId: null,
+  activeWorkspaceView: "home",
+  organizationSetupStep: "identity",
   learnerName: "Staff Learner",
   moduleProgress: {},
   practicalSignoff: false,
@@ -81,8 +83,23 @@ const NAV_ITEMS = [
   ["reports", "Reports", "▥"]
 ];
 
+const AUTHENTICATED_NAV_ITEMS = {
+  "Organisation Administrator": [["home", "Home", "⌂"], ["pathways", "Pathways", "▷"], ["people", "People", "♙"], ["competency", "Competency", "✓"], ["reports", "Reports", "▥"], ["admin", "Admin", "⚙"]],
+  "Content Administrator/Educator": [["home", "Home", "⌂"], ["pathways", "Pathways", "▷"], ["people", "People", "♙"], ["reports", "Reports", "▥"]],
+  worker: [["home", "Home", "⌂"], ["pathways", "Pathways", "▷"], ["competency", "Competency", "✓"]],
+  trainer: [["home", "Home", "⌂"], ["people", "Trainees", "♙"], ["competency", "Assess", "✓"], ["reports", "Reports", "▥"]],
+  management: [["home", "Home", "⌂"], ["pathways", "Pathways", "▷"], ["people", "People", "♙"], ["competency", "Competency", "✓"], ["reports", "Reports", "▥"]]
+};
+
+function authenticatedNavigation(role) {
+  if (AUTHENTICATED_NAV_ITEMS[role]) return AUTHENTICATED_NAV_ITEMS[role];
+  if (["PCA", "Cleaner", "Support Worker"].includes(role)) return AUTHENTICATED_NAV_ITEMS.worker;
+  if (role?.includes("Trainer")) return AUTHENTICATED_NAV_ITEMS.trainer;
+  return AUTHENTICATED_NAV_ITEMS.management;
+}
+
 function workplaceRoleLabel(role) {
-  return WORKPLACE_ROLES[role] || "Staff member";
+  return WORKPLACE_ROLES[role] || role || "Staff member";
 }
 
 function normalizeCurrentUserRole() {
@@ -302,13 +319,16 @@ function renderShell(content) {
   const user = authenticatedContext?.appUser || state.currentUser;
   const department = DEPARTMENTS.find(item => item.id === state.selectedDepartment) || authenticatedContext?.departmentDetails?.find(item => item.id === state.selectedDepartment);
   const authenticatedWorkspace = Boolean(authenticatedContext || (user && (department || user.role?.includes("trainer"))));
-  const navigation = NAV_ITEMS.map(([id, label, icon], index) => `
-    <button class="workspace-nav-item ${index === 0 ? "is-active" : ""}" data-nav="${id}" aria-label="${label}">
+  const navigationItems = authenticatedContext ? authenticatedNavigation(authenticatedContext.membership?.role) : NAV_ITEMS;
+  const activeView = authenticatedContext ? (state.activeWorkspaceView || "home") : "home";
+  if (!navigationItems.some(([id]) => id === activeView)) state.activeWorkspaceView = navigationItems[0][0];
+  const navigation = navigationItems.map(([id, label, icon]) => `
+    <button class="workspace-nav-item ${id === (state.activeWorkspaceView || "home") ? "is-active" : ""}" data-nav="${id}" aria-label="${label}">
       <span aria-hidden="true">${icon}</span><small>${label}</small>
     </button>
   `).join("");
   app.innerHTML = `
-    <div class="shell ${authenticatedWorkspace ? "authenticated-shell" : ""}">
+    <div class="shell ${authenticatedWorkspace ? "authenticated-shell" : ""} ${authenticatedContext ? "database-workspace" : ""}">
       <header class="topbar">
         <div class="brand">
           <div class="brand-mark">
@@ -330,9 +350,9 @@ function renderShell(content) {
           ${authenticatedContext ? `<button class="btn btn-secondary" id="signOutBtn">Sign Out</button>` : ""}${authenticatedWorkspace ? `<button class="profile-button" id="switchRoleBtn" aria-label="User profile: ${escapeHtml(user.name)}"><span>${escapeHtml(user.name).charAt(0).toUpperCase()}</span><strong>${escapeHtml(user.name)}</strong></button>` : user ? `<button class="btn btn-secondary" id="switchRoleBtn">Switch role</button>` : ""}
         </div>
       </header>
-      ${authenticatedWorkspace ? `<nav class="side-nav" aria-label="Primary navigation">${navigation}</nav>` : ""}
+      ${authenticatedWorkspace ? `<nav class="side-nav" style="--nav-count:${navigationItems.length}" aria-label="Primary navigation">${navigation}</nav>` : ""}
       <main class="page" id="mainContent">${content}</main>
-      ${authenticatedWorkspace ? `<nav class="bottom-nav" aria-label="Primary navigation">${navigation}</nav>` : ""}
+      ${authenticatedWorkspace ? `<nav class="bottom-nav" style="--nav-count:${navigationItems.length}" aria-label="Primary navigation">${navigation}</nav>` : ""}
       <footer class="site-footer">
         <div class="footer-inner">
           <p class="footer-copyright">© 2026 SkillWard. All rights reserved.</p>
@@ -368,6 +388,12 @@ function renderShell(content) {
 
   document.querySelectorAll(".workspace-nav-item").forEach(button => {
     button.addEventListener("click", () => {
+      if (authenticatedContext) {
+        state.activeWorkspaceView = button.dataset.nav;
+        saveState();
+        renderAuthenticatedWorkspace();
+        return;
+      }
       document.getElementById(button.dataset.nav)?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   });
@@ -624,13 +650,56 @@ function renderPlatformAdministration(context) {
 function renderOrganizationAdministration(context) {
   const facilities = context.facilities || [], departments = context.departmentDetails || [], settings = context.organization.branding_settings || {};
   const roleOptions = ["Organisation Administrator","Facility Administrator","Department Manager","Content Administrator/Educator","PCA Trainer","Cleaner Trainer","PCA","Cleaner","Support Worker"];
-  renderShell(`${organizationSwitcher(context)}<section class="dashboard-hero"><div class="dashboard-welcome"><span class="eyebrow">ORGANISATION SETUP</span><h2>${escapeHtml(context.organization.name)}</h2><p>Configure branding, facilities, departments and controlled membership invitations.</p></div></section><div class="stats-grid"><div class="stat-card"><span>Facilities</span><strong>${facilities.length}</strong></div><div class="stat-card"><span>Departments</span><strong>${departments.length}</strong></div><div class="stat-card"><span>Staff profiles</span><strong>${context.organizationStaff.length}</strong></div></div><section class="admin-setup-grid"><form class="card setup-form" id="brandingForm"><span class="eyebrow">1 · BRANDING</span><h3>Organisation identity</h3><label>Logo storage path<input name="logoPath" value="${escapeHtml(context.organization.logo_path || "")}" placeholder="${escapeHtml(context.organization.id)}/logo.svg"></label><div class="colour-fields"><label>Primary colour<input name="primaryColor" type="color" value="${escapeHtml(settings.primaryColor || "#0b4051")}"></label><label>Accent colour<input name="accentColor" type="color" value="${escapeHtml(settings.accentColor || "#20b8ad")}"></label></div><button class="btn" type="submit">Save branding</button><p class="auth-status" role="status"></p></form><form class="card setup-form" id="facilityForm"><span class="eyebrow">2 · FACILITIES</span><h3>Add facility</h3><label>Name<input name="name" required></label><label>Location<input name="location"></label><button class="btn" type="submit">Add facility</button><p class="auth-status" role="status"></p></form><form class="card setup-form" id="departmentForm"><span class="eyebrow">3 · DEPARTMENTS</span><h3>Add department</h3><label>Facility<select name="facilityId" required><option value="">Choose facility</option>${facilities.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("")}</select></label><label>Code<input name="code" maxlength="30" required></label><label>Name<input name="name" required></label><label>Description<textarea name="description"></textarea></label><button class="btn" type="submit">Add department</button><p class="auth-status" role="status"></p></form><form class="card setup-form" id="organizationInviteForm"><span class="eyebrow">4 · MEMBERSHIP</span><h3>Create invitation</h3><label>Email<input name="email" type="email" required></label><label>Role<select name="role">${roleOptions.map(role => `<option>${escapeHtml(role)}</option>`).join("")}</select></label><label>Facility<select name="facilityId"><option value="">Organisation-wide</option>${facilities.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("")}</select></label><label>Department<select name="departmentId"><option value="">No department yet</option>${departments.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("")}</select></label><button class="btn" type="submit">Create invitation</button><p class="small">The protected invitation delivery service must be deployed before an email is sent.</p><p class="auth-status" role="status"></p></form><form class="card setup-form" id="supportAuthorizationForm"><span class="eyebrow">5 · SUPPORT ACCESS</span><h3>Authorise support mode</h3><label>SkillWard support user ID<input name="supportUserId" type="text" required></label><label>Reason<textarea name="reason" minlength="10" required></textarea></label><label>Hours (maximum 24)<input name="hours" type="number" min="1" max="24" value="1" required></label><button class="btn" type="submit">Authorise time-limited access</button><p class="small">The support user must separately activate the session. Every change is written to the immutable audit history.</p><p class="auth-status" role="status"></p></form></section>`);
-  document.querySelector('#organizationInviteForm label')?.insertAdjacentHTML("beforebegin", '<label>Full name<input name="fullName" required></label><label>Employee ID<input name="employeeId" required></label>');
+  const view = state.activeWorkspaceView || "home";
+  const staff = context.organizationStaff || [];
+  const identityComplete = Boolean(context.organization.logo_path || settings.primaryColor || settings.accentColor);
+  const setupItems = [
+    ["identity", "Organisation identity", identityComplete, "Add your logo and brand colours"],
+    ["facility", "First facility", facilities.length > 0, "Create the hospital or care location"],
+    ["department", "Departments", departments.length > 0, "Add the teams that deliver training"],
+    ["people", "Administrators and staff", staff.length > 1, "Invite the people who will use SkillWard"]
+  ];
+  const completed = setupItems.filter(item => item[2]).length;
+  const progress = Math.round((completed / setupItems.length) * 100);
+  const workspaceHero = (eyebrow, title, description, action = "") => `${organizationSwitcher(context)}<section class="dashboard-hero workspace-page-hero"><div class="dashboard-welcome"><span class="eyebrow">${eyebrow}</span><h2>${title}</h2><p>${description}</p></div>${action}</section>`;
+  const stats = `<div class="stats-grid workspace-stats"><div class="stat-card"><span>Facilities</span><strong>${facilities.length}</strong></div><div class="stat-card"><span>Departments</span><strong>${departments.length}</strong></div><div class="stat-card"><span>People</span><strong>${staff.length}</strong></div><div class="stat-card"><span>Setup</span><strong>${progress}%</strong></div></div>`;
+  const staffRows = staff.map(item => { const profile = item.user_profiles || {}; return `<article class="person-row"><span class="person-avatar">${escapeHtml((profile.full_name || item.employee_id || "S").charAt(0).toUpperCase())}</span><div><strong>${escapeHtml(profile.full_name || "Staff member")}</strong><small>${escapeHtml(item.employee_id || "Employee ID pending")} · ${escapeHtml(item.employment_status || "Active")}</small></div><span class="status-chip status-${item.account_status === "Active" ? "success" : "warning"}">${escapeHtml(item.account_status || "Profile")}</span></article>`; }).join("");
+  const inviteForm = `<form class="card setup-form focused-form" id="organizationInviteForm"><span class="eyebrow">PEOPLE &amp; PERMISSIONS</span><h3>Invite a team member</h3><p class="small">Create one secure account, then assign only the organisation, facility and department access this person needs.</p><div class="form-grid"><label>Full name<input name="fullName" autocomplete="name" required></label><label>Employee ID<input name="employeeId" required></label><label>Email<input name="email" type="email" autocomplete="email" required></label><label>Role<select name="role">${roleOptions.map(role => `<option>${escapeHtml(role)}</option>`).join("")}</select></label><label>Facility<select name="facilityId"><option value="">Organisation-wide</option>${facilities.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("")}</select></label><label>Department<select name="departmentId"><option value="">No department yet</option>${departments.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("")}</select></label></div><button class="btn" type="submit">Send secure invitation</button><p class="small trust-note">Invitation delivery is protected, role-scoped and written to the audit history.</p><p class="auth-status" role="status"></p></form>`;
+
+  let content = "";
+  if (view === "home") {
+    const checklist = setupItems.map(([step, label, done, detail], index) => `<button class="setup-check ${done ? "is-complete" : ""}" data-setup-step="${step}"><span>${done ? "✓" : index + 1}</span><div><strong>${label}</strong><small>${done ? "Complete" : detail}</small></div><b>→</b></button>`).join("");
+    content = `${workspaceHero("ORGANISATION HOME", escapeHtml(context.organization.name), `Welcome, ${escapeHtml(context.profile.full_name)}. Set up your organisation, then manage learning and competency from the workspace navigation.`)}${stats}<section class="workspace-home-grid"><section class="card setup-progress-card"><div class="section-heading"><div><span class="eyebrow">GET STARTED</span><h3>Organisation setup</h3></div><strong>${completed}/${setupItems.length}</strong></div><div class="setup-progress-track"><span style="width:${progress}%"></span></div><div class="setup-checklist">${checklist}</div></section><section class="card workspace-overview-card"><span class="eyebrow">WORKSPACE OVERVIEW</span><h3>Everything in one secure organisation</h3><div class="overview-links"><button class="workspace-route" data-view="pathways"><span>▷</span><div><strong>Training pathways</strong><small>Lessons, quizzes and practical requirements</small></div><b>→</b></button><button class="workspace-route" data-view="people"><span>♙</span><div><strong>People and permissions</strong><small>Staff, trainers, managers and access</small></div><b>→</b></button><button class="workspace-route" data-view="competency"><span>✓</span><div><strong>Competency</strong><small>Assessment, approval and renewal status</small></div><b>→</b></button><button class="workspace-route" data-view="reports"><span>▥</span><div><strong>Reports</strong><small>Readiness and compliance visibility</small></div><b>→</b></button></div></section></section>`;
+  } else if (view === "pathways") {
+    const pathways = [...new Map((context.trainingAssignments || []).filter(item => item.training_pathways).map(item => [item.training_pathways.id || item.training_pathway_id, item.training_pathways])).values()];
+    content = `${workspaceHero("LEARNING", "Training pathways", "Build structured learning from SkillWard templates, then assign the published version to workers.", '<button class="btn workspace-route" data-view="admin" data-setup-step="department">Check department readiness</button>')}<section class="workspace-home-grid"><section class="card"><span class="eyebrow">PATHWAY LIBRARY</span><h3>${pathways.length ? "Available pathways" : "No organisation pathways yet"}</h3>${pathways.map(item => `<article class="pathway-list-item"><span>▷</span><div><strong>${escapeHtml(item.title || "Training pathway")}</strong><small>${escapeHtml(item.description || "Organisation learning pathway")}</small></div><span class="status-chip status-success">Published</span></article>`).join("") || '<div class="purpose-empty"><span>＋</span><h4>Start with a SkillWard template</h4><p>The Canvas-style pathway builder will guide educators through modules, lessons, quizzes, practical checklists, review and publishing without starting from a blank screen.</p></div>'}</section><section class="card pathway-structure"><span class="eyebrow">PATHWAY STRUCTURE</span><h3>Learning that becomes competency</h3><ol><li><span>1</span><div><strong>Modules and lessons</strong><small>Local procedures, objectives, media and documents</small></div></li><li><span>2</span><div><strong>Knowledge checks</strong><small>Quizzes, pass marks, prerequisites and attempts</small></div></li><li><span>3</span><div><strong>Practical assessment</strong><small>Trainer checklist, evidence and recommendation</small></div></li><li><span>4</span><div><strong>Approval and renewal</strong><small>Manager decision, competency record and reassessment</small></div></li></ol></section></section>`;
+  } else if (view === "people") {
+    content = `${workspaceHero("PEOPLE", "People and permissions", "Invite staff once, assign trusted roles and keep every facility and department boundary explicit.")}${stats}<section class="people-layout"><section class="card people-directory"><div class="section-heading"><div><span class="eyebrow">DIRECTORY</span><h3>Organisation people</h3></div><span class="count-badge">${staff.length}</span></div><div class="people-list">${staffRows || '<div class="purpose-empty compact"><h4>No staff profiles yet</h4><p>Use the invitation form to add the first administrator, manager, educator, trainer or worker.</p></div>'}</div></section>${inviteForm}</section>`;
+  } else if (view === "competency") {
+    content = `${workspaceHero("COMPETENCY", "Assessment and assurance", "Track the complete journey from learning through practical assessment, manager approval and reassessment.")}<div class="stats-grid workspace-stats"><div class="stat-card"><span>Awaiting assessment</span><strong>0</strong></div><div class="stat-card"><span>Awaiting approval</span><strong>0</strong></div><div class="stat-card"><span>Current</span><strong>${context.competencyRecords?.length || 0}</strong></div><div class="stat-card"><span>Reassessment</span><strong>0</strong></div></div><section class="card competency-flow"><span class="eyebrow">CONTROLLED WORKFLOW</span><h3>One auditable competency record</h3><div><article><span>1</span><strong>Worker completes learning</strong></article><article><span>2</span><strong>Trainer assesses practice</strong></article><article><span>3</span><strong>Manager approves</strong></article><article><span>4</span><strong>SkillWard monitors renewal</strong></article></div><p class="empty-state">No organisation-wide competency decisions require attention yet.</p></section>`;
+  } else if (view === "reports") {
+    content = `${workspaceHero("REPORTS", "Readiness and compliance", "See whether the organisation is configured, staffed and ready to deliver controlled training.")}${stats}<section class="reports-grid"><article class="card report-panel"><span class="eyebrow">SETUP READINESS</span><h3>${progress}% ready</h3><div class="setup-progress-track"><span style="width:${progress}%"></span></div><ul>${setupItems.map(item => `<li><span>${item[2] ? "✓" : "○"}</span>${item[1]}<strong>${item[2] ? "Ready" : "Action required"}</strong></li>`).join("")}</ul></article><article class="card report-panel"><span class="eyebrow">ACCESS ASSURANCE</span><h3>Organisation boundary active</h3><p>Every workplace record is restricted by active membership, role and authorised facility or department access.</p><div class="assurance-badge">✓ RLS protected</div></article></section>`;
+  } else {
+    const step = state.organizationSetupStep || "identity";
+    const steps = [["identity", "Identity"], ["facility", "Facilities"], ["department", "Departments"], ["people", "Invitations"], ["support", "Support"]];
+    const stepper = `<nav class="admin-stepper" aria-label="Organisation setup">${steps.map(([id, label], index) => `<button class="${step === id ? "is-active" : ""}" data-setup-step="${id}"><span>${index + 1}</span>${label}</button>`).join("")}</nav>`;
+    let panel = "";
+    if (step === "identity") panel = `<form class="card setup-form focused-form" id="brandingForm"><span class="eyebrow">1 · ORGANISATION IDENTITY</span><h3>Brand this workspace</h3><p class="small">Use an approved logo URL and colours that staff will recognise when they sign in.</p><label>Organisation logo URL<input name="logoPath" type="url" value="${escapeHtml(context.organization.logo_path || "")}" placeholder="https://example.org/organisation-logo.svg"></label><div class="colour-fields"><label><span>Primary colour</span><input name="primaryColor" type="color" value="${escapeHtml(settings.primaryColor || "#0b4051")}"><small>${escapeHtml(settings.primaryColor || "#0b4051")}</small></label><label><span>Accent colour</span><input name="accentColor" type="color" value="${escapeHtml(settings.accentColor || "#20b8ad")}"><small>${escapeHtml(settings.accentColor || "#20b8ad")}</small></label></div><button class="btn" type="submit">Save and continue</button><p class="auth-status" role="status"></p></form>`;
+    if (step === "facility") panel = `<section class="admin-focus-grid"><form class="card setup-form focused-form" id="facilityForm"><span class="eyebrow">2 · FACILITIES</span><h3>Add a care location</h3><p class="small">A facility is a physical hospital or care site. Departments are created inside it.</p><label>Facility name<input name="name" placeholder="Royal Perth Hospital" required></label><label>Location<input name="location" placeholder="Perth, Western Australia"></label><button class="btn" type="submit">Add facility and continue</button><p class="auth-status" role="status"></p></form><section class="card setup-register"><span class="eyebrow">CURRENT FACILITIES</span><h3>${facilities.length} configured</h3>${facilities.map(item => `<article><div><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.location || "Location not provided")}</small></div><span class="status-chip status-success">Active</span></article>`).join("") || '<p class="empty-state">No facilities have been added.</p>'}</section></section>`;
+    if (step === "department") panel = `<section class="admin-focus-grid"><form class="card setup-form focused-form" id="departmentForm"><span class="eyebrow">3 · DEPARTMENTS</span><h3>Add a department</h3><p class="small">Departments control content, staff access, trainers, reporting and competency workflows.</p><label>Facility<select name="facilityId" required><option value="">Choose facility</option>${facilities.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("")}</select></label><div class="form-grid"><label>Department code<input name="code" maxlength="30" placeholder="OT" required></label><label>Department name<input name="name" placeholder="Operating Theatre & Recovery" required></label></div><label>Description<textarea name="description" placeholder="Describe the team and its training responsibilities"></textarea></label><button class="btn" type="submit" ${facilities.length ? "" : "disabled"}>Add department and continue</button>${facilities.length ? "" : '<p class="form-guidance">Add a facility before creating a department.</p>'}<p class="auth-status" role="status"></p></form><section class="card setup-register"><span class="eyebrow">CURRENT DEPARTMENTS</span><h3>${departments.length} configured</h3>${departments.map(item => `<article><div><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.code || "Department")}</small></div><span class="status-chip status-success">Active</span></article>`).join("") || '<p class="empty-state">No departments have been added.</p>'}</section></section>`;
+    if (step === "people") panel = inviteForm;
+    if (step === "support") panel = `<form class="card setup-form focused-form support-form" id="supportAuthorizationForm"><span class="eyebrow">5 · SUPPORT ACCESS</span><h3>Authorise a verified support request</h3><p class="small">Use this only when SkillWard support has supplied a verified support user ID. Access is time-limited and fully audited.</p><label>Verified support user ID<input name="supportUserId" type="text" autocomplete="off" required></label><label>Reason for access<textarea name="reason" minlength="10" placeholder="Describe the support request and approved scope" required></textarea></label><label class="hours-field">Access duration in hours <input name="hours" type="number" min="1" max="24" value="1" required></label><button class="btn" type="submit">Authorise time-limited access</button><p class="trust-note">The support user must separately activate the session. Every access event is written to immutable audit history.</p><p class="auth-status" role="status"></p></form>`;
+    content = `${workspaceHero("ADMIN", "Organisation settings", "Complete the guided setup once, then return here only when your organisation structure or access changes.")}${stepper}<div class="admin-focus">${panel}</div>`;
+  }
+
+  renderShell(content);
   bindAuthenticatedWorkspace(context);
-  bindSetupForm("brandingForm", values => authService.database.updateOrganizationBranding(context, { logoPath:values.get("logoPath"), primaryColor:values.get("primaryColor"), accentColor:values.get("accentColor") }));
-  bindSetupForm("facilityForm", values => authService.database.createFacility(context, { name:values.get("name"), location:values.get("location") }));
-  bindSetupForm("departmentForm", values => authService.database.createDepartment(context, { facilityId:values.get("facilityId"), code:values.get("code"), name:values.get("name"), description:values.get("description") }));
-  bindSetupForm("organizationInviteForm", values => authService.database.inviteOrganizationMember(context, { fullName:values.get("fullName"), employeeId:values.get("employeeId"), email:values.get("email"), role:values.get("role"), facilityId:values.get("facilityId"), departmentId:values.get("departmentId") }));
+  document.querySelectorAll(".workspace-route").forEach(button => button.addEventListener("click", () => { state.activeWorkspaceView = button.dataset.view; if (button.dataset.setupStep) state.organizationSetupStep = button.dataset.setupStep; saveState(); renderAuthenticatedWorkspace(); }));
+  document.querySelectorAll("[data-setup-step]").forEach(button => button.addEventListener("click", () => { state.activeWorkspaceView = "admin"; state.organizationSetupStep = button.dataset.setupStep; saveState(); renderAuthenticatedWorkspace(); }));
+  bindSetupForm("brandingForm", async values => { await authService.database.updateOrganizationBranding(context, { logoPath:values.get("logoPath"), primaryColor:values.get("primaryColor"), accentColor:values.get("accentColor") }); state.organizationSetupStep = "facility"; saveState(); });
+  bindSetupForm("facilityForm", async values => { await authService.database.createFacility(context, { name:values.get("name"), location:values.get("location") }); state.organizationSetupStep = "department"; saveState(); });
+  bindSetupForm("departmentForm", async values => { await authService.database.createDepartment(context, { facilityId:values.get("facilityId"), code:values.get("code"), name:values.get("name"), description:values.get("description") }); state.organizationSetupStep = "people"; saveState(); });
+  bindSetupForm("organizationInviteForm", async values => { await authService.database.inviteOrganizationMember(context, { fullName:values.get("fullName"), employeeId:values.get("employeeId"), email:values.get("email"), role:values.get("role"), facilityId:values.get("facilityId"), departmentId:values.get("departmentId") }); state.activeWorkspaceView = "people"; saveState(); });
   bindSetupForm("supportAuthorizationForm", values => authService.database.authorizeSupportAccess(context, { supportUserId:values.get("supportUserId"), reason:values.get("reason"), hours:values.get("hours") }));
 }
 
