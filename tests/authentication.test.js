@@ -102,6 +102,13 @@ test("recovery form validates matching strong passwords and updates only through
   assert.match(app, /Password updated successfully\. Sign in with your new password/);
 });
 
+test("recovery links preserve the active deployment path without hardcoding GitHub Pages", () => {
+  assert.match(app, /const recoveryUrl = new URL\(location\.href\)/);
+  assert.match(app, /recoveryUrl\.searchParams\.set\("recovery", "1"\)/);
+  assert.match(app, /resetPassword[^\n]+recoveryUrl\.toString\(\)/);
+  assert.doesNotMatch(app, /location\.origin\}\/skillward-training\/\?recovery=1/);
+});
+
 test("role routing covers Management, learners, managers and trainers", () => {
   for (const role of ["SkillWard Super Administrator", "Organisation Administrator", "Facility Administrator", "Department Manager", "Content Administrator/Educator", "PCA", "Cleaner", "Support Worker", "PCA Trainer", "Cleaner Trainer"]) assert.match(auth + app, new RegExp(role));
   assert.match(app, /departments\.length>1/); assert.match(app, /No assigned department/);
