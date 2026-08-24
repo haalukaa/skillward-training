@@ -129,26 +129,49 @@ export class SkillWardDatabaseService {
     const featureFlags = await this.optionalQuery("skillward_feature_flags", q => q.order("feature_key", { ascending: true }));
     const organizationStaff = ["SkillWard Super Administrator", "Organisation Administrator"].includes(membership.role)
       ? await this.query("organization_staff_profiles", q => q.eq("organization_id", organizationId), "*, user_profiles!organization_staff_profiles_user_id_fkey(*)") : [];
+    const organizationMemberships = ["SkillWard Super Administrator", "Organisation Administrator", "Department Manager"].includes(membership.role)
+      ? await this.optionalQuery("organization_memberships", q => q.eq("organization_id", organizationId).eq("membership_status", "Active")) : [];
     const organizationInvitations = membership.role === "Organisation Administrator"
       ? await this.optionalQuery("organization_invitations", q => q.eq("organization_id", organizationId).order("created_at", { ascending: false })) : [];
-    const learningPathways = administrative
+    let learningPathways = administrative
       ? await this.optionalQuery("learning_pathways", q => q.eq("organization_id", organizationId).order("updated_at", { ascending: false })) : [];
-    const learningPathwayIds = learningPathways.map(item => item.id);
-    const learningPathwayVersions = learningPathwayIds.length
+    let learningPathwayIds = learningPathways.map(item => item.id);
+    let learningPathwayVersions = learningPathwayIds.length
       ? await this.optionalQuery("learning_pathway_versions", q => q.in("pathway_id", learningPathwayIds).order("version_number", { ascending: false })) : [];
-    const learningVersionIds = learningPathwayVersions.map(item => item.id);
-    const learningModules = learningVersionIds.length
+    let learningVersionIds = learningPathwayVersions.map(item => item.id);
+    let learningModules = learningVersionIds.length
       ? await this.optionalQuery("learning_modules", q => q.in("pathway_version_id", learningVersionIds).order("position", { ascending: true })) : [];
-    const learningModuleItems = learningVersionIds.length
+    let learningModuleItems = learningVersionIds.length
       ? await this.optionalQuery("learning_module_items", q => q.in("pathway_version_id", learningVersionIds).order("position", { ascending: true })) : [];
+    const learningAssignments = administrative || ["Facility Administrator", "Department Manager"].includes(membership.role)
+      ? await this.optionalQuery("learning_assignments", q => q.eq("organization_id", organizationId).order("updated_at", { ascending: false }))
+      : membership.role.includes("Trainer")
+        ? await this.optionalQuery("learning_assignments", q => q.eq("organization_id", organizationId).eq("trainer_user_id", user.id).order("updated_at", { ascending: false }))
+        : await this.optionalQuery("learning_assignments", q => q.eq("organization_id", organizationId).eq("worker_user_id", user.id).order("updated_at", { ascending: false }));
+    const phase3AssignmentIds = learningAssignments.map(item => item.id);
+    if (!administrative && learningAssignments.length) {
+      learningPathwayIds = [...new Set(learningAssignments.map(item => item.pathway_id))];
+      learningVersionIds = [...new Set(learningAssignments.map(item => item.pathway_version_id))];
+      learningPathways = await this.optionalQuery("learning_pathways", q => q.in("id", learningPathwayIds));
+      learningPathwayVersions = await this.optionalQuery("learning_pathway_versions", q => q.in("id", learningVersionIds));
+      learningModules = await this.optionalQuery("learning_modules", q => q.in("pathway_version_id", learningVersionIds).order("position", { ascending:true }));
+      learningModuleItems = await this.optionalQuery("learning_module_items", q => q.in("pathway_version_id", learningVersionIds).order("position", { ascending:true }));
+    }
+    const learningItemProgress = phase3AssignmentIds.length ? await this.optionalQuery("learning_item_progress", q => q.in("assignment_id", phase3AssignmentIds).order("updated_at", { ascending: true })) : [];
+    const competencyObservations = phase3AssignmentIds.length ? await this.optionalQuery("competency_observations", q => q.in("assignment_id", phase3AssignmentIds).order("observed_at", { ascending: false })) : [];
+    const competencyRecommendations = phase3AssignmentIds.length ? await this.optionalQuery("competency_recommendations", q => q.in("assignment_id", phase3AssignmentIds).order("submitted_at", { ascending: false })) : [];
+    const competencyAwards = phase3AssignmentIds.length ? await this.optionalQuery("competency_awards", q => q.in("assignment_id", phase3AssignmentIds).order("decided_at", { ascending: false })) : [];
+    const competencyWorkflowEvents = phase3AssignmentIds.length ? await this.optionalQuery("competency_workflow_events", q => q.in("assignment_id", phase3AssignmentIds).order("created_at", { ascending: false })) : [];
 
     return {
       user, profile, platformAdministrator, memberships, membership, organization,
       facilities, facilityAssignments, departments: departmentAssignments,
       departmentAssignments, departmentDetails, trainerAssignments, traineeProfiles,
       trainingAssignments, moduleProgress, competencyRecords, practicalObservations,
-      signoffRecommendations, notifications, organizationStaff, organizationInvitations,
+      signoffRecommendations, notifications, organizationStaff, organizationMemberships, organizationInvitations,
       learningPathways, learningPathwayVersions, learningModules, learningModuleItems,
+      learningAssignments, learningItemProgress, competencyObservations,
+      competencyRecommendations, competencyAwards, competencyWorkflowEvents,
       authSettings, featureFlags
     };
   }
@@ -222,6 +245,26 @@ export class SkillWardDatabaseService {
 
   transitionLearningPathwayVersion(versionId, action) {
     return this.rpc("transition_learning_pathway_version", { target_version: versionId, requested_action: action });
+  }
+
+  assignPublishedPathway(input) {
+    return this.rpc("assign_published_pathway", { target_version:input.versionId, target_worker:input.workerUserId, target_trainer:input.trainerUserId || null, target_due_at:input.dueAt || null });
+  }
+
+  completeLearningItem(assignmentId, itemId, answer = {}) {
+    return this.rpc("complete_learning_item", { target_assignment:assignmentId, target_item:itemId, answer });
+  }
+
+  recordCompetencyObservation(assignmentId, outcome, observation) {
+    return this.rpc("record_competency_observation", { target_assignment:assignmentId, outcome, observation });
+  }
+
+  submitCompetencyRecommendation(assignmentId, recommendation, rationale = null) {
+    return this.rpc("submit_competency_recommendation", { target_assignment:assignmentId, recommendation, rationale });
+  }
+
+  decideCompetency(assignmentId, decision, notes = null) {
+    return this.rpc("decide_competency", { target_assignment:assignmentId, decision, notes });
   }
 
   createOrganization(input) {
