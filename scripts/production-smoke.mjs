@@ -3,7 +3,7 @@ import { mkdir } from "node:fs/promises";
 import { chromium } from "playwright";
 
 const baseUrl = process.env.SKILLWARD_PRODUCTION_URL || "https://skillwardtraining.com";
-const expectedAssetVersion = process.env.SKILLWARD_EXPECTED_RELEASE || "20260823-auth-entry-1";
+const expectedAssetVersion = process.env.SKILLWARD_EXPECTED_RELEASE || "20260824-platform-switch-1";
 const artifactsDirectory = "artifacts";
 
 const delay = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));

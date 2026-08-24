@@ -71,7 +71,7 @@ test("authenticated REST-style context loads its permitted profile, membership a
 test("organisation staff embeds the staff user relationship without manager ambiguity", () => {
   assert.match(database, /user_profiles!organization_staff_profiles_user_id_fkey\(\*\)/);
   assert.doesNotMatch(database, /organization_staff_profiles[^\n]+"\*, user_profiles\(\*\)"/);
-  assert.match(appIndex, /auth-bundle\.js\?v=20260823-auth-entry-1/);
+  assert.match(appIndex, /auth-bundle\.js\?v=20260824-platform-switch-1/);
 });
 
 test("training assignment embeds use the tenant-safe pathway relationship", () => {
@@ -150,7 +150,7 @@ test("recovery links preserve the active deployment path without hardcoding GitH
 test("production recovers legacy cached callback paths before relative assets load", () => {
   assert.match(index, /location\.pathname\.startsWith\("\/skillward-training\/"\)/);
   assert.match(index, /location\.replace\(`\/app\/\$\{location\.search\}\$\{location\.hash\}`\)/);
-  assert.match(appIndex, /\.\.\/app\.js\?v=20260823-auth-entry-1/);
+  assert.match(appIndex, /\.\.\/app\.js\?v=20260824-platform-switch-1/);
   assert.ok(index.indexOf("location.replace") < index.indexOf("marketing.css"), "legacy callback redirects before public assets load");
 });
 
@@ -163,6 +163,16 @@ test("multi-organisation workspace switching never derives authorization from br
   for (const text of ["organizationWorkspace", "switchOrganization", "organization_id", "Each workspace has separate facilities, departments and records"]) assert.match(app + auth + database, new RegExp(text));
   assert.doesNotMatch(auth, /user_metadata|raw_user_meta_data|localStorage/);
   assert.match(database, /memberships\.find\(item => item\.organization_id === requestedOrganizationId\)/);
+});
+
+test("platform administrators can explicitly switch out of an organisation workspace", () => {
+  assert.match(auth, /PLATFORM_WORKSPACE_ID = "__skillward_platform__"/);
+  assert.match(auth, /organizationId === PLATFORM_WORKSPACE_ID/);
+  assert.match(auth, /memberships: \[\]/);
+  assert.match(auth, /destination: organizationId === PLATFORM_WORKSPACE_ID \? "platform" : "organization"/);
+  assert.match(app, /SkillWardServices\?\.PLATFORM_WORKSPACE_ID/);
+  assert.match(app, /authService\.switchOrganization\(event\.target\.value\)/);
+  assert.doesNotMatch(app, /event\.target\.value \? await authService\.switchOrganization/);
 });
 
 test("database context selects only an active requested membership", async () => {

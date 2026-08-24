@@ -1028,7 +1028,8 @@ function renderEducatorWorkspace(context) {
 }
 
 function organizationSwitcher(context) {
-  const platformOption = context.platformAdministrator?.is_active ? '<option value="">SkillWard Platform Administration</option>' : "";
+  const platformWorkspaceId = globalThis.SkillWardServices?.PLATFORM_WORKSPACE_ID || "__skillward_platform__";
+  const platformOption = context.platformAdministrator?.is_active ? `<option value="${platformWorkspaceId}">SkillWard Platform Administration</option>` : "";
   if (context.memberships.length < 2 && !platformOption) return "";
   return `<section class="card organization-switcher"><label><span>Organisation workspace</span><select id="organizationWorkspace">${platformOption}${context.memberships.map(item => `<option value="${escapeHtml(item.organization_id)}" ${item.organization_id === context.organization?.id ? "selected" : ""}>${escapeHtml(item.organizations?.name || "Organisation")} · ${escapeHtml(item.role)}</option>`).join("")}</select></label><small>Each workspace has separate facilities, departments and records.</small></section>`;
 }
@@ -1039,7 +1040,7 @@ function bindAuthenticatedWorkspace(context) {
     state.activeOrganizationId = event.target.value;
     state.selectedDepartment = null;
     saveState();
-    authenticatedContext = event.target.value ? await authService.switchOrganization(event.target.value) : await authService.restore();
+    authenticatedContext = await authService.switchOrganization(event.target.value);
     renderAuthenticatedWorkspace();
   });
   document.getElementById("authenticatedDepartment")?.addEventListener("change", event => { state.selectedDepartment = event.target.value; saveState(); renderAuthenticatedWorkspace(); });
