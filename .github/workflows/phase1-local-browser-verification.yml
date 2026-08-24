@@ -87,6 +87,12 @@ jobs:
           unset SERVICE_ROLE_KEY SECRET_KEY local_service_key
           rm -f "$status_file"
 
+      - name: Verify the real local Auth logout endpoint
+        env:
+          SKILLWARD_LOCAL_API_ENDPOINT: ${{ env.LOCAL_API_ENDPOINT }}
+          SKILLWARD_LOCAL_PUBLIC_KEY: ${{ env.LOCAL_PUBLIC_KEY }}
+        run: node scripts/verify-local-auth-logout.mjs
+
       - name: Serve the authenticated invitation function locally
         shell: bash
         run: |
@@ -118,6 +124,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ env.LOCAL_API_ENDPOINT }}
           SUPABASE_ANON_KEY: ${{ env.LOCAL_PUBLIC_KEY }}
+          SKILLWARD_LOCAL_BROWSER_SESSION_ONLY: "true"
         run: |
           npm run build
           if rg -n 'SUPABASE_SERVICE_ROLE_KEY|service_role|sb_secret_' dist; then

@@ -119,13 +119,16 @@ Deno.serve(async request => {
     if (error) return serviceFailure("AUTH_GET_USER", error, "INVITATION_DELIVERY_FAILED");
     existingConfirmedUser = Boolean(data.user?.email_confirmed_at);
   }
-  for (let page = 1; page <= 10 && !invitedUserId; page += 1) {
-    const { data, error } = await serviceClient.auth.admin.listUsers({ page, perPage: 100 });
-    if (error) return serviceFailure("AUTH_LIST_USERS", error, "INVITATION_DELIVERY_FAILED");
-    const existing = data.users.find(user => user.email?.toLowerCase() === invitation.email.toLowerCase());
-    invitedUserId = existing?.id || null;
-    existingConfirmedUser = Boolean(existing?.email_confirmed_at);
-    if (data.users.length < 100) break;
+  if (!invitedUserId) {
+    const { data: profiles, error } = await serviceClient.from("user_profiles")
+      .select("user_id").ilike("email_display", invitation.email).limit(1);
+    if (error) return serviceFailure("EXISTING_PROFILE_LOOKUP", error, "INVITATION_DELIVERY_FAILED");
+    invitedUserId = profiles?.[0]?.user_id || null;
+    if (invitedUserId) {
+      const { data, error: userError } = await serviceClient.auth.admin.getUserById(invitedUserId);
+      if (userError) return serviceFailure("AUTH_GET_PROFILE_USER", userError, "INVITATION_DELIVERY_FAILED");
+      existingConfirmedUser = Boolean(data.user?.email_confirmed_at);
+    }
   }
 
   const redirectTo = invitationRedirect();

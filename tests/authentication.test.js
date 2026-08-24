@@ -7,6 +7,7 @@ const app = read("app.js"), auth = read("src/auth-service.js"), database = read(
 const recoverySource = read("src/recovery-service.js");
 const invitationSource = read("src/invitation-service.js");
 const invitationFunction = read("supabase/functions/invite-organization-member/index.ts");
+const supabaseClient = read("src/supabase-client.js");
 const authMigration = read("supabase/migrations/20260823210000_authentication_entry_rebuild.sql");
 const index = read("index.html");
 const appIndex = read("app/index.html");
@@ -76,6 +77,14 @@ test("organisation staff embeds the staff user relationship without manager ambi
 test("training assignment embeds use the tenant-safe pathway relationship", () => {
   assert.match(database, /training_pathways!assignments_pathway_org_fk\(\*\)/);
   assert.doesNotMatch(database, /training_assignments[^\n]+training_pathways\(\*\)/);
+});
+
+test("local browser logout isolation is explicit, loopback-only and independently probed", () => {
+  assert.match(supabaseClient, /config\.localBrowserSessionOnly === true/);
+  assert.match(supabaseClient, /\["localhost", "127\.0\.0\.1", "::1"\]/);
+  assert.match(supabaseClient, /requestUrl\.pathname === "\/auth\/v1\/logout"/);
+  assert.match(read("scripts/verify-local-auth-logout.mjs"), /Verified real local Auth logout endpoint/);
+  assert.match(read(".github\/workflows\/phase1-local-browser-verification.yml"), /SKILLWARD_LOCAL_BROWSER_SESSION_ONLY: "true"/);
 });
 
 test("account blocking, recovery, restoration and safe diagnostics are implemented", () => {

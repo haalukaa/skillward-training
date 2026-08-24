@@ -16,7 +16,8 @@ await build({ entryPoints:["src/auth-service.js"], bundle:true, minify:true, for
 
 const browserConfig = {
   supabaseUrl: process.env.SUPABASE_URL?.trim() || "",
-  supabaseAnonKey: process.env.SUPABASE_ANON_KEY?.trim() || ""
+  supabaseAnonKey: process.env.SUPABASE_ANON_KEY?.trim() || "",
+  localBrowserSessionOnly: process.env.SKILLWARD_LOCAL_BROWSER_SESSION_ONLY === "true"
 };
 await writeFile(
   "dist/runtime-config.js",
