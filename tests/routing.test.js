@@ -79,9 +79,10 @@ test("legacy learner and trainer sessions remain compatible", () => {
   assert.match(session("trainer").html, /PCA Trainer Workspace/);
 });
 
-test("landing content and mobile full-name field remain present", () => {
+test("real-user entry is direct while Guided Demo remains a separate route", () => {
   const html = session(null).html;
-  assert.match(html, /Build Your Confidence/); assert.match(html, /Before Your First Shift/); assert.match(html, /hero-motion/); assert.match(html, /Get Started/); assert.match(html, /login-flip/); assert.match(html, /id="nameInput" type="text"/);
+  assert.match(html, /Sign in to your SkillWard workspace/); assert.match(html, /id="emailInput"/); assert.match(html, /id="passwordInput"/); assert.match(html, /Forgot Password/); assert.match(html, /href="\/demo\/"/);
+  assert.doesNotMatch(html, /Choose your sector|Enter your workspace|Get Started|id="roleInput"/);
 });
 
 test("authenticated navigation retains desktop and mobile destinations", () => {
@@ -149,6 +150,6 @@ test("Canvas workspace assets use a production cache version", () => {
   const appIndexSource = fs.readFileSync(path.join(root, "app", "index.html"), "utf8");
   assert.match(indexSource, /marketing\.css\?v=20260824-canvas-production-1/);
   assert.match(indexSource, /marketing\.js\?v=20260824-canvas-production-1/);
-  assert.match(appIndexSource, /\.\.\/styles\.css\?v=20260824-canvas-production-1/);
-  assert.match(appIndexSource, /\.\.\/app\.js\?v=20260824-canvas-production-1/);
+  assert.match(appIndexSource, /\.\.\/styles\.css\?v=20260823-auth-entry-1/);
+  assert.match(appIndexSource, /\.\.\/app\.js\?v=20260823-auth-entry-1/);
 });

@@ -2240,3 +2240,95 @@ th {
   .authenticated-shell .profile-button strong, .authenticated-shell .profile-button b, .authenticated-shell .role-pill { display: none; }
   .profile-menu { position: fixed; top: 62px; right: 10px; }
 }
+
+/* Authentication entry v2 */
+.auth-entry-v2 {
+  width: min(1120px, 100%);
+  margin: 24px auto 56px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(360px, .85fr);
+  gap: 32px;
+  align-items: stretch;
+}
+.auth-entry-story {
+  position: relative;
+  overflow: hidden;
+  min-height: 610px;
+  padding: clamp(34px, 6vw, 72px);
+  border-radius: 28px;
+  color: white;
+  background: radial-gradient(circle at 78% 18%, rgba(32,184,173,.28), transparent 34%), linear-gradient(145deg, #0b2938, #0c4655);
+  box-shadow: 0 30px 70px rgba(11,47,62,.22);
+}
+.auth-entry-story::after {
+  content: "";
+  position: absolute;
+  width: 330px;
+  height: 330px;
+  right: -120px;
+  bottom: -160px;
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 50%;
+  box-shadow: 0 0 0 46px rgba(255,255,255,.03), 0 0 0 92px rgba(255,255,255,.025);
+}
+.auth-entry-mark { width: 58px; margin-bottom: 48px; }
+.auth-entry-mark svg { width: 100%; fill: none; stroke: #54d3c7; stroke-width: 2.8; }
+.auth-entry-story .eyebrow { color: #8de9df; }
+.auth-entry-story h2 { max-width: 640px; margin: 14px 0 18px; font-size: clamp(2.6rem, 5vw, 4.6rem); line-height: .98; letter-spacing: -.055em; }
+.auth-entry-story > p { max-width: 600px; color: rgba(255,255,255,.76); font-size: 1.05rem; line-height: 1.7; }
+.auth-entry-assurance { display: grid; gap: 14px; padding: 0; margin: 38px 0; list-style: none; }
+.auth-entry-assurance li { display: flex; align-items: center; gap: 13px; color: rgba(255,255,255,.9); font-weight: 700; }
+.auth-entry-assurance span { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; color: #0b4051; background: #bff5e7; }
+.auth-demo-link { position: relative; z-index: 1; display: grid; gap: 5px; max-width: 520px; padding: 18px 20px; border: 1px solid rgba(255,255,255,.18); border-radius: 16px; color: white; text-decoration: none; background: rgba(255,255,255,.08); }
+.auth-demo-link span { color: rgba(255,255,255,.7); font-size: .82rem; line-height: 1.5; }
+.direct-login-card { align-self: center; padding: clamp(28px, 4vw, 46px); border-radius: 24px; }
+.direct-login-card h2 { margin: 8px 0 6px; font-size: 2rem; }
+.direct-login-card .access-form { margin-top: 25px; }
+.auth-security-note { margin: 26px 0 0; padding-top: 20px; border-top: 1px solid var(--border); color: var(--muted); font-size: .76rem; line-height: 1.5; }
+.auth-status-success { color: #08705f; background: #e6faf4; border-radius: 10px; padding: 10px 12px; }
+
+.guided-demo-entry { width: min(1120px, 100%); margin: 24px auto 60px; }
+.guided-demo-entry > header { max-width: 760px; margin: 0 auto 34px; text-align: center; }
+.guided-demo-entry > header h2 { margin: 10px 0; font-size: clamp(2.3rem, 5vw, 4rem); }
+.guided-demo-sector-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.guided-demo-sector { min-height: 290px; display: flex; flex-direction: column; align-items: flex-start; text-align: left; cursor: pointer; border: 1px solid var(--border); transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease; }
+.guided-demo-sector:hover, .guided-demo-sector:focus-visible { transform: translateY(-4px); border-color: var(--teal); box-shadow: 0 18px 40px rgba(11,64,81,.14); }
+.guided-demo-sector > span { color: var(--teal); font-size: .72rem; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
+.guided-demo-sector strong { margin: 34px 0 12px; font-size: 1.35rem; }
+.guided-demo-sector small { color: var(--muted); line-height: 1.6; }
+.guided-demo-sector b { margin-top: auto; color: var(--teal-dark); }
+.guided-demo-role { width: min(560px, 100%); margin: 0 auto; }
+.guided-demo-exit { display: block; margin: 28px auto; text-align: center; color: var(--teal-dark); font-weight: 800; }
+
+.workspace-entry-card, .invitation-setup, .access-state-card { width: min(720px, 100%); margin: 48px auto 70px; padding: clamp(28px, 5vw, 52px); }
+.workspace-entry-card h2, .invitation-setup h2, .access-state-card h2 { margin: 8px 0 12px; font-size: clamp(2rem, 4vw, 3.2rem); }
+.entry-workspace-choice { width: 100%; text-align: left; }
+.entry-workspace-choice span { display: block; color: var(--teal); font-size: .68rem; font-weight: 900; text-transform: uppercase; letter-spacing: .1em; }
+.invitation-scope { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 26px 0; }
+.invitation-scope div { padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-soft); }
+.invitation-scope dt { color: var(--muted); font-size: .7rem; font-weight: 800; text-transform: uppercase; }
+.invitation-scope dd { margin: 5px 0 0; font-weight: 800; }
+.demo-session-controls { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; align-items: center; }
+.demo-session-controls .link-button { color: var(--teal-dark); font-size: .74rem; }
+.profile-signout-all { width: 100%; margin-top: 18px; color: #9d2d2d; }
+
+@media (max-width: 900px) {
+  .auth-entry-v2 { grid-template-columns: 1fr; margin-top: 4px; }
+  .auth-entry-story { min-height: auto; }
+  .guided-demo-sector-grid { grid-template-columns: 1fr; }
+  .guided-demo-sector { min-height: 210px; }
+}
+
+@media (max-width: 560px) {
+  .auth-entry-v2 { gap: 14px; margin-bottom: 28px; }
+  .auth-entry-story { padding: 28px 22px; border-radius: 20px; }
+  .auth-entry-mark { width: 44px; margin-bottom: 28px; }
+  .auth-entry-story h2 { font-size: 2.55rem; }
+  .auth-entry-assurance { margin: 24px 0; }
+  .direct-login-card { padding: 24px 20px; border-radius: 18px; }
+  .guided-demo-entry > header { text-align: left; }
+  .guided-demo-sector { min-height: 190px; }
+  .invitation-scope { grid-template-columns: 1fr; }
+  .workspace-entry-card, .invitation-setup, .access-state-card { margin-top: 18px; padding: 24px 20px; }
+  .demo-session-controls { justify-content: flex-start; }
+}

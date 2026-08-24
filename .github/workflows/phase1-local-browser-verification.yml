@@ -1,0 +1,210 @@
+name: Phase 1 isolated local browser verification
+
+on:
+  pull_request:
+    paths:
+      - "app/**"
+      - "src/**"
+      - "supabase/**"
+      - "tests/**"
+      - "scripts/**"
+      - "app.js"
+      - "styles.css"
+      - "package.json"
+      - "package-lock.json"
+      - "playwright.local.config.mjs"
+      - ".github/workflows/phase1-local-browser-verification.yml"
+      - ".github/workflows/supabase-database.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Local Supabase Auth, RLS, Mailpit, desktop, and 390x844
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Check out the pull request
+        uses: actions/checkout@v4
+
+      - name: Install pinned Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.115.0
+
+      - name: Inspect installed CLI and discover every help command
+        run: node scripts/inspect-supabase-cli-help.mjs
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install pinned application and browser dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Validate migrations and repository structure
+        run: python3 scripts/validate_database_foundation.py
+
+      - name: Scan tracked files for committed secrets
+        run: bash scripts/scan_secrets.sh
+
+      - name: Start the complete isolated local Supabase stack
+        shell: bash
+        run: |
+          set -euo pipefail
+          startup_log="$RUNNER_TEMP/skillward-supabase-start.log"
+          umask 077
+          trap 'rm -f "$startup_log"' EXIT
+          if supabase start > "$startup_log" 2>&1; then
+            echo 'Isolated local Supabase stack started without logging generated keys.'
+            exit 0
+          fi
+          sed -E \
+            -e 's/(│ (Publishable|Secret) Key │ )[^│]+/\1[REDACTED_LOCAL_KEY] /g' \
+            -e 's/eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}/[REDACTED_JWT]/g' \
+            -e 's/(sb_(secret|publishable))_[A-Za-z0-9_-]+/[REDACTED_KEY]/g' \
+            -e 's/[A-Fa-f0-9]{64}/[REDACTED_LOCAL_KEY]/g' \
+            "$startup_log" >&2
+          exit 1
+
+      - name: Apply every migration and fictional SQL seed
+        run: supabase db reset
+
+      - name: Run every database and RLS assertion
+        run: supabase test db
+
+      - name: Create login-capable fictional users through local Auth
+        shell: bash
+        run: |
+          set -euo pipefail
+          status_file="$RUNNER_TEMP/skillward-supabase-status.env"
+          umask 077
+          supabase status --output env > "$status_file"
+          source "$status_file"
+          local_api_url="${API_URL:-}"
+          local_anon_key="${ANON_KEY:-${PUBLISHABLE_KEY:-}}"
+          local_service_key="${SERVICE_ROLE_KEY:-${SECRET_KEY:-}}"
+          : "${local_api_url:?Local API URL unavailable}"
+          : "${local_anon_key:?Local anon or publishable key unavailable}"
+          : "${local_service_key:?Local service-role or secret key unavailable}"
+          echo "::add-mask::$local_service_key"
+          SKILLWARD_LOCAL_API_ENDPOINT="$local_api_url" \
+          SKILLWARD_LOCAL_SETUP_KEY="$local_service_key" \
+          node scripts/setup-local-auth-fixtures.mjs
+          {
+            echo "LOCAL_API_ENDPOINT=$local_api_url"
+            echo "LOCAL_PUBLIC_KEY=$local_anon_key"
+          } >> "$GITHUB_ENV"
+          unset SERVICE_ROLE_KEY SECRET_KEY local_service_key
+          rm -f "$status_file"
+
+      - name: Verify the real local Auth logout endpoint
+        env:
+          SKILLWARD_LOCAL_API_ENDPOINT: ${{ env.LOCAL_API_ENDPOINT }}
+          SKILLWARD_LOCAL_PUBLIC_KEY: ${{ env.LOCAL_PUBLIC_KEY }}
+        run: node scripts/verify-local-auth-logout.mjs
+
+      - name: Serve the authenticated invitation function locally
+        shell: bash
+        run: |
+          set -euo pipefail
+          function_env="$RUNNER_TEMP/skillward-functions.env"
+          function_log="$RUNNER_TEMP/skillward-functions.log"
+          umask 077
+          printf '%s\n' \
+            'PUBLIC_SITE_ORIGIN=http://127.0.0.1:4173' \
+            'PUBLIC_SITE_URL=http://127.0.0.1:4173' > "$function_env"
+          nohup supabase functions serve invite-organization-member \
+            --env-file "$function_env" > "$function_log" 2>&1 &
+          for attempt in $(seq 1 60); do
+            if curl --silent --fail --request OPTIONS \
+              --header 'Origin: http://127.0.0.1:4173' \
+              --header 'Access-Control-Request-Method: POST' \
+              "$LOCAL_API_ENDPOINT/functions/v1/invite-organization-member" >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo 'Local invitation function did not become healthy.' >&2
+          exit 1
+
+      - name: Run all application tests
+        run: npm test
+
+      - name: Build with only the local URL and anon key
+        env:
+          SUPABASE_URL: ${{ env.LOCAL_API_ENDPOINT }}
+          SUPABASE_ANON_KEY: ${{ env.LOCAL_PUBLIC_KEY }}
+          SKILLWARD_LOCAL_BROWSER_SESSION_ONLY: "true"
+        run: |
+          npm run build
+          if rg -n 'SUPABASE_SERVICE_ROLE_KEY|service_role|sb_secret_' dist; then
+            echo 'Privileged Supabase material was found in the browser build.' >&2
+            exit 1
+          fi
+
+      - name: Start the local SkillWard production build
+        shell: bash
+        run: |
+          set -euo pipefail
+          nohup python3 -m http.server 4173 --bind 127.0.0.1 \
+            --directory dist > "$RUNNER_TEMP/skillward-web.log" 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail http://127.0.0.1:4173/app/ >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo 'Local SkillWard build did not become healthy.' >&2
+          exit 1
+
+      - name: Install pinned Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run desktop and exact 390x844 end-to-end verification
+        env:
+          SKILLWARD_BASE_URL: http://127.0.0.1:4173
+          MAILPIT_URL: http://127.0.0.1:54324
+        run: npm run test:e2e:local
+
+      - name: Verify fictional screenshot evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(find artifacts/phase1-local -maxdepth 1 -name '*.png' | wc -l)" -ge 20
+          if rg -i -l 'skillwardtraining\.com|supabase\.co' artifacts/phase1-local; then
+            echo 'Unexpected hosted or production text found in screenshot artifacts.' >&2
+            exit 1
+          fi
+
+      - name: Upload fictional desktop and mobile screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: skillward-phase-1-local-browser-screenshots
+          path: |
+            artifacts/phase1-local/*.png
+            test-results/**/*.png
+            test-results/**/error-context.md
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Show non-sensitive local diagnostics on failure
+        if: failure()
+        shell: bash
+        run: |
+          docker ps --format 'table {{.Names}}\t{{.Status}}'
+          curl --silent --show-error http://127.0.0.1:54324/api/v1/info || true
+          if test -f "$RUNNER_TEMP/skillward-functions.log"; then
+            tail -200 "$RUNNER_TEMP/skillward-functions.log" \
+              | sed -E 's/eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}/[REDACTED_JWT]/g; s/(sb_secret|sb_publishable)_[A-Za-z0-9_-]+/[REDACTED_KEY]/g'
+          fi
+
+      - name: Stop isolated local Supabase services
+        if: always()
+        run: supabase stop --no-backup

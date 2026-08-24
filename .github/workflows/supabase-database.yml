@@ -32,13 +32,13 @@ jobs:
       - name: Install the officially supported Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.115.0
 
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
 
       - name: Install application dependencies
-        run: npm install --ignore-scripts
+        run: npm ci --ignore-scripts
 
       - name: Validate migration and repository structure
         run: python3 scripts/validate_database_foundation.py
@@ -47,7 +47,23 @@ jobs:
         run: bash scripts/scan_secrets.sh
 
       - name: Start local Supabase services
-        run: supabase start
+        shell: bash
+        run: |
+          set -euo pipefail
+          startup_log="$RUNNER_TEMP/skillward-supabase-start.log"
+          umask 077
+          trap 'rm -f "$startup_log"' EXIT
+          if supabase start > "$startup_log" 2>&1; then
+            echo 'Local Supabase stack started without logging generated keys.'
+            exit 0
+          fi
+          sed -E \
+            -e 's/(│ (Publishable|Secret) Key │ )[^│]+/\1[REDACTED_LOCAL_KEY] /g' \
+            -e 's/eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}/[REDACTED_JWT]/g' \
+            -e 's/(sb_(secret|publishable))_[A-Za-z0-9_-]+/[REDACTED_KEY]/g' \
+            -e 's/[A-Fa-f0-9]{64}/[REDACTED_LOCAL_KEY]/g' \
+            "$startup_log" >&2
+          exit 1
 
       - name: Apply clean migrations and test-only development seed
         run: supabase db reset
@@ -63,7 +79,7 @@ jobs:
 
       - name: Show local service status on failure
         if: failure()
-        run: supabase status || true
+        run: docker ps --format 'table {{.Names}}\t{{.Status}}'
 
       - name: Stop local Supabase services
         if: always()

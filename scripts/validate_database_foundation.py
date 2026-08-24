@@ -21,7 +21,8 @@ TABLES = (
     "skillward_administrators", "support_access_sessions",
     "permission_roles", "organization_role_profiles", "learning_pathways",
     "learning_pathway_versions", "learning_modules",
-    "learning_module_items", "content_audit_events",
+    "learning_module_items", "content_audit_events", "skillward_feature_flags",
+    "organization_auth_settings", "authentication_audit_events",
 )
 
 files = sorted(MIGRATIONS.glob("*.sql"))
@@ -33,7 +34,10 @@ sql = "\n".join(path.read_text(encoding="utf-8").lower() for path in files)
 
 for table in TABLES:
     assert f"create table public.{table}" in sql, f"Missing table: {table}"
-    assert f"'{table}'" in sql and "enable row level security" in sql, (
+    assert (
+        f"'{table}'" in sql
+        or f"alter table public.{table} enable row level security" in sql
+    ) and "enable row level security" in sql, (
         f"Missing RLS registration: {table}"
     )
 
@@ -59,6 +63,16 @@ shared_domain_plan = re.search(
 )
 assert shared_domain_plan and int(shared_domain_plan.group(1)) == 40, (
     "Shared-domain pgTAP plan must contain exactly 40 assertions"
+)
+
+authentication_test_sql = (
+    ROOT / "supabase" / "tests" / "authentication_entry.test.sql"
+).read_text(encoding="utf-8")
+authentication_plan = re.search(
+    r"select\s+plan\((\d+)\)", authentication_test_sql, re.IGNORECASE
+)
+assert authentication_plan and int(authentication_plan.group(1)) == 41, (
+    "Authentication-entry pgTAP plan must contain exactly 41 assertions"
 )
 
 env_lines = (ROOT / ".env.example").read_text(encoding="utf-8").splitlines()
