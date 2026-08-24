@@ -2367,3 +2367,6 @@ th {
   .pathway-library-row .status-chip, .module-item-row .status-chip { grid-column: 2; justify-self: start; }
   .authoring-actions .btn { width: 100%; }
 }
+.phase3-layout{display:grid;grid-template-columns:minmax(260px,360px) minmax(0,1fr);gap:1rem;align-items:start}.phase3-register{display:grid;gap:1rem}.phase3-assignment,.phase3-learning-card,.phase3-item{display:grid;gap:.75rem}.phase3-assignment{background:#fff;border:1px solid var(--border);border-radius:18px;padding:1.1rem;grid-template-columns:minmax(0,1fr) minmax(260px,.7fr)}.phase3-evidence{display:grid;gap:.55rem}.phase3-item{border-top:1px solid var(--border);padding-top:.8rem}.phase3-item select{max-width:100%}
+@media(max-width:900px){.phase3-layout,.phase3-assignment{grid-template-columns:1fr}}
+@media(max-width:560px){.phase3-assignment{padding:.85rem}.phase3-assignment .btn,.phase3-learning-card .btn{width:100%}}

@@ -71,7 +71,7 @@ test("authenticated REST-style context loads its permitted profile, membership a
 test("organisation staff embeds the staff user relationship without manager ambiguity", () => {
   assert.match(database, /user_profiles!organization_staff_profiles_user_id_fkey\(\*\)/);
   assert.doesNotMatch(database, /organization_staff_profiles[^\n]+"\*, user_profiles\(\*\)"/);
-  assert.match(appIndex, /auth-bundle\.js\?v=20260824-phase2-authoring-1/);
+  assert.match(appIndex, /auth-bundle\.js\?v=20260824-phase3-competency-1/);
 });
 
 test("training assignment embeds use the tenant-safe pathway relationship", () => {
@@ -150,7 +150,7 @@ test("recovery links preserve the active deployment path without hardcoding GitH
 test("production recovers legacy cached callback paths before relative assets load", () => {
   assert.match(index, /location\.pathname\.startsWith\("\/skillward-training\/"\)/);
   assert.match(index, /location\.replace\(`\/app\/\$\{location\.search\}\$\{location\.hash\}`\)/);
-  assert.match(appIndex, /\.\.\/app\.js\?v=20260824-phase2-authoring-1/);
+  assert.match(appIndex, /\.\.\/app\.js\?v=20260824-phase3-competency-1/);
   assert.ok(index.indexOf("location.replace") < index.indexOf("marketing.css"), "legacy callback redirects before public assets load");
 });
 
