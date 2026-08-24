@@ -113,11 +113,9 @@ for (const [project, accounts] of Object.entries(FIXTURES)) {
 }
 
 const trainingAssignments = [];
-const trainerAssignments = [];
 for (const project of Object.keys(FIXTURES)) {
   const worker = created[project].worker;
   const recovery = created[project].recovery;
-  const trainer = created[project].trainer;
   for (const learner of [worker, recovery]) {
     trainingAssignments.push({
       hospital_id: LOCAL_IDS.alphaFacility,
@@ -130,17 +128,6 @@ for (const project of Object.keys(FIXTURES)) {
       progress_percentage: 25
     });
   }
-  trainerAssignments.push({
-    hospital_id: LOCAL_IDS.alphaFacility,
-    organization_id: LOCAL_IDS.alphaOrganization,
-    facility_id: LOCAL_IDS.alphaFacility,
-    department_id: LOCAL_IDS.alphaDepartment,
-    trainer_user_id: trainer.id,
-    trainee_user_id: worker.id,
-    trainer_role: "PCA Trainer",
-    trainee_role: "PCA",
-    is_active: true
-  });
 }
 function sqlValue(value) {
   if (value === null || value === undefined) return "null";
@@ -173,10 +160,6 @@ const sql = [
     "hospital_id", "organization_id", "facility_id", "department_id", "user_id",
     "pathway_id", "status", "progress_percentage"
   ], trainingAssignments),
-  insertRows("trainer_assignments", [
-    "hospital_id", "organization_id", "facility_id", "department_id", "trainer_user_id",
-    "trainee_user_id", "trainer_role", "trainee_role", "is_active"
-  ], trainerAssignments),
   `update public.organization_auth_settings set idle_timeout_minutes = 5 where organization_id = '${LOCAL_IDS.alphaOrganization}';`,
   "commit;"
 ].join("\n");
