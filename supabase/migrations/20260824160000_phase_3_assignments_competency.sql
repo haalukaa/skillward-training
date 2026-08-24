@@ -7,6 +7,12 @@ create type public.learning_assignment_status as enum (
 create type public.learning_item_progress_status as enum ('Not Started','In Progress','Completed','Failed');
 create type public.competency_decision as enum ('Competent','Reassessment Required');
 
+-- Phase 3 progress rows retain their tenant key in every content reference.
+alter table public.learning_modules
+  add constraint learning_modules_id_organization_key unique(id,organization_id);
+alter table public.learning_module_items
+  add constraint learning_module_items_id_organization_key unique(id,organization_id);
+
 create table public.learning_assignments (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id),
