@@ -57,8 +57,8 @@ values
   ('d1000000-0000-0000-0000-000000000002','d0000000-0000-0000-0000-000000000002',1,'Draft','Blueprint draft');
 insert into public.learning_modules(id,pathway_id,pathway_version_id,title,position)
 values ('d2000000-0000-0000-0000-000000000001','d0000000-0000-0000-0000-000000000001','d1000000-0000-0000-0000-000000000001','Blueprint orientation',0);
-insert into public.learning_module_items(id,pathway_id,pathway_version_id,module_id,item_type,title,position,completion_requirement)
-values ('d3000000-0000-0000-0000-000000000001','d0000000-0000-0000-0000-000000000001','d1000000-0000-0000-0000-000000000001','d2000000-0000-0000-0000-000000000001','Page','Blueprint introduction',0,'View');
+insert into public.learning_module_items(id,pathway_id,pathway_version_id,module_id,item_type,title,position,completion_requirement,content)
+values ('d3000000-0000-0000-0000-000000000001','d0000000-0000-0000-0000-000000000001','d1000000-0000-0000-0000-000000000001','d2000000-0000-0000-0000-000000000001','Page','Blueprint introduction',0,'View','{"body":"Introduction"}'::jsonb);
 update public.learning_pathway_versions
 set lifecycle='Published',review_submitted_at=now(),approved_at=now(),published_at=now()
 where id='d1000000-0000-0000-0000-000000000001';
@@ -79,11 +79,11 @@ values
   ('a5200000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000001','a5000000-0000-0000-0000-000000000001','a5100000-0000-0000-0000-000000000001','Alpha draft module',0),
   ('a5200000-0000-0000-0000-000000000002','a0000000-0000-0000-0000-000000000001','a5000000-0000-0000-0000-000000000001','a5100000-0000-0000-0000-000000000002','Alpha published module',0),
   ('b5200000-0000-0000-0000-000000000001','b0000000-0000-0000-0000-000000000001','b5000000-0000-0000-0000-000000000001','b5100000-0000-0000-0000-000000000001','Beta published module',0);
-insert into public.learning_module_items(id,organization_id,pathway_id,pathway_version_id,module_id,item_type,title,position,completion_requirement)
+insert into public.learning_module_items(id,organization_id,pathway_id,pathway_version_id,module_id,item_type,title,position,completion_requirement,content,configuration)
 values
-  ('a5300000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000001','a5000000-0000-0000-0000-000000000001','a5100000-0000-0000-0000-000000000001','a5200000-0000-0000-0000-000000000001','Page','Alpha draft page',0,'View'),
-  ('a5300000-0000-0000-0000-000000000002','a0000000-0000-0000-0000-000000000001','a5000000-0000-0000-0000-000000000001','a5100000-0000-0000-0000-000000000002','a5200000-0000-0000-0000-000000000002','Quiz','Alpha knowledge check',0,'Minimum Score'),
-  ('b5300000-0000-0000-0000-000000000001','b0000000-0000-0000-0000-000000000001','b5000000-0000-0000-0000-000000000001','b5100000-0000-0000-0000-000000000001','b5200000-0000-0000-0000-000000000001','Page','Beta published page',0,'View');
+  ('a5300000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000001','a5000000-0000-0000-0000-000000000001','a5100000-0000-0000-0000-000000000001','a5200000-0000-0000-0000-000000000001','Page','Alpha draft page',0,'View','{"body":"Draft learning"}'::jsonb,'{}'::jsonb),
+  ('a5300000-0000-0000-0000-000000000002','a0000000-0000-0000-0000-000000000001','a5000000-0000-0000-0000-000000000001','a5100000-0000-0000-0000-000000000002','a5200000-0000-0000-0000-000000000002','Quiz','Alpha knowledge check',0,'Minimum Score','{"questions":[{"prompt":"Ready?","options":["Yes","No"],"correctOption":0}]}'::jsonb,'{"passMark":80}'::jsonb),
+  ('b5300000-0000-0000-0000-000000000001','b0000000-0000-0000-0000-000000000001','b5000000-0000-0000-0000-000000000001','b5100000-0000-0000-0000-000000000001','b5200000-0000-0000-0000-000000000001','Page','Beta published page',0,'View','{"body":"Published learning"}'::jsonb,'{}'::jsonb);
 update public.learning_pathway_versions
 set lifecycle='Published',review_submitted_at=now(),approved_at=now(),published_at=now()
 where id in ('a5100000-0000-0000-0000-000000000002','b5100000-0000-0000-0000-000000000001');

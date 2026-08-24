@@ -133,13 +133,23 @@ export class SkillWardDatabaseService {
       ? await this.optionalQuery("organization_invitations", q => q.eq("organization_id", organizationId).order("created_at", { ascending: false })) : [];
     const learningPathways = administrative
       ? await this.optionalQuery("learning_pathways", q => q.eq("organization_id", organizationId).order("updated_at", { ascending: false })) : [];
+    const learningPathwayIds = learningPathways.map(item => item.id);
+    const learningPathwayVersions = learningPathwayIds.length
+      ? await this.optionalQuery("learning_pathway_versions", q => q.in("pathway_id", learningPathwayIds).order("version_number", { ascending: false })) : [];
+    const learningVersionIds = learningPathwayVersions.map(item => item.id);
+    const learningModules = learningVersionIds.length
+      ? await this.optionalQuery("learning_modules", q => q.in("pathway_version_id", learningVersionIds).order("position", { ascending: true })) : [];
+    const learningModuleItems = learningVersionIds.length
+      ? await this.optionalQuery("learning_module_items", q => q.in("pathway_version_id", learningVersionIds).order("position", { ascending: true })) : [];
 
     return {
       user, profile, platformAdministrator, memberships, membership, organization,
       facilities, facilityAssignments, departments: departmentAssignments,
       departmentAssignments, departmentDetails, trainerAssignments, traineeProfiles,
       trainingAssignments, moduleProgress, competencyRecords, practicalObservations,
-      signoffRecommendations, notifications, organizationStaff, organizationInvitations, learningPathways, authSettings, featureFlags
+      signoffRecommendations, notifications, organizationStaff, organizationInvitations,
+      learningPathways, learningPathwayVersions, learningModules, learningModuleItems,
+      authSettings, featureFlags
     };
   }
 
@@ -173,6 +183,45 @@ export class SkillWardDatabaseService {
     const { data, error } = await this.client.from(table).update(values).eq("id", id).select("*").single();
     if (error) throw this.contextError(error);
     return data;
+  }
+
+  async rpc(name, args) {
+    const { data, error } = await this.client.rpc(name, args);
+    if (error) throw this.contextError(error, name);
+    return data;
+  }
+
+  createLearningPathway(context, input) {
+    return this.rpc("create_learning_pathway_draft", {
+      target_organization: context.organization.id,
+      pathway_code: input.code.trim().toUpperCase(), pathway_title: input.title.trim(),
+      pathway_summary: input.summary?.trim() || null, version_description: input.description?.trim() || null,
+      objectives: input.objectives || [], renewal_days: input.renewalDays || null
+    });
+  }
+
+  addLearningModule(input) {
+    return this.rpc("add_learning_module", {
+      target_version: input.versionId, module_title: input.title.trim(),
+      module_description: input.description?.trim() || null,
+      required: input.required !== false, sequential_completion: Boolean(input.sequential)
+    });
+  }
+
+  addLearningModuleItem(input) {
+    return this.rpc("add_learning_module_item", {
+      target_module: input.moduleId, content_type: input.type, item_title: input.title.trim(),
+      completion: input.completion, item_content: input.content || {},
+      item_configuration: input.configuration || {}, required: input.required !== false
+    });
+  }
+
+  createLearningPathwayVersion(pathwayId) {
+    return this.rpc("create_learning_pathway_version", { target_pathway: pathwayId });
+  }
+
+  transitionLearningPathwayVersion(versionId, action) {
+    return this.rpc("transition_learning_pathway_version", { target_version: versionId, requested_action: action });
   }
 
   createOrganization(input) {
