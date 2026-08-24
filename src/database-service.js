@@ -114,9 +114,9 @@ export class SkillWardDatabaseService {
     const traineeProfiles = traineeIds.length ? await this.query("user_profiles", q => q.in("user_id", traineeIds)) : [];
     const workerRoles = ["PCA", "Cleaner", "Support Worker"];
     const trainingAssignments = workerRoles.includes(membership.role)
-      ? await this.query("training_assignments", q => q.eq("organization_id", organizationId).eq("user_id", user.id), "*, training_pathways(*)")
+      ? await this.query("training_assignments", q => q.eq("organization_id", organizationId).eq("user_id", user.id), "*, training_pathways!assignments_pathway_org_fk(*)")
       : traineeIds.length
-        ? await this.query("training_assignments", q => q.eq("organization_id", organizationId).in("user_id", traineeIds), "*, training_pathways(*)") : [];
+        ? await this.query("training_assignments", q => q.eq("organization_id", organizationId).in("user_id", traineeIds), "*, training_pathways!assignments_pathway_org_fk(*)") : [];
     const assignmentIds = trainingAssignments.map(item => item.id);
     const moduleProgress = assignmentIds.length ? await this.query("module_progress", q => q.eq("organization_id", organizationId).in("training_assignment_id", assignmentIds)) : [];
     const competencyRecords = workerRoles.includes(membership.role) ? await this.query("competency_records", q => q.eq("organization_id", organizationId).eq("user_id", user.id)) : [];

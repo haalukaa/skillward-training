@@ -73,6 +73,11 @@ test("organisation staff embeds the staff user relationship without manager ambi
   assert.match(appIndex, /auth-bundle\.js\?v=20260823-auth-entry-1/);
 });
 
+test("training assignment embeds use the tenant-safe pathway relationship", () => {
+  assert.match(database, /training_pathways!assignments_pathway_org_fk\(\*\)/);
+  assert.doesNotMatch(database, /training_assignments[^\n]+training_pathways\(\*\)/);
+});
+
 test("account blocking, recovery, restoration and safe diagnostics are implemented", () => {
   assert.match(database, /error\?\.code === "42501"/);
   assert.match(database, /CONTEXT_TABLE_PERMISSION/);

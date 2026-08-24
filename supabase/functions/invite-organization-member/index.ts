@@ -10,6 +10,12 @@ const jsonHeaders = {
 };
 const response = (status: number, body: Record<string, unknown>) =>
   new Response(JSON.stringify(body), { status, headers: jsonHeaders });
+const serviceFailure = (stage: string, error: { code?: string } | null | undefined, publicCode: string) => {
+  const safeStage = stage.replace(/[^A-Z0-9_]/gi, "");
+  const safeCode = String(error?.code || "unknown").replace(/[^A-Z0-9_-]/gi, "");
+  console.error(`SkillWard invitation service failure: ${safeStage}:${safeCode}`);
+  return response(502, { error: publicCode });
+};
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function invitationRedirect(): string | undefined {
@@ -110,12 +116,12 @@ Deno.serve(async request => {
   let existingConfirmedUser = false;
   if (invitedUserId) {
     const { data, error } = await serviceClient.auth.admin.getUserById(invitedUserId);
-    if (error) return response(502, { error: "INVITATION_DELIVERY_FAILED" });
+    if (error) return serviceFailure("AUTH_GET_USER", error, "INVITATION_DELIVERY_FAILED");
     existingConfirmedUser = Boolean(data.user?.email_confirmed_at);
   }
   for (let page = 1; page <= 10 && !invitedUserId; page += 1) {
     const { data, error } = await serviceClient.auth.admin.listUsers({ page, perPage: 100 });
-    if (error) return response(502, { error: "INVITATION_DELIVERY_FAILED" });
+    if (error) return serviceFailure("AUTH_LIST_USERS", error, "INVITATION_DELIVERY_FAILED");
     const existing = data.users.find(user => user.email?.toLowerCase() === invitation.email.toLowerCase());
     invitedUserId = existing?.id || null;
     existingConfirmedUser = Boolean(existing?.email_confirmed_at);
@@ -131,20 +137,20 @@ Deno.serve(async request => {
     if (error || !data.user) {
       await serviceClient.from("organization_invitations")
         .update({ invitation_state: "Failed", failure_code: "AUTH_INVITE_FAILED" }).eq("id", invitation.id);
-      return response(502, { error: "INVITATION_DELIVERY_FAILED" });
+      return serviceFailure("AUTH_INVITE", error, "INVITATION_DELIVERY_FAILED");
     }
     invitedUserId = data.user.id;
   } else if (action === "resend" && !existingConfirmedUser) {
     const { error } = await serviceClient.auth.resend({
       type: "signup", email: invitation.email, options: { emailRedirectTo: redirectTo }
     });
-    if (error) return response(502, { error: "INVITATION_DELIVERY_FAILED" });
+    if (error) return serviceFailure("AUTH_RESEND", error, "INVITATION_DELIVERY_FAILED");
   } else if (existingConfirmedUser) {
     const { error } = await serviceClient.auth.signInWithOtp({
       email: invitation.email,
       options: { shouldCreateUser: false, emailRedirectTo: redirectTo }
     });
-    if (error) return response(502, { error: "INVITATION_DELIVERY_FAILED" });
+    if (error) return serviceFailure("AUTH_MAGIC_LINK", error, "INVITATION_DELIVERY_FAILED");
   }
 
   const { data: existingProfile } = await serviceClient.from("user_profiles")
@@ -156,14 +162,14 @@ Deno.serve(async request => {
       account_status: "Invited", employment_status: "New Starter",
       active_organization_id: invitation.organization_id, onboarding_completed_at: null
     });
-    if (error) return response(502, { error: "INVITATION_SETUP_FAILED" });
+    if (error) return serviceFailure("PROFILE_INSERT", error, "INVITATION_SETUP_FAILED");
   }
 
   const { error: staffError } = await serviceClient.from("organization_staff_profiles").upsert({
     organization_id: invitation.organization_id, user_id: invitedUserId,
     employee_id: invitation.employee_id, employment_status: "New Starter"
   }, { onConflict: "organization_id,user_id" });
-  if (staffError) return response(502, { error: "INVITATION_SETUP_FAILED" });
+  if (staffError) return serviceFailure("STAFF_UPSERT", staffError, "INVITATION_SETUP_FAILED");
 
   const { data: membership } = await serviceClient.from("organization_memberships")
     .select("id,membership_status").eq("organization_id", invitation.organization_id)
@@ -178,7 +184,7 @@ Deno.serve(async request => {
         organization_id: invitation.organization_id, user_id: invitedUserId,
         role: invitation.intended_role, membership_status: "Invited", created_by: callerResult.user.id
       }).select("id").single();
-  if (membershipResult.error || !membershipResult.data) return response(502, { error: "INVITATION_SETUP_FAILED" });
+  if (membershipResult.error || !membershipResult.data) return serviceFailure("MEMBERSHIP_WRITE", membershipResult.error, "INVITATION_SETUP_FAILED");
 
   if (invitation.facility_id) {
     const { data: assignment } = await serviceClient.from("facility_assignments").select("id")
@@ -197,7 +203,7 @@ Deno.serve(async request => {
   if (invitation.department_id) {
     const { data: department } = await serviceClient.from("departments").select("facility_id")
       .eq("id", invitation.department_id).eq("organization_id", invitation.organization_id).single();
-    if (!department) return response(502, { error: "INVITATION_SETUP_FAILED" });
+    if (!department) return serviceFailure("DEPARTMENT_READ", null, "INVITATION_SETUP_FAILED");
     const { data: assignment } = await serviceClient.from("department_assignments").select("id")
       .eq("organization_id", invitation.organization_id).eq("department_id", invitation.department_id)
       .eq("user_id", invitedUserId).eq("role", invitation.intended_role).maybeSingle();
@@ -222,7 +228,7 @@ Deno.serve(async request => {
     resend_count: invitation.resend_count + (action === "resend" ? 1 : 0),
     accepted_at: null, revoked_at: null, revoked_by: null, failure_code: null
   }).eq("id", invitation.id);
-  if (updateError) return response(502, { error: "INVITATION_SETUP_FAILED" });
+  if (updateError) return serviceFailure("INVITATION_UPDATE", updateError, "INVITATION_SETUP_FAILED");
 
   await serviceClient.from("audit_logs").insert({
     organization_id: invitation.organization_id, hospital_id: invitation.facility_id,
