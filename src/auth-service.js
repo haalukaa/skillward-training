@@ -158,9 +158,11 @@ export class AuthService {
     await this.database.recordAuthenticationEvent("password_changed");
   }
 
-  async signOut(scope = "local") {
+  async signOut(scope = "local", recordAudit = true) {
     if (!this.client) return;
-    await this.database?.recordAuthenticationEvent(scope === "global" ? "signed_out_all" : "signed_out");
+    if (recordAudit) {
+      await this.database?.recordAuthenticationEvent(scope === "global" ? "signed_out_all" : "signed_out");
+    }
     await this.client.auth.signOut({ scope });
   }
 

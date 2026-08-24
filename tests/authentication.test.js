@@ -27,6 +27,13 @@ test("sign-in and Demo Mode are separate and public sign-up is unavailable", () 
   assert.match(app, /await authService\?\.signOut\(\)/);
 });
 
+test("sessionless Demo entry and unprovisioned users do not emit authenticated audit requests", () => {
+  assert.match(app, /signOut\("local", false\); authenticatedContext = null/);
+  assert.match(app, /signOut\("local", caught\.message !== "MISSING_PROFILE"\)/);
+  assert.match(auth, /async signOut\(scope = "local", recordAudit = true\)/);
+  assert.match(auth, /if \(recordAudit\)/);
+});
+
 test("authenticated REST-style context loads its permitted profile, membership and routing data", async () => {
   for (const table of ["user_profiles", "organizations", "organization_memberships", "facilities", "facility_assignments", "department_assignments", "departments", "trainer_assignments", "training_assignments", "module_progress", "competency_records", "notifications"]) assert.match(database, new RegExp(`"${table}"`));
   assert.match(auth, /context\.membership\.role/); assert.match(auth, /departmentDetails/);

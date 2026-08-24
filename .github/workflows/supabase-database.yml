@@ -32,13 +32,13 @@ jobs:
       - name: Install the officially supported Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.115.0
 
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
 
       - name: Install application dependencies
-        run: npm install --ignore-scripts
+        run: npm ci --ignore-scripts
 
       - name: Validate migration and repository structure
         run: python3 scripts/validate_database_foundation.py

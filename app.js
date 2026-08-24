@@ -1,1762 +1,32 @@
-const app = document.getElementById("app");
-
-const defaultState = {
-  currentUser: null,
-  selectedDepartment: null,
-  activeOrganizationId: null,
-  activeWorkspaceView: "home",
-  organizationSetupStep: "identity",
-  demoSector: "hospital",
-  demoJourneys: {},
-  learnerName: "Staff Learner",
-  moduleProgress: {},
-  practicalSignoff: false,
-  trainerComments: "",
-  trainerAssignments: null,
-  traineeRecords: null,
-  managementData: null
-};
-
-const DEPARTMENTS = [
-  {
-    id: "operating-theatre",
-    code: "OT",
-    name: "Operating Theatre & Recovery",
-    summary: "PCA onboarding, theatre and recovery workflows, cleaning, safety and practical competency.",
-    detail: "6 modules",
-    active: true
-  },
-  {
-    id: "day-surgery",
-    code: "DS",
-    name: "Day Surgery",
-    summary: "Patient preparation, movement, daily readiness and day-surgery support workflows.",
-    detail: "Planned",
-    active: false
-  },
-  {
-    id: "acute-surgical-unit",
-    code: "ASU",
-    name: "Acute Surgical Unit",
-    summary: "PCA support, patient flow, equipment readiness and Acute Surgical Unit workflows.",
-    detail: "Planned",
-    active: false
-  },
-  {
-    id: "dialysis",
-    code: "DI",
-    name: "Dialysis",
-    summary: "Patient support, treatment-area readiness, cleaning and dialysis workflows.",
-    detail: "Planned",
-    active: false
-  },
-  {
-    id: "gastro",
-    code: "GA",
-    name: "Gastro",
-    summary: "Procedure-area preparation, patient support, cleaning and gastro workflows.",
-    detail: "Planned",
-    active: false
-  },
-  {
-    id: "emergency-department",
-    code: "ED",
-    name: "Emergency Department",
-    summary: "Department readiness, urgent patient transport, safety and emergency workflows.",
-    detail: "Planned",
-    active: false
-  }
-];
-
-const WORKPLACE_ROLES = {
-  pca: "PCA",
-  cleaner: "Cleaner",
-  "care-worker": "Personal Care Worker",
-  "aged-care-cleaner": "Environmental Services Worker",
-  "aged-care-trainer": "Clinical Educator",
-  "support-worker": "Disability Support Worker",
-  "disability-trainer": "Practice Coach",
-  "pca-trainer": "PCA Trainer",
-  "cleaner-trainer": "Cleaner Trainer",
-  management: "Management"
-};
-
-const DEPARTMENT_SELECTION_ROLES = new Set(["pca", "cleaner"]);
-
-const NAV_ITEMS = [
-  ["home", "Home", "‚åÇ"],
-  ["training", "Training", "‚ñ∑"],
-  ["staff", "Staff", "‚ôô"],
-  ["reports", "Reports", "‚ñ•"]
-];
-
-function demoNavigation(role) {
-  const kind = demoRoleKind(role);
-  if (kind === "worker") return [["home", "Home", "‚åÇ"], ["training", "Training", "‚ñ∑"]];
-  if (kind === "trainer") return [["home", "Home", "‚åÇ"], ["staff", "Trainees", "‚ôô"], ["training", "Guidance", "‚ñ∑"]];
-  if (role === "management") return NAV_ITEMS;
-  return [["home", "Home", "‚åÇ"]];
-}
-
-const AUTHENTICATED_NAV_ITEMS = {
-  "SkillWard Super Administrator": [["home", "Home", "‚åÇ"], ["leads", "Demo requests", "‚óá"]],
-  "Organisation Administrator": [["home", "Home", "‚åÇ"], ["pathways", "Pathways", "‚ñ∑"], ["people", "People", "‚ôô"], ["competency", "Competency", "‚úì"], ["reports", "Reports", "‚ñ•"], ["admin", "Admin", "‚öô"]],
-  "Facility Administrator": [["home", "Management Home", "‚åÇ"], ["training", "Training", "‚ñ∑"], ["staff", "Staff", "‚ôô"], ["reports", "Reports", "‚ñ•"]],
-  "Department Manager": [["home", "Management Home", "‚åÇ"], ["training", "Training", "‚ñ∑"], ["staff", "Staff", "‚ôô"], ["reports", "Reports", "‚ñ•"]],
-  "Content Administrator/Educator": [["home", "Content Home", "‚åÇ"], ["pathways", "Pathways", "‚ñ∑"], ["reports", "Reports", "‚ñ•"]],
-  worker: [["home", "Home", "‚åÇ"]], trainer: [["home", "Home", "‚åÇ"]], management: [["home", "Home", "‚åÇ"]]
-};
-
-function authenticatedNavigation(role) {
-  if (AUTHENTICATED_NAV_ITEMS[role]) return AUTHENTICATED_NAV_ITEMS[role];
-  if (["PCA", "Cleaner", "Support Worker"].includes(role)) return AUTHENTICATED_NAV_ITEMS.worker;
-  if (role?.includes("Trainer")) return AUTHENTICATED_NAV_ITEMS.trainer;
-  return AUTHENTICATED_NAV_ITEMS.management;
-}
-
-function workplaceRoleLabel(role) {
-  return WORKPLACE_ROLES[role] || role || "Staff member";
-}
-
-function demoSector(id = state.currentUser?.sector || state.demoSector) {
-  return globalThis.SKILLWARD_DEMO_SECTORS?.[id] || globalThis.SKILLWARD_DEMO_SECTORS?.hospital;
-}
-
-function demoRoleKind(role = state.currentUser?.role, sector = demoSector()) {
-  return sector?.roles.find(item => item.value === role)?.kind
-    || (role === "management" ? "management" : role?.includes("trainer") ? "trainer" : "worker");
-}
-
-function demoJourney(sectorId = state.currentUser?.sector || state.demoSector) {
-  if (!state.demoJourneys || typeof state.demoJourneys !== "object") state.demoJourneys = {};
-  if (!state.demoJourneys[sectorId]) {
-    state.demoJourneys[sectorId] = {
-      learnedModules: [], validated: false, score: 0, observed: false,
-      observation: "", approved: false, renewalScheduled: false, renewalDate: "",
-      history: []
-    };
-  }
-  return state.demoJourneys[sectorId];
-}
-
-function recordDemoJourney(action, detail, patch = {}) {
-  const journey = demoJourney();
-  Object.assign(journey, patch);
-  journey.history.unshift({ action, detail, at: new Date().toLocaleString("en-AU") });
-  saveState();
-}
-
-function demoStageStatus(journey = demoJourney(), sector = demoSector()) {
-  const learned = journey.learnedModules.length >= sector.pathway.modules.length;
-  return [
-    ["Learn", learned, learned ? "Required modules complete" : `${journey.learnedModules.length}/${sector.pathway.modules.length} modules complete`],
-    ["Validate", journey.validated, journey.validated ? `${journey.score}% knowledge result` : "Knowledge check required"],
-    ["Observe", journey.observed, journey.observed ? "Practical observation recorded" : "Trainer observation required"],
-    ["Approve", journey.approved, journey.approved ? "Management approval recorded" : "Management decision required"],
-    ["Renew", journey.renewalScheduled, journey.renewalScheduled ? `Renewal ${journey.renewalDate}` : "Renewal date required"]
-  ];
-}
-
-function normalizeCurrentUserRole() {
-  const role = state.currentUser?.role;
-
-  if (role === "learner" || role === "trainer") {
-    state.currentUser.role = role === "trainer" ? "pca-trainer" : "pca";
-    saveState();
-  }
-}
-
-function workflowRecords() {
-  if (!Array.isArray(state.traineeRecords)) state.traineeRecords = JSON.parse(JSON.stringify(TRAINEE_RECORDS));
-  return state.traineeRecords;
-}
-
-function assignmentDirectory() {
-  if (!Array.isArray(state.trainerAssignments)) state.trainerAssignments = JSON.parse(JSON.stringify(TRAINER_DIRECTORY));
-  return state.trainerAssignments;
-}
-
-function managementStore() {
-  if (!state.managementData) state.managementData = JSON.parse(JSON.stringify(SKILLWARD_MANAGEMENT_SAMPLE));
-  return SkillWardManagement.createStore(state.managementData);
-}
-
-function currentManager(store = managementStore()) {
-  return store.data.managers.find(item => item.name.toLowerCase() === state.currentUser.name.toLowerCase()) || store.data.managers.find(item => item.level === "Hospital Administrator" && item.accountStatus === "Active");
-}
-
-function currentTrainerRecord() {
-  const role = state.currentUser?.role;
-  const named = assignmentDirectory().find(item => item.role === role && item.name.toLowerCase() === state.currentUser.name.toLowerCase());
-  return named || assignmentDirectory().find(item => item.role === role);
-}
-
-function assignedDepartmentsForCurrentTrainer() {
-  return currentTrainerRecord()?.departments || [];
-}
-
-function departmentName(id) {
-  return DEPARTMENTS.find(item => item.id === id)?.name
-    || demoSector()?.departments.find(item => item.id === id)?.name
-    || authenticatedContext?.departmentDetails?.find(item => item.id === id)?.name || id;
-}
-
-function statusTone(status) {
-  if (status === "Approved") return "success";
-  if (status === "Reassessment Required") return "danger";
-  return status === "Not Started" ? "neutral" : "warning";
-}
-
-function workspaceHeader(user, department) {
-  if (!user) return "Healthcare Workforce Training";
-  if (user.mode === "demo") return `${demoSector(user.sector)?.organization || "Guided Demo"} ¬∑ ${demoSector(user.sector)?.name || "Care"}`;
-  if (user.role === "platform-admin") return "Platform Administration";
-  if (user.role === "management") {
-    return "Healthcare Workforce Training";
-  }
-  const labels = {
-    pca: "PCA Training Hub",
-    cleaner: "Cleaner Training Hub",
-    "pca-trainer": "PCA Trainer Workspace",
-    "cleaner-trainer": "Cleaner Trainer Workspace"
-  };
-  return `${department?.name || "Assigned department"} ¬∑ ${labels[user.role] || "Healthcare Workforce Training"}`;
-}
-
-function routeSignedInUser() {
-  normalizeCurrentUserRole();
-
-  if (state.currentUser?.mode === "demo") {
-    renderDemoWorkspace();
-    return;
-  }
-
-  const known = state.currentUser?.role === "management"
-    ? managementStore().data.managers.find(item => item.name.toLowerCase() === state.currentUser.name.toLowerCase())
-    : managementStore().data.staff.find(item => item.name.toLowerCase() === state.currentUser?.name?.toLowerCase());
-  if (known && ["Suspended", "Archived"].includes(known.accountStatus)) {
-    renderShell(`<section class="card access-blocked"><h2>Access unavailable</h2><p>${known.accountStatus === "Suspended" ? "Your access is suspended. Contact Management for assistance." : "This account is archived and cannot sign in."}</p></section>`);
-    return;
-  }
-
-  if (state.currentUser?.role?.includes("trainer")) {
-    const assigned = assignedDepartmentsForCurrentTrainer();
-    if (!assigned.includes(state.selectedDepartment)) state.selectedDepartment = assigned[0] || null;
-    saveState();
-  }
-
-  if (state.currentUser?.role === "management" && !state.selectedDepartment) {
-    const actor = currentManager();
-    state.selectedDepartment = actor?.departments?.[0] || null;
-    saveState();
-  }
-  if (state.currentUser?.role === "management") {
-    const actor = currentManager();
-    if (!actor?.departments?.includes(state.selectedDepartment)) {
-      state.selectedDepartment = actor?.departments?.[0] || null;
-      saveState();
-    }
-  }
-
-  if (DEPARTMENT_SELECTION_ROLES.has(state.currentUser.role) && !state.selectedDepartment) {
-    renderDepartmentSelection();
-    return;
-  }
-
-  routeCurrentUser();
-}
-
-function departmentIcon(departmentId) {
-  const paths = {
-    "operating-theatre": `
-      <path d="M4 16h16M6 16v3m12-3v3M7 13h10l2 3H5l2-3Z" />
-      <path d="M12 4v3m-4.5-.5 2 2m7-2-2 2M8 11a4 4 0 0 1 8 0" />`,
-    "day-surgery": `
-      <circle cx="12" cy="12" r="4" />
-      <path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2m0-14-2 2M7 17l-2 2" />`,
-    "acute-surgical-unit": `
-      <path d="M3 18V8m0 7h18v3M6 15v-4h5a3 3 0 0 1 3 3v1" />
-      <path d="M15 8h2m-1-1v2" />`,
-    "dialysis": `
-      <path d="M12 3S6.5 9.5 6.5 14a5.5 5.5 0 0 0 11 0C17.5 9.5 12 3 12 3Z" />
-      <path d="M10 17c1.8 1 4 .2 4.8-1.6" />`,
-    "gastro": `
-      <path d="M10 3v6c0 1.2-.8 2.2-2 2.6-2.2.8-3 3.3-2 5.3 1.2 2.4 4.3 3.4 6.6 2 2.8-1.7 3.2-4.8 2.4-7.4-.6-2 .2-3.9 2-4.8" />
-      <path d="M17 6.7c1.3 1 2 2.5 2 4.3" />`,
-    "emergency-department": `
-      <path d="M8 3h8v5h5v8h-5v5H8v-5H3V8h5V3Z" />
-      <path d="m6 12 3-1 2 3 2-5 2 3h3" />`
-  };
-
-  return `<svg viewBox="0 0 24 24" focusable="false" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths[departmentId] || ""}</svg>`;
-}
-
-let state = loadState();
-let currentModuleId = null;
-let currentAreaId = null;
-
-function loadState() {
-  try {
-    const saved = JSON.parse(localStorage.getItem("pcaTrainingWebAppV1"));
-    return { ...defaultState, ...(saved || {}) };
-  } catch {
-    return { ...defaultState };
-  }
-}
-
-function saveState() {
-  localStorage.setItem("pcaTrainingWebAppV1", JSON.stringify(state));
-}
-
-function getModuleState(id) {
-  return state.moduleProgress[id] || {
-    lessonComplete: false,
-    quizPassed: false,
-    quizScore: 0
-  };
-}
-
-function setModuleState(id, patch) {
-  state.moduleProgress[id] = { ...getModuleState(id), ...patch };
-  saveState();
-}
-
-function overallProgress() {
-  const totalUnits = TRAINING_MODULES.length * 2 + 1;
-  let completed = state.practicalSignoff ? 1 : 0;
-
-  TRAINING_MODULES.forEach(module => {
-    const m = getModuleState(module.id);
-    if (m.lessonComplete) completed++;
-    if (m.quizPassed) completed++;
-  });
-
-  return Math.round((completed / totalUnits) * 100);
-}
-
-function passedModules() {
-  return TRAINING_MODULES.filter(m => getModuleState(m.id).quizPassed).length;
-}
-
-function getArea(areaId) {
-  return TRAINING_AREAS.find(area => area.id === areaId);
-}
-
-function modulesForArea(areaId) {
-  return TRAINING_MODULES.filter(module => module.area === areaId);
-}
-
-function moduleCard(module) {
-  const m = getModuleState(module.id);
-  const status = m.quizPassed
-    ? ["Completed", "badge-complete"]
-    : m.lessonComplete
-      ? ["Quiz required", "badge-in-progress"]
-      : ["Not started", "badge-not-started"];
-
-  return `
-    <section class="card module-card">
-      <div class="module-card-head">
-        <span class="module-number">${String(module.number).padStart(2, "0")}</span>
-        <span class="module-duration">${module.duration}</span>
-      </div>
-      <div>
-        <div class="small">MODULE ${module.number}</div>
-        <h3>${module.title}</h3>
-      </div>
-      <p>${module.summary}</p>
-      <div class="module-meta">
-        <span class="badge ${status[1]}">${status[0]}</span>
-        <button class="btn open-module" data-id="${module.id}">
-          ${m.lessonComplete ? "Continue" : "Start"}
-        </button>
-      </div>
-    </section>
-  `;
-}
-
-function bindModuleButtons() {
-  document.querySelectorAll(".open-module").forEach(btn => {
-    btn.addEventListener("click", () => {
-      currentModuleId = btn.dataset.id;
-      currentAreaId = TRAINING_MODULES.find(module => module.id === currentModuleId)?.area || currentAreaId;
-      renderLesson(currentModuleId);
-    });
-  });
-}
-
-function renderShell(content) {
-  const user = authenticatedContext?.appUser || state.currentUser;
-  const department = DEPARTMENTS.find(item => item.id === state.selectedDepartment)
-    || demoSector(user?.sector)?.departments.find(item => item.id === state.selectedDepartment)
-    || authenticatedContext?.departmentDetails?.find(item => item.id === state.selectedDepartment);
-  const authenticatedWorkspace = Boolean(authenticatedContext || user?.mode === "demo" || (user && (department || user.role?.includes("trainer"))));
-  const navigationItems = authenticatedContext ? authenticatedNavigation(authenticatedContext.membership?.role) : state.currentUser?.mode === "demo" ? demoNavigation(user?.role) : NAV_ITEMS;
-  const activeView = authenticatedContext || state.currentUser?.mode === "demo" ? (state.activeWorkspaceView || "home") : "home";
-  if (!navigationItems.some(([id]) => id === activeView)) state.activeWorkspaceView = navigationItems[0][0];
-  const navigation = navigationItems.map(([id, label, icon]) => `
-    <button class="workspace-nav-item ${id === (state.activeWorkspaceView || "home") ? "is-active" : ""}" data-nav="${id}" aria-label="${label}">
-      <span aria-hidden="true">${icon}</span><small>${label}</small>
-    </button>
-  `).join("");
-  app.innerHTML = `
-    <div class="shell ${authenticatedWorkspace ? "authenticated-shell" : ""} ${authenticatedContext ? "database-workspace" : ""}">
-      <header class="topbar">
-        <div class="brand">
-          <div class="brand-mark">
-            <svg viewBox="0 0 48 54" focusable="false">
-              <title>SkillWard</title>
-              <path class="logo-shield" d="M24 2 44 9v16c0 13-8 22-20 28C12 47 4 38 4 25V9L24 2Z" />
-              <path class="logo-symbol" d="m14.5 27.5 6.2 6.2 13-14" />
-            </svg>
-          </div>
-          <div class="brand-copy">
-            <h1>SkillWard</h1>
-            <p>${escapeHtml(workspaceHeader(user, department))}</p>
-          </div>
-        </div>
-        <div class="top-actions">
-          ${authenticatedWorkspace ? `<button class="notification-button" aria-label="Notifications"><span aria-hidden="true">‚óè</span></button>` : ""}
-          ${user ? `<span class="role-pill">${workplaceRoleLabel(user.role)}</span>` : ""}
-          ${authenticatedContext?.organization ? `<span class="workspace-organization">${escapeHtml(authenticatedContext.organization.name)}</span>` : ""}
-          ${authenticatedWorkspace ? `<div class="profile-control"><button class="profile-button" id="profileButton" aria-label="Open profile menu for ${escapeHtml(user.name)}" aria-haspopup="menu" aria-expanded="false"><span>${escapeHtml(user.name).charAt(0).toUpperCase()}</span><strong>${escapeHtml(user.name)}</strong><b aria-hidden="true">‚åÑ</b></button><div class="profile-menu" id="profileMenu" role="menu" hidden><button type="button" role="menuitem" data-profile-action="profile"><span>‚óã</span><div><strong>Profile</strong><small>View your identity and role</small></div></button><button type="button" role="menuitem" data-profile-action="workspace"><span>‚óá</span><div><strong>Workspace</strong><small>Change sector, role or organisation</small></div></button><button type="button" role="menuitem" data-profile-action="signout" class="profile-signout"><span>‚Ü™</span><div><strong>Sign Out</strong><small>End this session securely</small></div></button></div></div>` : user ? `<button class="btn btn-secondary" id="legacySwitchRoleBtn">Switch role</button>` : ""}
-        </div>
-      </header>
-      ${authenticatedWorkspace ? `<nav class="side-nav" style="--nav-count:${navigationItems.length}" aria-label="Primary navigation">${navigation}</nav>` : ""}
-      <main class="page" id="mainContent">${content}</main>
-      ${authenticatedWorkspace ? `<nav class="bottom-nav" style="--nav-count:${navigationItems.length}" aria-label="Primary navigation">${navigation}</nav>` : ""}
-      <footer class="site-footer">
-        <div class="footer-inner">
-          <p class="footer-copyright">¬© 2026 SkillWard. All rights reserved.</p>
-          <nav class="footer-links" aria-label="Legal and support">
-            <a href="/legal/privacy/">Privacy Policy</a>
-            <span aria-hidden="true">¬∑</span>
-            <a href="/legal/terms/">Terms of Use</a>
-            <span aria-hidden="true">¬∑</span>
-            <a href="/legal/accessibility/">Accessibility</a>
-            <span aria-hidden="true">¬∑</span>
-            <a href="/contact/">Contact &amp; Support</a>
-          </nav>
-          <p class="footer-disclaimer">SkillWard is a workforce training and competency platform. Training content does not replace workplace policies, clinical guidelines, or professional judgement.</p>
-        </div>
-      </footer>
-      <div class="profile-dialog-backdrop" id="profileDialog" hidden><section class="profile-dialog" role="dialog" aria-modal="true" aria-labelledby="profileDialogTitle"><button class="profile-dialog-close" id="closeProfileDialog" aria-label="Close">√ó</button><div id="profileDialogContent"></div></section></div>
-    </div>
-  `;
-
-  const activeLabel = navigationItems.find(([id]) => id === state.activeWorkspaceView)?.[1] || "Home";
-  const workspaceName = authenticatedContext?.organization?.name || (user?.mode === "demo" ? demoSector(user.sector)?.organization : "");
-  document.title = user ? `${activeLabel}${workspaceName ? ` | ${workspaceName}` : ""} | SkillWard` : "Sign In | SkillWard";
-
-  document.getElementById("legacySwitchRoleBtn")?.addEventListener("click", () => {
-    state.currentUser = null;
-    state.selectedDepartment = null;
-    saveState();
-    renderLogin();
-  });
-
-  const profileButton = document.getElementById("profileButton");
-  const profileMenu = document.getElementById("profileMenu");
-  profileButton?.addEventListener("click", () => {
-    profileMenu.hidden = !profileMenu.hidden;
-    profileButton.setAttribute("aria-expanded", String(!profileMenu.hidden));
-  });
-  document.querySelectorAll("[data-profile-action]").forEach(button => button.addEventListener("click", async () => {
-    profileMenu.hidden = true;
-    profileButton.setAttribute("aria-expanded", "false");
-    if (button.dataset.profileAction === "signout") return signOutCurrentUser();
-    openProfileDialog(button.dataset.profileAction, user);
-  }));
-  document.getElementById("closeProfileDialog")?.addEventListener("click", closeProfileDialog);
-  document.getElementById("profileDialog")?.addEventListener("click", event => { if (event.target.id === "profileDialog") closeProfileDialog(); });
-  document.querySelectorAll("[data-demo-action]").forEach(button => button.addEventListener("click", async () => {
-    if (button.dataset.demoAction === "reset") {
-      state.demoJourneys[state.currentUser.sector] = null;
-      demoJourney(state.currentUser.sector); saveState(); renderDemoWorkspace(); return;
-    }
-    if (button.dataset.demoAction === "change") return openProfileDialog("workspace", user);
-    if (button.dataset.demoAction === "exit") {
-      state.currentUser = null; state.selectedDepartment = null; state.activeWorkspaceView = "home"; saveState();
-      location.assign("/");
-    }
-  }));
-
-  document.getElementById("changeDepartmentBtn")?.addEventListener("click", () => {
-    state.selectedDepartment = null;
-    saveState();
-    renderDepartmentSelection();
-  });
-
-  document.querySelectorAll(".workspace-nav-item").forEach(button => {
-    button.addEventListener("click", () => {
-      if (authenticatedContext) {
-        state.activeWorkspaceView = button.dataset.nav;
-        saveState();
-        renderAuthenticatedWorkspace();
-        return;
-      }
-      if (state.currentUser?.mode === "demo") {
-        state.activeWorkspaceView = button.dataset.nav;
-        saveState();
-        renderDemoWorkspace();
-        return;
-      }
-      document.getElementById(button.dataset.nav)?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-  });
-
-}
-
-async function signOutCurrentUser() {
-  await authService?.signOut();
-  clearTimeout(idleSessionTimer);
-  authenticatedContext = null;
-  state.currentUser = null;
-  state.selectedDepartment = null;
-  state.activeOrganizationId = null;
-  state.activeWorkspaceView = "home";
-  saveState();
-  renderLogin();
-}
-
-function closeProfileDialog() {
-  const dialog = document.getElementById("profileDialog");
-  if (dialog) dialog.hidden = true;
-}
-
-function openProfileDialog(view, user) {
-  const dialog = document.getElementById("profileDialog"), content = document.getElementById("profileDialogContent");
-  if (!dialog || !content) return;
-  if (view === "profile") {
-    const organization = authenticatedContext?.organization?.name || demoSector(user?.sector)?.organization || "SkillWard";
-    const sector = authenticatedContext?.organization?.organization_type || demoSector(user?.sector)?.name || "Healthcare";
-    content.innerHTML = `<span class="eyebrow">YOUR PROFILE</span><h2 id="profileDialogTitle">${escapeHtml(user.name)}</h2><div class="profile-summary-avatar">${escapeHtml(user.name).charAt(0).toUpperCase()}</div><dl class="profile-summary"><div><dt>Role</dt><dd>${escapeHtml(workplaceRoleLabel(user.role))}</dd></div><div><dt>Workspace</dt><dd>${escapeHtml(organization)}</dd></div><div><dt>Sector</dt><dd>${escapeHtml(sector)}</dd></div><div><dt>Session</dt><dd>${authenticatedContext ? "Secure organisation account" : "Guided Demo ¬∑ sample data only"}</dd></div></dl>${authenticatedContext ? '<button class="link-button profile-signout-all" id="signOutAllSessions">Sign out from all devices</button>' : ""}`;
-  } else if (state.currentUser?.mode === "demo") {
-    const sectors = Object.values(globalThis.SKILLWARD_DEMO_SECTORS || {});
-    const selected = demoSector(user.sector);
-    content.innerHTML = `<span class="eyebrow">WORKSPACE</span><h2 id="profileDialogTitle">Switch demo workspace</h2><p>Move between sectors and roles without clearing the shared competency journey.</p><form id="demoWorkspaceForm"><label>Sector<select id="demoWorkspaceSector">${sectors.map(item => `<option value="${item.id}" ${item.id === selected.id ? "selected" : ""}>${escapeHtml(item.name)} ¬∑ ${escapeHtml(item.organization)}</option>`).join("")}</select></label><label>Role<select id="demoWorkspaceRole"></select></label><button class="btn" type="submit">Open workspace</button></form>`;
-    const sectorSelect = document.getElementById("demoWorkspaceSector"), roleSelect = document.getElementById("demoWorkspaceRole");
-    const populateRoles = () => { const sector = demoSector(sectorSelect.value); roleSelect.innerHTML = sector.roles.map(role => `<option value="${role.value}" ${sector.id === selected.id && role.value === user.role ? "selected" : ""}>${escapeHtml(role.label)}</option>`).join(""); };
-    populateRoles(); sectorSelect.addEventListener("change", populateRoles);
-    document.getElementById("demoWorkspaceForm").addEventListener("submit", event => { event.preventDefault(); const sector = demoSector(sectorSelect.value); state.demoSector = sector.id; state.currentUser = { ...state.currentUser, sector:sector.id, role:roleSelect.value }; state.selectedDepartment = sector.departments[0].id; state.activeWorkspaceView = "home"; saveState(); renderDemoWorkspace(); });
-  } else {
-    const memberships = authenticatedContext?.memberships || [];
-    content.innerHTML = `<span class="eyebrow">WORKSPACE</span><h2 id="profileDialogTitle">Your authorised workspaces</h2><p>Access remains limited to active organisation memberships.</p><div class="workspace-choice-list">${memberships.map(item => `<button class="workspace-choice" data-organization="${escapeHtml(item.organization_id)}"><strong>${escapeHtml(item.organizations?.name || "Organisation")}</strong><small>${escapeHtml(item.role)}</small></button>`).join("") || `<div class="workspace-choice"><strong>${escapeHtml(authenticatedContext?.organization?.name || "Current workspace")}</strong><small>${escapeHtml(authenticatedContext?.membership?.role || "Authorised access")}</small></div>`}</div>`;
-    document.querySelectorAll("[data-organization]").forEach(button => button.addEventListener("click", async () => { state.activeOrganizationId = button.dataset.organization; state.activeWorkspaceView = "home"; state.selectedDepartment = null; saveState(); authenticatedContext = await authService.switchOrganization(button.dataset.organization); renderAuthenticatedWorkspace(); }));
-  }
-  dialog.hidden = false;
-  document.getElementById("signOutAllSessions")?.addEventListener("click", async () => {
-    await authService.signOutEverywhere(); authenticatedContext = null; state.currentUser = null; saveState(); renderLogin("You have been signed out from all sessions.");
-  });
-  content.querySelector("button, select")?.focus();
-}
-
-let authService = null;
-let authenticatedContext = null;
-let idleSessionTimer = null;
-let idleSessionMinutes = 30;
-let idleSessionListenersBound = false;
-
-function configureIdleSession(minutes) {
-  idleSessionMinutes = Math.min(480, Math.max(5, Number(minutes) || 30));
-  const reset = () => {
-    clearTimeout(idleSessionTimer);
-    if (!authenticatedContext) return;
-    idleSessionTimer = setTimeout(async () => {
-      await authService.database?.recordAuthenticationEvent("session_expired", authenticatedContext?.organization?.id || null, { reason: "idle_timeout" });
-      await authService.signOut("local");
-      authenticatedContext = null; state.currentUser = null; state.activeOrganizationId = null; saveState();
-      renderAccessState("SESSION_EXPIRED");
-    }, idleSessionMinutes * 60000);
-  };
-  if (!idleSessionListenersBound) {
-    ["pointerdown", "keydown", "touchstart"].forEach(name => document.addEventListener(name, reset, { passive: true }));
-    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") reset(); });
-    idleSessionListenersBound = true;
-  }
-  reset();
-}
-
-function authMessage(code) {
-  const messages = {
-    ACCOUNT_SUSPENDED: "Your access is currently suspended. Contact Management.",
-    ACCOUNT_ARCHIVED: "This account is no longer active. Contact Management.",
-    ACCOUNT_INVITED: "Your account setup is not complete. Contact Management.",
-    MISSING_PROFILE: "Your account is not configured for SkillWard. Contact Management.",
-    MISSING_MEMBERSHIP: "Your account is not configured for SkillWard. Contact Management.",
-    MEMBERSHIP_EXPIRED: "Your authorised workspace access has expired. Contact Management.",
-    INVITATION_EXPIRED: "Your invitation is expired or unavailable. Ask Management to resend it.",
-    INVITATION_INVALID: "This invitation is invalid, expired or has already been used.",
-    ACCESS_DENIED: "You are not authorised to open that workspace.",
-    CONFIGURATION_MISSING: "Secure sign-in is not configured for this deployment.",
-    CONTEXT_READ_FAILED: "We could not load your workplace access. Check your connection or contact Management.",
-    CONTEXT_TABLE_PERMISSION: "We could not load your workplace access. Check your connection or contact Management.",
-    RECOVERY_INVALID: "This recovery link is invalid or has expired. Request a new link."
-  };
-  return messages[code] || "We could not sign you in. Check your details and try again.";
-}
-
-function renderDeprecatedEntry(message = "") {
-  const sectorIcon = (sector) => {
-    const icons = {
-      hospital: `<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M12 42V15a4 4 0 0 1 4-4h16a4 4 0 0 1 4 4v27M7 42h34M20 11V6h8v5M24 18v10m-5-5h10M17 42V32h14v10"/></svg>`,
-      "aged-care": `<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M8 22 24 8l16 14v20H8V22Z"/><path d="M18 42V29h12v13M17 20c2.4-3.1 5.3-3.4 7-.7 1.7-2.7 4.6-2.4 7 .7-1.2 4-4.2 6.7-7 8.5-2.8-1.8-5.8-4.5-7-8.5Z"/></svg>`,
-      disability: `<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="9" r="4"/><path d="M15 17h18M24 14v13m0 0-8 14m8-14 9 14M12 27l12-6 12 6"/></svg>`
-    };
-    return icons[sector];
-  };
-
-  renderShell(`
-    <div class="entry-experience">
-      <section class="entry-view welcome-view" id="welcomeView">
-        <div class="welcome-atmosphere" aria-hidden="true"><span class="welcome-orb welcome-orb-one"></span><span class="welcome-orb welcome-orb-two"></span><span class="welcome-grid"></span></div>
-        <div class="welcome-content">
-          <div class="welcome-emblem"><svg viewBox="0 0 48 54" focusable="false"><title>SkillWard</title><path class="logo-shield" d="M24 2 44 9v16c0 13-8 22-20 28C12 47 4 38 4 25V9L24 2Z" /><path class="logo-symbol" d="m14.5 27.5 6.2 6.2 13-14" /></svg></div>
-          <p class="welcome-kicker"><span></span> Workforce learning, built around care</p>
-          <h2>Welcome to <span>SkillWard</span></h2>
-          <p class="welcome-lead">One trusted platform for training, competency and confident practice across care organisations.</p>
-          <div class="welcome-actions">
-            <button class="btn welcome-primary" id="getStartedBtn">Get Started <span aria-hidden="true">‚Üí</span></button>
-            <a class="welcome-secondary" href="/book-demo/">For organisations <span aria-hidden="true">‚Üó</span></a>
-          </div>
-          <div class="welcome-trust" aria-label="Platform capabilities"><span>Structured learning</span><i></i><span>Competency evidence</span><i></i><span>Compliance visibility</span></div>
-        </div>
-        <aside class="welcome-visual" aria-hidden="true">
-          <div class="visual-card visual-card-main"><small>WORKFORCE READINESS</small><strong>Learning that becomes confident practice.</strong><div class="visual-progress"><span></span></div><div class="visual-metrics"><div><b>01</b><small>Learn</small></div><div><b>02</b><small>Validate</small></div><div><b>03</b><small>Sign off</small></div></div></div>
-          <div class="visual-card visual-card-float"><span>‚úì</span><div><strong>Competency ready</strong><small>Visible. Structured. Accountable.</small></div></div>
-        </aside>
-      </section>
-
-      <section class="entry-view sector-view" id="sectorView" hidden>
-        <button class="entry-back" id="backToWelcome" type="button"><span aria-hidden="true">‚Üê</span> Back</button>
-        <header class="sector-heading">
-          <p class="welcome-kicker"><span></span> SkillWard environments</p>
-          <h2>Choose your sector</h2>
-          <p>Select the care environment you want to enter. Your organisation and permissions are securely connected after sign-in.</p>
-        </header>
-        <div class="sector-grid">
-          <button class="sector-card sector-card-active demo-sector-card" id="selectHospital" data-sector="hospital" type="button">
-            <span class="sector-status sector-status-live"><i></i> Available</span>
-            <span class="sector-icon">${sectorIcon("hospital")}</span>
-            <span class="sector-copy"><strong>Hospital</strong><small>Clinical support workforce training, competency and department readiness.</small></span>
-            <span class="sector-arrow" aria-hidden="true">‚Üí</span>
-          </button>
-          <button class="sector-card sector-card-active demo-sector-card" id="selectAgedCare" data-sector="aged-care" type="button">
-            <span class="sector-status sector-status-live"><i></i> Available</span>
-            <span class="sector-icon">${sectorIcon("aged-care")}</span>
-            <span class="sector-copy"><strong>Aged Care</strong><small>Care workforce onboarding, capability and compliance.</small></span>
-            <span class="sector-arrow" aria-hidden="true">‚Üí</span>
-          </button>
-          <button class="sector-card sector-card-active demo-sector-card" id="selectDisability" data-sector="disability" type="button">
-            <span class="sector-status sector-status-live"><i></i> Available</span>
-            <span class="sector-icon">${sectorIcon("disability")}</span>
-            <span class="sector-copy"><strong>Disability Support</strong><small>Support-worker learning, practical capability and continuing development.</small></span>
-            <span class="sector-arrow" aria-hidden="true">‚Üí</span>
-          </button>
-        </div>
-        <p class="sector-footnote">All environments use sample organisations and training content in Guided Demo. Production content remains organisation-controlled and subject to approval.</p>
-      </section>
-
-      <section class="entry-view hospital-entry-view" id="hospitalView" hidden>
-        <button class="entry-back hospital-back" id="backToSectors" type="button"><span aria-hidden="true">‚Üê</span> All sectors</button>
-        <div class="login-layout hospital-login-layout">
-          <section class="login-intro">
-            <div class="hero-motion" aria-hidden="true"><span class="motion-orb motion-orb-one"></span><span class="motion-orb motion-orb-two"></span><span class="motion-grid"></span></div>
-            <div class="login-label hero-reveal hero-reveal-1"><span></span> <b id="environmentLabel">Hospital workforce enablement</b></div>
-            <h2 class="hero-title" id="environmentTitle" aria-label="Build your confidence before your first shift"><span class="hero-line hero-reveal hero-reveal-2">Build Your Confidence</span><span class="hero-line hero-accent hero-reveal hero-reveal-3">Before Your First Shift<span class="typing-cursor" aria-hidden="true"></span></span></h2>
-            <p class="hero-reveal hero-reveal-4" id="environmentDescription">Structured, role-based learning that turns approved hospital procedures into confident workplace practice.</p>
-            <div class="learning-flow" aria-label="SkillWard learning process"><div><span>01</span><strong>Learn</strong><small>Role-based pathways</small></div><i aria-hidden="true"></i><div><span>02</span><strong>Validate</strong><small>Knowledge checks</small></div><i aria-hidden="true"></i><div><span>03</span><strong>Sign off</strong><small>Observed competency</small></div></div>
-            <p class="login-platform-note hero-reveal hero-reveal-5" id="environmentNote">Designed for hospital teams, trainers and frontline staff.</p>
-          </section>
-          <section class="card login-card hospital-access-card" id="workspaceCard" data-entry-transition="login-flip">
-            <div class="hospital-card-heading"><span class="sector-mini-icon" id="environmentIcon">${sectorIcon("hospital")}</span><div><div class="access-label"><span></span> <b id="environmentAccessLabel">HOSPITAL ENVIRONMENT</b></div><h2>Enter your workspace</h2></div></div>
-            <p class="login-card-intro">Sign in securely or explore SkillWard with sample data.</p>
-            ${message ? `<p class="auth-status" role="status">${escapeHtml(message)}</p>` : ""}
-            <div class="entry-options" id="entryOptions"><button class="entry-option" id="showSignIn"><span class="option-icon" aria-hidden="true">‚Üí</span><strong>Sign in to SkillWard</strong><small>Use your Management-issued account.</small></button><button class="entry-option" id="showDemo"><span class="option-icon" aria-hidden="true">‚óá</span><strong>Explore Demo Mode</strong><small>Preview workflows using sample browser data.</small></button></div>
-            <form id="signInForm" class="access-form" hidden novalidate><h3>Sign in to SkillWard</h3><label><span>Email</span><input id="emailInput" type="email" autocomplete="username" inputmode="email" required /></label><label><span>Password</span><input id="passwordInput" type="password" autocomplete="current-password" required /></label><p id="authError" class="auth-status" role="alert"></p><button class="btn btn-wide login-submit" type="submit">Sign in <span aria-hidden="true">‚Üí</span></button><button class="link-button" type="button" id="forgotPassword">Forgot password?</button><button class="link-button backChoices" type="button">Back to access options</button></form>
-            <form id="demoForm" class="access-form" hidden><h3 id="demoFormTitle">Explore Hospital Demo</h3><p class="small">Nothing in Demo Mode is written to Supabase. Sample information stays only in this browser.</p><label><span>Full name</span><input id="nameInput" type="text" autocomplete="name" placeholder="e.g. Alex Smith" required /></label><label><span>Workspace role</span><select id="roleInput"></select></label><button class="btn btn-wide login-submit" type="submit">Continue in Demo Mode <span aria-hidden="true">‚Üí</span></button><button class="link-button backChoices" type="button">Back to access options</button></form>
-            <form id="resetForm" class="access-form" hidden><h3>Reset password</h3><p class="small">Enter your email. For privacy, the confirmation is always the same.</p><label><span>Email</span><input id="resetEmail" type="email" autocomplete="username" required /></label><button class="btn btn-wide" type="submit">Send recovery link</button><button class="link-button backChoices" type="button">Back</button></form>
-          </section>
-        </div>
-      </section>
-    </div>`);
-
-  const views = {
-    welcome: document.getElementById("welcomeView"),
-    sectors: document.getElementById("sectorView"),
-    hospital: document.getElementById("hospitalView")
-  };
-  const showView = (name) => {
-    Object.entries(views).forEach(([key, view]) => { view.hidden = key !== name; });
-    window.scrollTo({ top: 0, behavior: "smooth" });
-    document.querySelector(`#${name === "welcome" ? "getStartedBtn" : name === "sectors" ? "selectHospital" : "showSignIn"}`)?.focus({ preventScroll: true });
-  };
-
-  document.getElementById("getStartedBtn").addEventListener("click", () => showView("sectors"));
-  document.getElementById("backToWelcome").addEventListener("click", () => showView("welcome"));
-  let selectedSector = demoSector(state.demoSector);
-  const configureEnvironment = sectorId => {
-    selectedSector = demoSector(sectorId);
-    state.demoSector = selectedSector.id;
-    saveState();
-    document.getElementById("environmentLabel").textContent = `${selectedSector.name} workforce enablement`;
-    document.getElementById("environmentDescription").textContent = selectedSector.description;
-    document.getElementById("environmentNote").textContent = `Sample organisation: ${selectedSector.organization} ¬∑ ${selectedSector.facility}`;
-    document.getElementById("environmentIcon").innerHTML = sectorIcon(selectedSector.id);
-    document.getElementById("environmentAccessLabel").textContent = `${selectedSector.name.toUpperCase()} ENVIRONMENT`;
-    document.getElementById("demoFormTitle").textContent = `Explore ${selectedSector.name} Demo`;
-    document.getElementById("roleInput").innerHTML = selectedSector.roles.map(role => `<option value="${role.value}">${escapeHtml(role.label)}</option>`).join("");
-    showView("hospital");
-  };
-  document.querySelectorAll(".demo-sector-card").forEach(button => button.addEventListener("click", () => configureEnvironment(button.dataset.sector)));
-  document.getElementById("backToSectors").addEventListener("click", () => showView("sectors"));
-
-  const choices = document.getElementById("entryOptions");
-  const forms = ["signInForm", "demoForm", "resetForm"].map(id => document.getElementById(id));
-  const show = id => { choices.hidden = true; forms.forEach(form => { form.hidden = form.id !== id; }); };
-  document.getElementById("showSignIn").addEventListener("click", () => show("signInForm"));
-  document.getElementById("showDemo").addEventListener("click", () => show("demoForm"));
-  document.getElementById("forgotPassword").addEventListener("click", () => show("resetForm"));
-  document.querySelectorAll(".backChoices").forEach(button => button.addEventListener("click", () => { forms.forEach(form => { form.hidden = true; }); choices.hidden = false; }));
-  document.getElementById("demoForm").addEventListener("submit", async event => { event.preventDefault(); const name = document.getElementById("nameInput").value.trim(); if (!name) return; await authService?.signOut(); authenticatedContext = null; state.currentUser = { name, role: document.getElementById("roleInput").value, mode: "demo", sector: selectedSector.id }; state.demoSector = selectedSector.id; state.selectedDepartment = selectedSector.departments[0].id; state.activeWorkspaceView = "home"; if (state.currentUser.role === "pca") state.learnerName = name; demoJourney(selectedSector.id); saveState(); renderDemoWorkspace(); });
-  document.getElementById("signInForm").addEventListener("submit", async event => { event.preventDefault(); const form = event.currentTarget, button = form.querySelector("button[type=submit]"), error = document.getElementById("authError"); button.disabled = true; error.textContent = "Signing in securely‚Ä¶"; try { state.currentUser = null; state.selectedDepartment = null; saveState(); authenticatedContext = await authService.signIn(document.getElementById("emailInput").value, document.getElementById("passwordInput").value); state.activeOrganizationId = authenticatedContext.organization?.id || null; saveState(); renderAuthenticatedWorkspace(); } catch (e) { error.textContent = authMessage(e.message); if (["MISSING_PROFILE", "MISSING_MEMBERSHIP"].includes(e.message)) await authService?.signOut(); } finally { button.disabled = false; } });
-  document.getElementById("resetForm").addEventListener("submit", async event => { event.preventDefault(); const button = event.currentTarget.querySelector("button[type=submit]"); button.disabled = true; const recoveryUrl = new URL(location.href); recoveryUrl.search = ""; recoveryUrl.hash = ""; recoveryUrl.searchParams.set("recovery", "1"); try { await authService.resetPassword(document.getElementById("resetEmail").value, recoveryUrl.toString()); } catch {} renderLogin("If an eligible account exists, a password recovery link has been sent."); });
-  if (message) configureEnvironment(state.demoSector || "hospital");
-}
-
-function requestedWorkspaceView() {
-  const requested = new URLSearchParams(location.search).get("view");
-  return ["home", "training", "staff", "reports", "pathways", "people", "competency", "admin", "leads"].includes(requested)
-    ? requested : null;
-}
-
-function applyRequestedWorkspaceView(context) {
-  const requested = requestedWorkspaceView();
-  const allowed = authenticatedNavigation(context.membership?.role).map(([id]) => id);
-  if (requested && allowed.includes(requested)) state.activeWorkspaceView = requested;
-}
-
-async function acceptResolvedEntry(result) {
-  if (result?.entryState === "workspace-choice") return renderWorkspaceChooser(result);
-  if (result?.entryState === "invitation") return renderInvitationSetup(result);
-  authenticatedContext = result;
-  state.currentUser = null;
-  state.activeOrganizationId = result.organization?.id || null;
-  state.selectedDepartment = null;
-  applyRequestedWorkspaceView(result);
-  saveState();
-  configureIdleSession(result.authSettings?.idle_timeout_minutes || 30);
-  renderAuthenticatedWorkspace();
-}
-
-function renderLogin(message = "", showRecovery = false) {
-  renderShell(`
-    <div class="auth-entry-v2">
-      <section class="auth-entry-story" aria-labelledby="authEntryTitle">
-        <div class="auth-entry-mark"><svg viewBox="0 0 48 54" aria-hidden="true"><path class="logo-shield" d="M24 2 44 9v16c0 13-8 22-20 28C12 47 4 38 4 25V9L24 2Z"/><path class="logo-symbol" d="m14.5 27.5 6.2 6.2 13-14"/></svg></div>
-        <span class="eyebrow">SECURE WORKFORCE ACCESS</span>
-        <h2 id="authEntryTitle">Sign in to your SkillWard workspace</h2>
-        <p>Your organisation, sector, facility, department and role are resolved from authorised membership records after sign-in.</p>
-        <ol class="auth-entry-assurance"><li><span>1</span>Enter your account details</li><li><span>2</span>SkillWard verifies active access</li><li><span>3</span>Your correct dashboard opens</li></ol>
-        <a class="auth-demo-link" href="/demo/"><strong>Looking for Guided Demo?</strong><span>Explore Hospital, Aged Care or Disability Support with isolated sample data ‚Üí</span></a>
-      </section>
-      <section class="card direct-login-card">
-        <div id="loginPanel" ${showRecovery ? "hidden" : ""}>
-          <span class="eyebrow">ACCOUNT SIGN IN</span><h2>Welcome back</h2>
-          <p class="small">Use the account issued by your organisation.</p>
-          ${message ? `<p class="auth-status auth-status-success" role="status">${escapeHtml(message)}</p>` : ""}
-          <form id="signInForm" class="access-form" novalidate>
-            <label><span>Email</span><input id="emailInput" type="email" autocomplete="username" inputmode="email" required autofocus></label>
-            <label><span>Password</span><span class="password-control"><input id="passwordInput" type="password" autocomplete="current-password" required><button class="link-button password-toggle" type="button" data-for="passwordInput">Show</button></span></label>
-            <p id="authError" class="auth-status" role="alert"></p>
-            <button class="btn btn-wide login-submit" type="submit">Sign In <span aria-hidden="true">‚Üí</span></button>
-            <button class="link-button" type="button" id="forgotPassword">Forgot Password?</button>
-          </form>
-        </div>
-        <div id="recoveryPanel" ${showRecovery ? "" : "hidden"}>
-          <span class="eyebrow">PASSWORD RECOVERY</span><h2>Reset your password</h2>
-          <p class="small">Enter your email address. The confirmation is deliberately the same for every request.</p>
-          <form id="resetForm" class="access-form">
-            <label><span>Email</span><input id="resetEmail" type="email" autocomplete="username" required></label>
-            <p id="resetStatus" class="auth-status" role="status"></p>
-            <button class="btn btn-wide" type="submit">Send recovery link</button>
-            <button class="link-button" id="backToSignIn" type="button">Back to Sign In</button>
-          </form>
-        </div>
-        <p class="auth-security-note">Protected by Supabase Auth rate limits and organisation-scoped database permissions.</p>
-      </section>
-    </div>`);
-
-  document.querySelectorAll(".password-toggle").forEach(button => button.addEventListener("click", () => {
-    const input = document.getElementById(button.dataset.for), showing = input.type === "text";
-    input.type = showing ? "password" : "text";
-    button.textContent = showing ? "Show" : "Hide";
-  }));
-  const loginPanel = document.getElementById("loginPanel"), recoveryPanel = document.getElementById("recoveryPanel");
-  document.getElementById("forgotPassword")?.addEventListener("click", () => {
-    loginPanel.hidden = true; recoveryPanel.hidden = false; document.getElementById("resetEmail")?.focus();
-  });
-  document.getElementById("backToSignIn")?.addEventListener("click", () => {
-    recoveryPanel.hidden = true; loginPanel.hidden = false; document.getElementById("emailInput")?.focus();
-  });
-
-  let failedAttempts = 0;
-  document.getElementById("signInForm")?.addEventListener("submit", async event => {
-    event.preventDefault();
-    const form = event.currentTarget, button = form.querySelector("button[type=submit]"), error = document.getElementById("authError");
-    button.disabled = true; error.textContent = "Signing in securely‚Ä¶";
-    try {
-      state.currentUser = null; state.selectedDepartment = null; saveState();
-      const result = await authService.signIn(document.getElementById("emailInput").value.trim(), document.getElementById("passwordInput").value);
-      failedAttempts = 0;
-      await acceptResolvedEntry(result);
-    } catch (caught) {
-      if (["ACCOUNT_SUSPENDED", "ACCOUNT_ARCHIVED", "MEMBERSHIP_EXPIRED", "MISSING_MEMBERSHIP", "INVITATION_EXPIRED", "ACCESS_DENIED"].includes(caught.message)) {
-        return renderAccessState(caught.message);
-      }
-      failedAttempts += 1;
-      error.textContent = authMessage(caught.message);
-      if (["MISSING_PROFILE", "MISSING_MEMBERSHIP"].includes(caught.message)) await authService?.signOut();
-      if (failedAttempts >= 3) {
-        error.textContent = "Too many unsuccessful attempts. Wait 30 seconds before trying again.";
-        setTimeout(() => { failedAttempts = 0; button.disabled = false; error.textContent = ""; }, 30000);
-        return;
-      }
-    }
-    button.disabled = false;
-  });
-
-  document.getElementById("resetForm")?.addEventListener("submit", async event => {
-    event.preventDefault();
-    const button = event.currentTarget.querySelector("button[type=submit]"), status = document.getElementById("resetStatus");
-    button.disabled = true; status.textContent = "Requesting a secure recovery email‚Ä¶";
-    const recoveryUrl = new URL("/app/", location.origin);
-    recoveryUrl.searchParams.set("recovery", "1");
-    try { await authService.resetPassword(document.getElementById("resetEmail").value.trim(), recoveryUrl.toString()); } catch {}
-    status.textContent = "If an eligible account exists, a password recovery link has been sent.";
-  });
-}
-
-function renderGuidedDemoEntry() {
-  const sectors = Object.values(globalThis.SKILLWARD_DEMO_SECTORS || {});
-  renderShell(`<section class="guided-demo-entry">
-    <header><span class="eyebrow">GUIDED DEMO ¬∑ SAMPLE DATA</span><h2>Choose a care environment</h2><p>Demo activity stays in this browser and never writes to authenticated organisation tables.</p></header>
-    <div class="guided-demo-sector-grid">${sectors.map(sector => `<button class="card guided-demo-sector" data-demo-sector="${escapeHtml(sector.id)}"><span>${escapeHtml(sector.name)}</span><strong>${escapeHtml(sector.organization)}</strong><small>${escapeHtml(sector.description)}</small><b>Choose ${escapeHtml(sector.name)} ‚Üí</b></button>`).join("")}</div>
-    <section class="card guided-demo-role" id="guidedDemoRole" hidden><button class="link-button" id="backToDemoSectors" type="button">‚Üê Change sector</button><span class="eyebrow" id="guidedDemoLabel"></span><h3>Choose a sample role</h3><form id="guidedDemoForm"><label><span>Your display name</span><input id="nameInput" type="text" autocomplete="name" value="Demo User" required></label><label><span>Demo role</span><select id="roleInput"></select></label><button class="btn btn-wide" type="submit">Open Guided Demo</button></form></section>
-    <a class="guided-demo-exit" href="/app/">Exit Demo and return to Sign In</a>
-  </section>`);
-  document.title = "Guided Demo | SkillWard";
-  let selectedSector = null;
-  const sectorGrid = document.querySelector(".guided-demo-sector-grid"), rolePanel = document.getElementById("guidedDemoRole");
-  document.querySelectorAll("[data-demo-sector]").forEach(button => button.addEventListener("click", () => {
-    selectedSector = demoSector(button.dataset.demoSector);
-    state.demoSector = selectedSector.id; saveState();
-    document.getElementById("guidedDemoLabel").textContent = `${selectedSector.name} ¬∑ ${selectedSector.organization}`;
-    document.getElementById("roleInput").innerHTML = selectedSector.roles.map(role => `<option value="${escapeHtml(role.value)}">${escapeHtml(role.label)}</option>`).join("");
-    sectorGrid.hidden = true; rolePanel.hidden = false; document.getElementById("nameInput").focus();
-  }));
-  document.getElementById("backToDemoSectors")?.addEventListener("click", () => { rolePanel.hidden = true; sectorGrid.hidden = false; });
-  document.getElementById("guidedDemoForm")?.addEventListener("submit", async event => {
-    event.preventDefault(); if (!selectedSector) return;
-    const name = document.getElementById("nameInput").value.trim(); if (!name) return;
-    await authService?.signOut(); authenticatedContext = null;
-    state.currentUser = { name, role: document.getElementById("roleInput").value, mode: "demo", sector: selectedSector.id };
-    state.demoSector = selectedSector.id; state.selectedDepartment = selectedSector.departments[0].id; state.activeWorkspaceView = "home";
-    demoJourney(selectedSector.id); saveState(); renderDemoWorkspace();
-  });
-}
-
-function renderWorkspaceChooser(entry) {
-  renderShell(`<section class="workspace-entry-card card"><span class="eyebrow">AUTHORISED WORKSPACES</span><h2>Choose where you are working</h2><p>${escapeHtml(entry.profile.full_name)}, your account has more than one active organisation membership.</p><div class="workspace-choice-list">${entry.memberships.map(membership => `<button class="workspace-choice entry-workspace-choice" data-entry-organization="${escapeHtml(membership.organization_id)}"><span>${escapeHtml(membership.organizations?.organization_type || "Organisation")}</span><strong>${escapeHtml(membership.organizations?.name || "Organisation workspace")}</strong><small>${escapeHtml(membership.role)}</small></button>`).join("")}</div><button class="link-button" id="chooserSignOut">Sign out</button></section>`);
-  document.title = "Choose Workspace | SkillWard";
-  document.querySelectorAll("[data-entry-organization]").forEach(button => button.addEventListener("click", async () => {
-    button.disabled = true;
-    try { await acceptResolvedEntry(await authService.switchOrganization(button.dataset.entryOrganization)); }
-    catch { renderAccessState("ACCESS_DENIED"); }
-  }));
-  document.getElementById("chooserSignOut")?.addEventListener("click", signOutCurrentUser);
-}
-
-function renderInvitationSetup(entry) {
-  const invitation = entry.invitation;
-  const organization = invitation.organizations?.name || "Inviting organisation";
-  const facility = invitation.facilities?.name || "Organisation-wide";
-  const department = invitation.departments?.name || "Not assigned";
-  const passwordFields = invitation.existing_account ? "" : `<label><span>Create password</span><span class="password-control"><input id="invitationPassword" type="password" autocomplete="new-password" minlength="12" required><button class="link-button password-toggle" data-for="invitationPassword" type="button">Show</button></span></label><label><span>Confirm password</span><input id="invitationPasswordConfirm" type="password" autocomplete="new-password" minlength="12" required></label>`;
-  renderShell(`<section class="invitation-setup card"><span class="eyebrow">VERIFIED INVITATION</span><h2>${invitation.existing_account ? "Accept your SkillWard workspace" : "Create your SkillWard account"}</h2><p>Your access was assigned by ${escapeHtml(organization)}. The role and workplace scope cannot be changed here.</p><dl class="invitation-scope"><div><dt>Organisation</dt><dd>${escapeHtml(organization)}</dd></div><div><dt>Facility</dt><dd>${escapeHtml(facility)}</dd></div><div><dt>Department</dt><dd>${escapeHtml(department)}</dd></div><div><dt>Role</dt><dd>${escapeHtml(invitation.intended_role)}</dd></div></dl><form id="invitationSetupForm"><label><span>Full name</span><input id="invitationFullName" value="${escapeHtml(invitation.full_name || entry.profile.full_name)}" autocomplete="name" required></label>${passwordFields}<p id="invitationError" class="auth-status" role="alert"></p><button class="btn btn-wide" type="submit">${invitation.existing_account ? "Accept invitation" : "Create account and continue"}</button></form></section>`);
-  document.title = "Complete Invitation | SkillWard";
-  document.querySelectorAll(".password-toggle").forEach(button => button.addEventListener("click", () => {
-    const input = document.getElementById(button.dataset.for), showing = input.type === "text";
-    input.type = showing ? "password" : "text"; button.textContent = showing ? "Show" : "Hide";
-  }));
-  document.getElementById("invitationSetupForm")?.addEventListener("submit", async event => {
-    event.preventDefault();
-    const button = event.currentTarget.querySelector("button[type=submit]"), error = document.getElementById("invitationError");
-    const fullName = document.getElementById("invitationFullName").value.trim();
-    if (!invitation.existing_account) {
-      const password = document.getElementById("invitationPassword").value;
-      const confirmation = document.getElementById("invitationPasswordConfirm").value;
-      if (password.length < 12 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password) || password !== confirmation) {
-        error.textContent = "Use at least 12 characters with upper-case, lower-case and a number, and make both entries match."; return;
-      }
-      try { await authService.updatePassword(password); } catch { error.textContent = "Your password could not be saved. Request a new invitation if this link has expired."; return; }
-    }
-    button.disabled = true; error.textContent = "Confirming your authorised workspace‚Ä¶";
-    try {
-      const organizationId = await authService.completeInvitation(invitation.id, fullName);
-      history.replaceState({}, "", "/app/");
-      await acceptResolvedEntry(await authService.restore(organizationId));
-    } catch (caught) {
-      error.textContent = caught.message === "INVITATION_USED" ? "This invitation has already been used." : "This invitation is invalid, expired or has been revoked.";
-      button.disabled = false;
-    }
-  });
-}
-
-function renderAccessState(code) {
-  const states = {
-    ACCOUNT_SUSPENDED: ["Account suspended", "Your organisation has temporarily suspended this account."],
-    ACCOUNT_ARCHIVED: ["Account archived", "This account or membership is no longer active."],
-    MEMBERSHIP_EXPIRED: ["Workspace access expired", "Your organisation membership has reached its configured expiry date."],
-    MISSING_MEMBERSHIP: ["No organisation membership", "Your account is valid but has no active SkillWard workspace."],
-    MISSING_PROFILE: ["Account not invited", "This account has not been provisioned for SkillWard."],
-    INVITATION_EXPIRED: ["Invitation expired", "The invitation is expired, revoked or no longer available. Ask the organisation administrator to resend it."],
-    ACCESS_DENIED: ["Access denied", "The requested workspace or destination is outside your authorised membership."],
-    SESSION_EXPIRED: ["Session expired", "Your secure session has ended. Sign in again to continue."],
-    SYSTEM_UNAVAILABLE: ["System temporarily unavailable", "SkillWard could not load your secure workspace. Try again shortly."]
-  };
-  const [title, description] = states[code] || states.ACCESS_DENIED;
-  renderShell(`<section class="access-state-card card"><span class="eyebrow">SECURE ACCESS</span><h2>${title}</h2><p>${description}</p><div class="button-row"><button class="btn" id="accessStateSignIn">Return to Sign In</button><a class="btn btn-secondary" href="/contact/">Contact support</a></div></section>`);
-  document.title = `${title} | SkillWard`;
-  document.getElementById("accessStateSignIn")?.addEventListener("click", async () => { await authService?.signOut(); renderLogin(); });
-}
-
-function renderLegacyAuthenticatedWorkspace() {
-  const c=authenticatedContext; if(!c)return renderLogin();
-  const departments=c.departmentDetails, role=c.membership.role;
-  if(role!=="Hospital Administrator" && !departments.length) return renderShell('<section class="card access-blocked"><h2>No assigned department</h2><p>Contact Management to have a department assigned.</p></section>');
-  if(departments.length && !departments.some(item=>item.id===state.selectedDepartment)) state.selectedDepartment=departments[0].id;
-  const choose=departments.length>1;
-  const title=role==="Hospital Administrator"?"Management Dashboard":role==="Department Manager"?"Department Management Workspace":`${role} ${role.includes("Trainer")?"Workspace":"Training Workspace"}`;
-  const selected=departments.find(item=>item.id===state.selectedDepartment)||departments[0];
-  const assignments=c.trainingAssignments.filter(item=>!selected||item.department_id===selected.id);
-  const progressFor=assignment=>c.moduleProgress.filter(item=>item.training_assignment_id===assignment.id);
-  const assignmentCards=assignments.map(assignment=>{const pathway=assignment.training_pathways||{};const progress=Math.round(Number(assignment.progress_percentage)||0);const modules=progressFor(assignment);return `<article class="card training-area-card"><div class="training-area-top"><span class="area-code">${escapeHtml(role)}</span><span class="status-chip status-${statusTone(assignment.status)}">${escapeHtml(assignment.status)}</span></div><div><h3>${escapeHtml(pathway.title||"Assigned training pathway")}</h3><p>${escapeHtml(pathway.description||"Complete the pathway assigned by Management.")}</p></div><div class="area-progress"><span style="width:${progress}%"></span></div><div class="module-meta"><span class="small">${progress}% complete ¬∑ ${modules.filter(item=>item.status==="Approved"||item.status==="Ready for Trainer Review").length}/${modules.length} tracked modules</span>${assignment.due_date?`<span class="small">Due ${escapeHtml(assignment.due_date)}</span>`:""}</div></article>`;}).join("");
-  const learner=["PCA","Cleaner"].includes(role), trainer=role.includes("Trainer");
-  const trainerRelationships=c.trainerAssignments.filter(item=>!selected||item.department_id===selected.id);
-  const traineeRows=trainerRelationships.map(relationship=>{const profile=c.traineeProfiles.find(item=>item.user_id===relationship.trainee_user_id);const assignment=c.trainingAssignments.find(item=>item.user_id===relationship.trainee_user_id&&item.department_id===relationship.department_id);if(!profile)return "";const progress=Math.round(Number(assignment?.progress_percentage)||0);const recommended=assignment&&c.signoffRecommendations.some(item=>item.training_assignment_id===assignment.id);return `<article class="card trainee-profile"><div class="section-heading"><div><span class="eyebrow">${escapeHtml(profile.employee_id||"ASSIGNED TRAINEE")}</span><h3>${escapeHtml(profile.full_name)}</h3><p>${escapeHtml(assignment?.training_pathways?.title||"No pathway assigned")}</p></div><span class="status-chip status-${statusTone(assignment?.status||"Not Started")}">${escapeHtml(assignment?.status||"Not Started")}</span></div><div class="area-progress"><span style="width:${progress}%"></span></div><p class="small">${progress}% complete${assignment?.due_date?` ¬∑ Due ${escapeHtml(assignment.due_date)}`:""}</p>${assignment?`<label>Practical observation<textarea class="trainer-observation" data-assignment="${escapeHtml(assignment.id)}" placeholder="Record observable competency evidence"></textarea></label><label>Outcome<select class="trainer-outcome" data-assignment="${escapeHtml(assignment.id)}"><option>Competent</option><option>Needs Development</option><option>Not Observed</option></select></label><div class="profile-actions"><button class="btn save-real-observation" data-assignment="${escapeHtml(assignment.id)}" data-trainee="${escapeHtml(profile.user_id)}" data-department="${escapeHtml(relationship.department_id)}">Record observation</button><button class="btn send-real-recommendation" data-assignment="${escapeHtml(assignment.id)}" ${recommended||!["Ready for Trainer Review","Reassessment Required"].includes(assignment.status)?"disabled":""}>${recommended?"Recommendation sent":"Send to Management"}</button></div><p class="auth-status" id="trainer-status-${escapeHtml(assignment.id)}" role="status"></p>`:'<p class="empty-state">Management has not assigned a training pathway yet.</p>'}</article>`;}).join("");
-  const learnerSummary=`<div class="stats-grid"><div class="stat-card"><span>Assigned pathways</span><strong>${assignments.length}</strong></div><div class="stat-card"><span>Unread notifications</span><strong>${c.notifications.length}</strong></div><div class="stat-card"><span>Competency records</span><strong>${c.competencyRecords.length}</strong></div></div><div class="section-heading" id="training"><div><span class="eyebrow">YOUR TRAINING</span><h3>Assigned pathways</h3></div></div><div class="grid grid-3">${assignmentCards||'<p class="empty-state">No training pathway has been assigned for this department yet.</p>'}</div>`;
-  const trainerSummary=`<div class="stats-grid"><div class="stat-card"><span>Assigned trainees</span><strong>${trainerRelationships.length}</strong></div><div class="stat-card"><span>Pending reviews</span><strong>${c.trainingAssignments.filter(item=>item.status==="Ready for Trainer Review").length}</strong></div><div class="stat-card"><span>Unread notifications</span><strong>${c.notifications.length}</strong></div></div><div class="section-heading" id="staff"><div><span class="eyebrow">ASSIGNED TRAINEES</span><h3>Training and competency</h3></div></div><div class="grid grid-2">${traineeRows||'<p class="empty-state">No trainees are assigned in this department.</p>'}</div>`;
-  const summary=learner?learnerSummary:trainer?trainerSummary:`<section class="card"><h3>${role==="Hospital Administrator"?"Hospital-wide Management access":escapeHtml(selected?.name||"Assigned access")}</h3><p class="small">Your permitted workspace is connected to SkillWard's secured database. Management write actions will be enabled in a later controlled phase.</p></section>`;
-  renderShell(`<section class="dashboard-hero" id="home"><div class="dashboard-welcome"><span class="eyebrow">AUTHENTICATED WORKSPACE</span><h2>${escapeHtml(title)}</h2><p>Welcome, ${escapeHtml(c.profile.full_name)}. Your role, access and training records are loaded securely from SkillWard's database.</p></div>${learner?`<div class="progress-ring" style="--progress:${Math.round(Number(assignments[0]?.progress_percentage)||0)*3.6}deg"><div><strong>${Math.round(Number(assignments[0]?.progress_percentage)||0)}%</strong><span>complete</span></div></div>`:""}</section>${choose?`<section class="card"><label>Permitted department<select id="authenticatedDepartment">${departments.map(d=>`<option value="${escapeHtml(d.id)}" ${d.id===selected?.id?"selected":""}>${escapeHtml(d.name)}</option>`).join("")}</select></label></section>`:""}${summary}`);
-  document.getElementById("authenticatedDepartment")?.addEventListener("change",event=>{state.selectedDepartment=event.target.value;renderAuthenticatedWorkspace();});
-  document.querySelectorAll(".save-real-observation").forEach(button=>button.addEventListener("click",async()=>{const id=button.dataset.assignment,status=document.getElementById(`trainer-status-${id}`),note=document.querySelector(`.trainer-observation[data-assignment="${id}"]`),outcome=document.querySelector(`.trainer-outcome[data-assignment="${id}"]`);button.disabled=true;status.textContent="Saving observation‚Ä¶";try{await authService.database.recordPracticalObservation(c,{trainingAssignmentId:id,traineeUserId:button.dataset.trainee,departmentId:button.dataset.department,observationText:note.value,outcome:outcome.value});authenticatedContext=await authService.restore();renderAuthenticatedWorkspace();}catch{status.textContent="Observation could not be saved. Add evidence and try again.";button.disabled=false;}}));
-  document.querySelectorAll(".send-real-recommendation").forEach(button=>button.addEventListener("click",async()=>{const id=button.dataset.assignment,status=document.getElementById(`trainer-status-${id}`);if(!confirm("Send this competency recommendation to Management?"))return;button.disabled=true;status.textContent="Sending recommendation‚Ä¶";try{await authService.database.submitSignoffRecommendation(c,{trainingAssignmentId:id,recommendationStatus:"Sent to Management",recommendationText:"Trainer recommends competency approval based on completed training and practical observation."});authenticatedContext=await authService.restore();renderAuthenticatedWorkspace();}catch{status.textContent="Recommendation could not be sent.";button.disabled=false;}}));
-}
-
-// Phase 1 authenticated workspace. This declaration intentionally supersedes
-// the compatibility renderer above while Demo Mode continues to use its
-// established route and sample-data dashboards.
-function renderAuthenticatedWorkspace() {
-  const c = authenticatedContext;
-  if (!c) return renderLogin();
-  if (c.membership.role === "SkillWard Super Administrator" && !c.organization) return renderPlatformAdministration(c);
-
-  const departments = c.departmentDetails;
-  const role = c.membership.role;
-  const unrestrictedRoles = new Set(["Organisation Administrator", "Content Administrator/Educator"]);
-  if (!unrestrictedRoles.has(role) && !departments.length) {
-    return renderShell(`${organizationSwitcher(c)}<section class="card access-blocked"><h2>No assigned department</h2><p>Contact your Organisation Administrator to request authorised department access.</p></section>`);
-  }
-  if (departments.length && !departments.some(item => item.id === state.selectedDepartment)) state.selectedDepartment = departments[0].id;
-  const selected = departments.find(item => item.id === state.selectedDepartment) || departments[0];
-  const assignments = c.trainingAssignments.filter(item => !selected || item.department_id === selected.id);
-  const learner = ["PCA", "Cleaner", "Support Worker"].includes(role);
-  const trainer = role.includes("Trainer");
-  const title = role === "Organisation Administrator" ? "Organisation Administration"
-    : role === "Facility Administrator" ? "Facility Administration"
-      : role === "Department Manager" ? "Department Management Workspace"
-        : `${role} ${trainer ? "Workspace" : "Training Workspace"}`;
-
-  if (role === "Organisation Administrator") return renderOrganizationAdministration(c);
-  if (role === "Content Administrator/Educator") return renderEducatorWorkspace(c);
-
-  const assignmentCards = assignments.map(assignment => {
-    const pathway = assignment.training_pathways || {};
-    const progress = Math.round(Number(assignment.progress_percentage) || 0);
-    const modules = c.moduleProgress.filter(item => item.training_assignment_id === assignment.id);
-    return `<article class="card training-area-card"><div class="training-area-top"><span class="area-code">${escapeHtml(role)}</span><span class="status-chip status-${statusTone(assignment.status)}">${escapeHtml(assignment.status)}</span></div><div><h3>${escapeHtml(pathway.title || "Assigned training pathway")}</h3><p>${escapeHtml(pathway.description || "Complete the pathway assigned by Management.")}</p></div><div class="area-progress"><span style="width:${progress}%"></span></div><div class="module-meta"><span class="small">${progress}% complete ¬∑ ${modules.length} tracked modules</span>${assignment.due_date ? `<span class="small">Due ${escapeHtml(assignment.due_date)}</span>` : ""}</div></article>`;
-  }).join("");
-  const trainerRelationships = c.trainerAssignments.filter(item => !selected || item.department_id === selected.id);
-  const traineeRows = trainerRelationships.map(relationship => {
-    const profile = c.traineeProfiles.find(item => item.user_id === relationship.trainee_user_id);
-    const assignment = c.trainingAssignments.find(item => item.user_id === relationship.trainee_user_id && item.department_id === relationship.department_id);
-    if (!profile) return "";
-    const progress = Math.round(Number(assignment?.progress_percentage) || 0);
-    return `<article class="card trainee-profile"><div class="section-heading"><div><span class="eyebrow">ASSIGNED TRAINEE</span><h3>${escapeHtml(profile.full_name)}</h3><p>${escapeHtml(assignment?.training_pathways?.title || "No pathway assigned")}</p></div><span class="status-chip status-${statusTone(assignment?.status || "Not Started")}">${escapeHtml(assignment?.status || "Not Started")}</span></div><div class="area-progress"><span style="width:${progress}%"></span></div>${assignment ? `<label>Practical observation<textarea class="trainer-observation" data-assignment="${escapeHtml(assignment.id)}" placeholder="Record observable competency evidence"></textarea></label><label>Outcome<select class="trainer-outcome" data-assignment="${escapeHtml(assignment.id)}"><option>Competent</option><option>Needs Development</option><option>Not Observed</option></select></label><div class="profile-actions"><button class="btn save-real-observation" data-assignment="${escapeHtml(assignment.id)}" data-trainee="${escapeHtml(profile.user_id)}" data-department="${escapeHtml(relationship.department_id)}">Record observation</button><button class="btn send-real-recommendation" data-assignment="${escapeHtml(assignment.id)}">Send to Management</button></div><p class="auth-status" id="trainer-status-${escapeHtml(assignment.id)}" role="status"></p>` : '<p class="empty-state">Management has not assigned a pathway.</p>'}</article>`;
-  }).join("");
-  const summary = learner
-    ? `<div class="stats-grid"><div class="stat-card"><span>Assigned pathways</span><strong>${assignments.length}</strong></div><div class="stat-card"><span>Unread notifications</span><strong>${c.notifications.length}</strong></div><div class="stat-card"><span>Competency records</span><strong>${c.competencyRecords.length}</strong></div></div><div class="section-heading" id="training"><div><span class="eyebrow">YOUR TRAINING</span><h3>Assigned pathways</h3></div></div><div class="grid grid-3">${assignmentCards || '<p class="empty-state">No pathway has been assigned in this workspace.</p>'}</div>`
-    : trainer
-      ? `<div class="stats-grid"><div class="stat-card"><span>Assigned trainees</span><strong>${trainerRelationships.length}</strong></div><div class="stat-card"><span>Pending reviews</span><strong>${c.trainingAssignments.filter(item => item.status === "Ready for Trainer Review").length}</strong></div><div class="stat-card"><span>Unread notifications</span><strong>${c.notifications.length}</strong></div></div><div class="section-heading" id="staff"><div><span class="eyebrow">ASSIGNED TRAINEES</span><h3>Training and competency</h3></div></div><div class="grid grid-2">${traineeRows || '<p class="empty-state">No trainees are assigned in this department.</p>'}</div>`
-      : `<section class="card"><h3>${escapeHtml(selected?.name || "Authorised workspace")}</h3><p class="small">Access is limited to your assigned facility and departments.</p></section>`;
-
-  renderShell(`${organizationSwitcher(c)}<section class="dashboard-hero" id="home"><div class="dashboard-welcome"><span class="eyebrow">${escapeHtml(c.organization.name)}</span><h2>${escapeHtml(title)}</h2><p>Welcome, ${escapeHtml(c.profile.full_name)}. Records are scoped to this organisation workspace.</p></div></section>${departments.length > 1 ? `<section class="card workspace-filter"><label>Permitted department<select id="authenticatedDepartment">${departments.map(d => `<option value="${escapeHtml(d.id)}" ${d.id === selected?.id ? "selected" : ""}>${escapeHtml(d.name)}</option>`).join("")}</select></label></section>` : ""}${summary}`);
-  bindAuthenticatedWorkspace(c);
-}
-
-function renderEducatorWorkspace(context) {
-  const view = state.activeWorkspaceView || "home";
-  const pathways = context.learningPathways || [];
-  const enabled = context.featureFlags?.find(flag => flag.feature_key === "content_library_v2")?.state === "Enabled";
-  const hero = `<section class="dashboard-hero"><div class="dashboard-welcome"><span class="eyebrow">CONTENT ADMINISTRATION</span><h2>${view === "pathways" ? "Pathways" : view === "reports" ? "Content assurance" : "Educator Home"}</h2><p>Welcome, ${escapeHtml(context.profile.full_name)}. Create and govern only content owned by ${escapeHtml(context.organization.name)}.</p></div></section>`;
-  const content = view === "pathways"
-    ? `<section class="card"><div class="section-heading"><div><span class="eyebrow">ORGANISATION LIBRARY</span><h3>${pathways.length} pathways</h3></div><span class="status-chip status-${enabled ? "success" : "warning"}">${enabled ? "Enabled" : "Phase 2 protected"}</span></div>${pathways.map(pathway => `<article class="pathway-list-item"><span>‚ñ∑</span><div><strong>${escapeHtml(pathway.title)}</strong><small>${escapeHtml(pathway.sector || "Healthcare")} ¬∑ ${escapeHtml(pathway.status || "Draft")}</small></div></article>`).join("") || '<div class="purpose-empty"><h4>No organisation pathways yet</h4><p>The pathway builder is feature-flagged until Phase 2 migrations and publication tests pass.</p></div>'}</section>`
-    : view === "reports"
-      ? `<section class="card"><span class="eyebrow">CONTENT GOVERNANCE</span><h3>Publication control is active</h3><p>Published versions are immutable, content actions are audited and organisation copies remain tenant-scoped.</p></section>`
-      : `<div class="stats-grid"><div class="stat-card"><span>Organisation pathways</span><strong>${pathways.length}</strong></div><div class="stat-card"><span>Builder release</span><strong>${enabled ? "Open" : "Protected"}</strong></div><div class="stat-card"><span>Workspace</span><strong>Educator</strong></div></div><section class="card"><span class="eyebrow">NEXT ACTION</span><h3>Review organisation content</h3><p>Use Pathways to see existing organisation-owned content. New authoring remains hidden until the Phase 2 release is complete.</p></section>`;
-  renderShell(`${hero}${content}`);
-  bindAuthenticatedWorkspace(context);
-}
-
-function organizationSwitcher(context) {
-  const platformOption = context.platformAdministrator?.is_active ? '<option value="">SkillWard Platform Administration</option>' : "";
-  if (context.memberships.length < 2 && !platformOption) return "";
-  return `<section class="card organization-switcher"><label><span>Organisation workspace</span><select id="organizationWorkspace">${platformOption}${context.memberships.map(item => `<option value="${escapeHtml(item.organization_id)}" ${item.organization_id === context.organization?.id ? "selected" : ""}>${escapeHtml(item.organizations?.name || "Organisation")} ¬∑ ${escapeHtml(item.role)}</option>`).join("")}</select></label><small>Each workspace has separate facilities, departments and records.</small></section>`;
-}
-
-function bindAuthenticatedWorkspace(context) {
-  document.getElementById("organizationWorkspace")?.addEventListener("change", async event => {
-    event.target.disabled = true;
-    state.activeOrganizationId = event.target.value;
-    state.selectedDepartment = null;
-    saveState();
-    authenticatedContext = event.target.value ? await authService.switchOrganization(event.target.value) : await authService.restore();
-    renderAuthenticatedWorkspace();
-  });
-  document.getElementById("authenticatedDepartment")?.addEventListener("change", event => { state.selectedDepartment = event.target.value; saveState(); renderAuthenticatedWorkspace(); });
-  document.querySelectorAll(".save-real-observation").forEach(button => button.addEventListener("click", async () => {
-    const id = button.dataset.assignment, status = document.getElementById(`trainer-status-${id}`), note = document.querySelector(`.trainer-observation[data-assignment="${id}"]`), outcome = document.querySelector(`.trainer-outcome[data-assignment="${id}"]`);
-    button.disabled = true; status.textContent = "Saving observation‚Ä¶";
-    try { await authService.database.recordPracticalObservation(context, { trainingAssignmentId:id, traineeUserId:button.dataset.trainee, departmentId:button.dataset.department, observationText:note.value, outcome:outcome.value }); authenticatedContext = await authService.restore(state.activeOrganizationId); renderAuthenticatedWorkspace(); }
-    catch { status.textContent = "Observation could not be saved. Add evidence and try again."; button.disabled = false; }
-  }));
-  document.querySelectorAll(".send-real-recommendation").forEach(button => button.addEventListener("click", async () => {
-    const status = document.getElementById(`trainer-status-${button.dataset.assignment}`);
-    if (!confirm("Send this competency recommendation to Management?")) return;
-    button.disabled = true; status.textContent = "Sending recommendation‚Ä¶";
-    try { await authService.database.submitSignoffRecommendation(context, { trainingAssignmentId:button.dataset.assignment, recommendationStatus:"Sent to Management", recommendationText:"Trainer recommends competency approval based on completed training and practical observation." }); authenticatedContext = await authService.restore(state.activeOrganizationId); renderAuthenticatedWorkspace(); }
-    catch { status.textContent = "Recommendation could not be sent."; button.disabled = false; }
-  }));
-}
-
-function renderPlatformAdministration(context) {
-  const organizations = context.organizations || [];
-  const usage = new Map((context.organizationUsage || []).map(item => [item.organization_id, item]));
-  if (state.activeWorkspaceView === "leads") {
-    const requests = context.demoRequests || [];
-    renderShell(`<section class="dashboard-hero"><div class="dashboard-welcome"><span class="eyebrow">SKILLWARD SALES</span><h2>Demo requests</h2><p>Business enquiries are visible only to active SkillWard Super Administrators.</p></div></section><section class="card"><div class="section-heading"><div><span class="eyebrow">PROTECTED LEADS</span><h3>Recent requests</h3></div><span class="count-badge">${requests.length}</span></div><div class="organization-register">${requests.map(item => `<article><div><strong>${escapeHtml(item.full_name)} ¬∑ ${escapeHtml(item.organization_name)}</strong><small>${escapeHtml(item.work_email)} ¬∑ ${escapeHtml(item.organization_type)} ¬∑ ${escapeHtml(item.job_role)}</small><small>${escapeHtml(item.primary_interest)} ¬∑ ${escapeHtml(item.staff_range)} staff ¬∑ ${escapeHtml(new Date(item.submitted_at).toLocaleString("en-AU"))}</small>${item.message ? `<small>${escapeHtml(item.message)}</small>` : ""}</div><span class="status-chip status-${item.status === "New" ? "warning" : "success"}">${escapeHtml(item.status)}</span></article>`).join("") || '<p class="empty-state">No demo requests have been submitted.</p>'}</div></section>`);
-    return;
-  }
-  renderShell(`<section class="dashboard-hero"><div class="dashboard-welcome"><span class="eyebrow">SKILLWARD CONTROL PLANE</span><h2>Platform Administration</h2><p>Create and govern organisations, subscriptions, templates and explicitly authorised support access.</p></div></section><div class="stats-grid"><div class="stat-card"><span>Organisations</span><strong>${organizations.length}</strong></div><div class="stat-card"><span>Active</span><strong>${organizations.filter(item => item.status === "Active").length}</strong></div><div class="stat-card"><span>Pilot plans</span><strong>${organizations.filter(item => item.subscription_plan === "Pilot").length}</strong></div></div><section class="admin-setup-grid"><form class="card setup-form" id="createOrganizationForm"><span class="eyebrow">NEW WORKSPACE</span><h3>Create organisation</h3><label>Name<input name="name" required></label><label>Type<select name="type"><option>Hospital</option><option>Aged Care</option><option>Disability Support</option></select></label><label>Slug<input name="slug" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" required></label><button class="btn" type="submit">Create organisation</button><p class="auth-status" role="status"></p></form><section class="card"><span class="eyebrow">SUBSCRIPTIONS &amp; USAGE</span><h3>Organisation register</h3><div class="organization-register">${organizations.map(item => { const totals = usage.get(item.id) || {}; return `<article><div><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.organization_type)} ¬∑ ${escapeHtml(item.subscription_plan)} ¬∑ ${escapeHtml(item.subscription_status)}</small><small>${Number(totals.active_members || 0)} members ¬∑ ${Number(totals.active_facilities || 0)} facilities ¬∑ ${Number(totals.active_departments || 0)} departments</small></div><span class="status-chip status-${item.status === "Active" ? "success" : "neutral"}">${escapeHtml(item.status)}</span>${item.status === "Active" ? `<button class="link-button archive-organization" data-id="${escapeHtml(item.id)}">Archive</button>` : ""}</article>`; }).join("") || '<p class="empty-state">No organisations have been created.</p>'}</div></section></section><section class="card"><span class="eyebrow">EXPLICIT SUPPORT MODE</span><h3>Authorised sessions</h3><p class="small">Support access is organisation-approved, time-limited and fully audited. Platform administration alone cannot open clinical workforce records.</p><div class="organization-register">${(context.supportSessions || []).map(item => `<article><div><strong>${escapeHtml(item.reason)}</strong><small>Expires ${escapeHtml(new Date(item.expires_at).toLocaleString("en-AU"))}</small></div><span class="status-chip status-${item.status === "Active" ? "success" : "warning"}">${escapeHtml(item.status)}</span>${item.status === "Pending" ? `<button class="link-button activate-support" data-id="${escapeHtml(item.id)}">Enter support mode</button>` : ""}</article>`).join("") || '<p class="empty-state">No organisation has authorised a support session.</p>'}</div></section><section class="card"><span class="eyebrow">SKILLWARD TEMPLATES</span><h3>Pathway template governance</h3><p class="small">Template ownership is established in Phase 1. The guided authoring and version-control tools arrive in Phase 2.</p></section>`);
-  document.querySelector(".admin-setup-grid")?.insertAdjacentHTML("beforeend", `<form class="card setup-form" id="firstAdministratorForm"><span class="eyebrow">FIRST ADMINISTRATOR</span><h3>Invite organisation owner</h3><label>Organisation<select name="organizationId" required><option value="">Choose organisation</option>${organizations.filter(item => item.status === "Active").map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("")}</select></label><label>Full name<input name="fullName" required></label><label>Employee ID<input name="employeeId" required></label><label>Email<input name="email" type="email" required></label><button class="btn" type="submit">Invite first administrator</button><p class="auth-status" role="status"></p></form>`);
-  document.getElementById("createOrganizationForm")?.addEventListener("submit", async event => { event.preventDefault(); const form = event.currentTarget, status = form.querySelector(".auth-status"), values = new FormData(form); status.textContent = "Creating secure workspace‚Ä¶"; try { await authService.database.createOrganization({ name:values.get("name"), organizationType:values.get("type"), slug:values.get("slug") }); authenticatedContext = await authService.restore(); renderAuthenticatedWorkspace(); } catch { status.textContent = "The organisation could not be created. Check the slug and try again."; } });
-  document.getElementById("firstAdministratorForm")?.addEventListener("submit", async event => { event.preventDefault(); const form = event.currentTarget, status = form.querySelector(".auth-status"), values = new FormData(form); status.textContent = "Creating protected invitation‚Ä¶"; try { await authService.database.inviteOrganizationMember(context, { organizationId:values.get("organizationId"), fullName:values.get("fullName"), employeeId:values.get("employeeId"), email:values.get("email"), role:"Organisation Administrator" }); status.textContent = "Invitation created and submitted for delivery."; form.reset(); } catch { status.textContent = "The first-administrator invitation could not be delivered."; } });
-  document.querySelectorAll(".archive-organization").forEach(button => button.addEventListener("click", async () => { if (!confirm("Archive this organisation? Its records will be retained and access will stop.")) return; await authService.database.archiveOrganization(button.dataset.id); authenticatedContext = await authService.restore(); renderAuthenticatedWorkspace(); }));
-  document.querySelectorAll(".activate-support").forEach(button => button.addEventListener("click", async () => { if (!confirm("Enter this time-limited support session? The action and all access will be audited.")) return; const session = (context.supportSessions || []).find(item => item.id === button.dataset.id); await authService.database.activateSupportSession(button.dataset.id); state.activeOrganizationId = session.organization_id; saveState(); authenticatedContext = await authService.switchOrganization(session.organization_id); renderAuthenticatedWorkspace(); }));
-}
-
-function renderOrganizationAdministration(context) {
-  const facilities = context.facilities || [], departments = context.departmentDetails || [], settings = context.organization.branding_settings || {};
-  const roleOptions = ["Organisation Administrator","Facility Administrator","Department Manager","Content Administrator/Educator","PCA Trainer","Cleaner Trainer","PCA","Cleaner","Support Worker"];
-  const view = state.activeWorkspaceView || "home";
-  const staff = context.organizationStaff || [];
-  const invitations = context.organizationInvitations || [];
-  const identityComplete = Boolean(context.organization.logo_path || settings.primaryColor || settings.accentColor);
-  const setupItems = [
-    ["identity", "Organisation identity", identityComplete, "Add your logo and brand colours"],
-    ["facility", "First facility", facilities.length > 0, "Create the hospital or care location"],
-    ["department", "Departments", departments.length > 0, "Add the teams that deliver training"],
-    ["people", "Administrators and staff", staff.length > 1, "Invite the people who will use SkillWard"]
-  ];
-  const completed = setupItems.filter(item => item[2]).length;
-  const progress = Math.round((completed / setupItems.length) * 100);
-  const workspaceHero = (eyebrow, title, description, action = "") => `${organizationSwitcher(context)}<section class="dashboard-hero workspace-page-hero"><div class="dashboard-welcome"><span class="eyebrow">${eyebrow}</span><h2>${title}</h2><p>${description}</p></div>${action}</section>`;
-  const stats = `<div class="stats-grid workspace-stats"><div class="stat-card"><span>Facilities</span><strong>${facilities.length}</strong></div><div class="stat-card"><span>Departments</span><strong>${departments.length}</strong></div><div class="stat-card"><span>People</span><strong>${staff.length}</strong></div><div class="stat-card"><span>Setup</span><strong>${progress}%</strong></div></div>`;
-  const staffRows = staff.map(item => { const profile = item.user_profiles || {}; return `<article class="person-row"><span class="person-avatar">${escapeHtml((profile.full_name || item.employee_id || "S").charAt(0).toUpperCase())}</span><div><strong>${escapeHtml(profile.full_name || "Staff member")}</strong><small>${escapeHtml(item.employee_id || "Employee ID pending")} ¬∑ ${escapeHtml(item.employment_status || "Active")}</small></div><span class="status-chip status-${item.account_status === "Active" ? "success" : "warning"}">${escapeHtml(item.account_status || "Profile")}</span></article>`; }).join("");
-  const inviteForm = `<form class="card setup-form focused-form" id="organizationInviteForm"><span class="eyebrow">PEOPLE &amp; PERMISSIONS</span><h3>Invite a team member</h3><p class="small">Create one secure account, then assign only the organisation, facility and department access this person needs.</p><div class="form-grid"><label>Full name<input name="fullName" autocomplete="name" required></label><label>Employee ID<input name="employeeId" required></label><label>Email<input name="email" type="email" autocomplete="email" required></label><label>Role<select name="role">${roleOptions.map(role => `<option>${escapeHtml(role)}</option>`).join("")}</select></label><label>Facility<select name="facilityId"><option value="">Organisation-wide</option>${facilities.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("")}</select></label><label>Department<select name="departmentId"><option value="">No department yet</option>${departments.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("")}</select></label></div><button class="btn" type="submit">Send secure invitation</button><p class="small trust-note">Invitation delivery is protected, role-scoped and written to the audit history.</p><p class="auth-status" role="status"></p></form>`;
-  const invitationRegister = `<section class="card invitation-register"><div class="section-heading"><div><span class="eyebrow">INVITATIONS</span><h3>Invitation history</h3></div><span class="count-badge">${invitations.length}</span></div>${invitations.map(invitation => `<article><div><strong>${escapeHtml(invitation.full_name)}</strong><small>${escapeHtml(invitation.email)} ¬∑ ${escapeHtml(invitation.intended_role)}</small><small>Expires ${escapeHtml(new Date(invitation.expires_at).toLocaleString("en-AU"))}</small></div><span class="status-chip status-${invitation.invitation_state === "Accepted" ? "success" : invitation.invitation_state === "Delivered" ? "warning" : "neutral"}">${escapeHtml(invitation.invitation_state || invitation.status)}</span>${["Pending", "Delivered", "Failed", "Expired"].includes(invitation.invitation_state) ? `<div class="invitation-actions"><button class="link-button manage-invitation" data-invitation-action="resend" data-invitation-id="${escapeHtml(invitation.id)}">Resend</button><button class="link-button manage-invitation" data-invitation-action="revoke" data-invitation-id="${escapeHtml(invitation.id)}">Revoke</button></div>` : ""}</article>`).join("") || '<p class="empty-state">No invitations have been created.</p>'}<p class="auth-status" id="invitationActionStatus" role="status"></p></section>`;
-
-  let content = "";
-  if (view === "home") {
-    const checklist = setupItems.map(([step, label, done, detail], index) => `<button class="setup-check ${done ? "is-complete" : ""}" data-setup-step="${step}"><span>${done ? "‚úì" : index + 1}</span><div><strong>${label}</strong><small>${done ? "Complete" : detail}</small></div><b>‚Üí</b></button>`).join("");
-    content = `${workspaceHero("ORGANISATION HOME", escapeHtml(context.organization.name), `Welcome, ${escapeHtml(context.profile.full_name)}. Set up your organisation, then manage learning and competency from the workspace navigation.`)}${stats}<section class="workspace-home-grid"><section class="card setup-progress-card"><div class="section-heading"><div><span class="eyebrow">GET STARTED</span><h3>Organisation setup</h3></div><strong>${completed}/${setupItems.length}</strong></div><div class="setup-progress-track"><span style="width:${progress}%"></span></div><div class="setup-checklist">${checklist}</div></section><section class="card workspace-overview-card"><span class="eyebrow">WORKSPACE OVERVIEW</span><h3>Everything in one secure organisation</h3><div class="overview-links"><button class="workspace-route" data-view="pathways"><span>‚ñ∑</span><div><strong>Training pathways</strong><small>Lessons, quizzes and practical requirements</small></div><b>‚Üí</b></button><button class="workspace-route" data-view="people"><span>‚ôô</span><div><strong>People and permissions</strong><small>Staff, trainers, managers and access</small></div><b>‚Üí</b></button><button class="workspace-route" data-view="competency"><span>‚úì</span><div><strong>Competency</strong><small>Assessment, approval and renewal status</small></div><b>‚Üí</b></button><button class="workspace-route" data-view="reports"><span>‚ñ•</span><div><strong>Reports</strong><small>Readiness and compliance visibility</small></div><b>‚Üí</b></button></div></section></section>`;
-  } else if (view === "pathways") {
-    const pathways = [...new Map((context.trainingAssignments || []).filter(item => item.training_pathways).map(item => [item.training_pathways.id || item.training_pathway_id, item.training_pathways])).values()];
-    content = `${workspaceHero("LEARNING", "Training pathways", "Build structured learning from SkillWard templates, then assign the published version to workers.", '<button class="btn workspace-route" data-view="admin" data-setup-step="department">Check department readiness</button>')}<section class="workspace-home-grid"><section class="card"><span class="eyebrow">PATHWAY LIBRARY</span><h3>${pathways.length ? "Available pathways" : "No organisation pathways yet"}</h3>${pathways.map(item => `<article class="pathway-list-item"><span>‚ñ∑</span><div><strong>${escapeHtml(item.title || "Training pathway")}</strong><small>${escapeHtml(item.description || "Organisation learning pathway")}</small></div><span class="status-chip status-success">Published</span></article>`).join("") || '<div class="purpose-empty"><span>Ôºã</span><h4>Start with a SkillWard template</h4><p>The Canvas-style pathway builder will guide educators through modules, lessons, quizzes, practical checklists, review and publishing without starting from a blank screen.</p></div>'}</section><section class="card pathway-structure"><span class="eyebrow">PATHWAY STRUCTURE</span><h3>Learning that becomes competency</h3><ol><li><span>1</span><div><strong>Modules and lessons</strong><small>Local procedures, objectives, media and documents</small></div></li><li><span>2</span><div><strong>Knowledge checks</strong><small>Quizzes, pass marks, prerequisites and attempts</small></div></li><li><span>3</span><div><strong>Practical assessment</strong><small>Trainer checklist, evidence and recommendation</small></div></li><li><span>4</span><div><strong>Approval and renewal</strong><small>Manager decision, competency record and reassessment</small></div></li></ol></section></section>`;
-  } else if (view === "people") {
-    content = `${workspaceHero("PEOPLE", "People and permissions", "Invite staff once, assign trusted roles and keep every facility and department boundary explicit.")}${stats}<section class="people-layout"><section class="card people-directory"><div class="section-heading"><div><span class="eyebrow">DIRECTORY</span><h3>Organisation people</h3></div><span class="count-badge">${staff.length}</span></div><div class="people-list">${staffRows || '<div class="purpose-empty compact"><h4>No staff profiles yet</h4><p>Use the invitation form to add the first administrator, manager, educator, trainer or worker.</p></div>'}</div></section>${inviteForm}</section>${invitationRegister}`;
-  } else if (view === "competency") {
-    content = `${workspaceHero("COMPETENCY", "Assessment and assurance", "Track the complete journey from learning through practical assessment, manager approval and reassessment.")}<div class="stats-grid workspace-stats"><div class="stat-card"><span>Awaiting assessment</span><strong>0</strong></div><div class="stat-card"><span>Awaiting approval</span><strong>0</strong></div><div class="stat-card"><span>Current</span><strong>${context.competencyRecords?.length || 0}</strong></div><div class="stat-card"><span>Reassessment</span><strong>0</strong></div></div><section class="card competency-flow"><span class="eyebrow">CONTROLLED WORKFLOW</span><h3>One auditable competency record</h3><div><article><span>1</span><strong>Worker completes learning</strong></article><article><span>2</span><strong>Trainer assesses practice</strong></article><article><span>3</span><strong>Manager approves</strong></article><article><span>4</span><strong>SkillWard monitors renewal</strong></article></div><p class="empty-state">No organisation-wide competency decisions require attention yet.</p></section>`;
-  } else if (view === "reports") {
-    content = `${workspaceHero("REPORTS", "Readiness and compliance", "See whether the organisation is configured, staffed and ready to deliver controlled training.")}${stats}<section class="reports-grid"><article class="card report-panel"><span class="eyebrow">SETUP READINESS</span><h3>${progress}% ready</h3><div class="setup-progress-track"><span style="width:${progress}%"></span></div><ul>${setupItems.map(item => `<li><span>${item[2] ? "‚úì" : "‚óã"}</span>${item[1]}<strong>${item[2] ? "Ready" : "Action required"}</strong></li>`).join("")}</ul></article><article class="card report-panel"><span class="eyebrow">ACCESS ASSURANCE</span><h3>Organisation boundary active</h3><p>Every workplace record is restricted by active membership, role and authorised facility or department access.</p><div class="assurance-badge">‚úì RLS protected</div></article></section>`;
-  } else {
-    const step = state.organizationSetupStep || "identity";
-    const steps = [["identity", "Identity"], ["facility", "Facilities"], ["department", "Departments"], ["people", "Invitations"], ["support", "Support"]];
-    const stepper = `<nav class="admin-stepper" aria-label="Organisation setup">${steps.map(([id, label], index) => `<button class="${step === id ? "is-active" : ""}" data-setup-step="${id}"><span>${index + 1}</span>${label}</button>`).join("")}</nav>`;
-    let panel = "";
-    if (step === "identity") panel = `<form class="card setup-form focused-form" id="brandingForm"><span class="eyebrow">1 ¬∑ ORGANISATION IDENTITY</span><h3>Brand this workspace</h3><p class="small">Use an approved logo URL and colours that staff will recognise when they sign in.</p><label>Organisation logo URL<input name="logoPath" type="url" value="${escapeHtml(context.organization.logo_path || "")}" placeholder="https://example.org/organisation-logo.svg"></label><div class="colour-fields"><label><span>Primary colour</span><input name="primaryColor" type="color" value="${escapeHtml(settings.primaryColor || "#0b4051")}"><small>${escapeHtml(settings.primaryColor || "#0b4051")}</small></label><label><span>Accent colour</span><input name="accentColor" type="color" value="${escapeHtml(settings.accentColor || "#20b8ad")}"><small>${escapeHtml(settings.accentColor || "#20b8ad")}</small></label></div><button class="btn" type="submit">Save and continue</button><p class="auth-status" role="status"></p></form>`;
-    if (step === "facility") panel = `<section class="admin-focus-grid"><form class="card setup-form focused-form" id="facilityForm"><span class="eyebrow">2 ¬∑ FACILITIES</span><h3>Add a care location</h3><p class="small">A facility is a physical hospital or care site. Departments are created inside it.</p><label>Facility name<input name="name" placeholder="Royal Perth Hospital" required></label><label>Location<input name="location" placeholder="Perth, Western Australia"></label><button class="btn" type="submit">Add facility and continue</button><p class="auth-status" role="status"></p></form><section class="card setup-register"><span class="eyebrow">CURRENT FACILITIES</span><h3>${facilities.length} configured</h3>${facilities.map(item => `<article><div><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.location || "Location not provided")}</small></div><span class="status-chip status-success">Active</span></article>`).join("") || '<p class="empty-state">No facilities have been added.</p>'}</section></section>`;
-    if (step === "department") panel = `<section class="admin-focus-grid"><form class="card setup-form focused-form" id="departmentForm"><span class="eyebrow">3 ¬∑ DEPARTMENTS</span><h3>Add a department</h3><p class="small">Departments control content, staff access, trainers, reporting and competency workflows.</p><label>Facility<select name="facilityId" required><option value="">Choose facility</option>${facilities.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("")}</select></label><div class="form-grid"><label>Department code<input name="code" maxlength="30" placeholder="OT" required></label><label>Department name<input name="name" placeholder="Operating Theatre & Recovery" required></label></div><label>Description<textarea name="description" placeholder="Describe the team and its training responsibilities"></textarea></label><button class="btn" type="submit" ${facilities.length ? "" : "disabled"}>Add department and continue</button>${facilities.length ? "" : '<p class="form-guidance">Add a facility before creating a department.</p>'}<p class="auth-status" role="status"></p></form><section class="card setup-register"><span class="eyebrow">CURRENT DEPARTMENTS</span><h3>${departments.length} configured</h3>${departments.map(item => `<article><div><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.code || "Department")}</small></div><span class="status-chip status-success">Active</span></article>`).join("") || '<p class="empty-state">No departments have been added.</p>'}</section></section>`;
-    if (step === "people") panel = inviteForm;
-    if (step === "support") panel = `<form class="card setup-form focused-form support-form" id="supportAuthorizationForm"><span class="eyebrow">5 ¬∑ SUPPORT ACCESS</span><h3>Authorise a verified support request</h3><p class="small">Use this only when SkillWard support has supplied a verified support user ID. Access is time-limited and fully audited.</p><label>Verified support user ID<input name="supportUserId" type="text" autocomplete="off" required></label><label>Reason for access<textarea name="reason" minlength="10" placeholder="Describe the support request and approved scope" required></textarea></label><label class="hours-field">Access duration in hours <input name="hours" type="number" min="1" max="24" value="1" required></label><button class="btn" type="submit">Authorise time-limited access</button><p class="trust-note">The support user must separately activate the session. Every access event is written to immutable audit history.</p><p class="auth-status" role="status"></p></form>`;
-    content = `${workspaceHero("ADMIN", "Organisation settings", "Complete the guided setup once, then return here only when your organisation structure or access changes.")}${stepper}<div class="admin-focus">${panel}</div>`;
-  }
-
-  renderShell(content);
-  bindAuthenticatedWorkspace(context);
-  document.querySelectorAll(".workspace-route").forEach(button => button.addEventListener("click", () => { state.activeWorkspaceView = button.dataset.view; if (button.dataset.setupStep) state.organizationSetupStep = button.dataset.setupStep; saveState(); renderAuthenticatedWorkspace(); }));
-  document.querySelectorAll("[data-setup-step]").forEach(button => button.addEventListener("click", () => { state.activeWorkspaceView = "admin"; state.organizationSetupStep = button.dataset.setupStep; saveState(); renderAuthenticatedWorkspace(); }));
-  bindSetupForm("brandingForm", async values => { await authService.database.updateOrganizationBranding(context, { logoPath:values.get("logoPath"), primaryColor:values.get("primaryColor"), accentColor:values.get("accentColor") }); state.organizationSetupStep = "facility"; saveState(); });
-  bindSetupForm("facilityForm", async values => { await authService.database.createFacility(context, { name:values.get("name"), location:values.get("location") }); state.organizationSetupStep = "department"; saveState(); });
-  bindSetupForm("departmentForm", async values => { await authService.database.createDepartment(context, { facilityId:values.get("facilityId"), code:values.get("code"), name:values.get("name"), description:values.get("description") }); state.organizationSetupStep = "people"; saveState(); });
-  bindSetupForm("organizationInviteForm", async values => { await authService.database.inviteOrganizationMember(context, { fullName:values.get("fullName"), employeeId:values.get("employeeId"), email:values.get("email"), role:values.get("role"), facilityId:values.get("facilityId"), departmentId:values.get("departmentId") }); state.activeWorkspaceView = "people"; saveState(); });
-  document.querySelectorAll(".manage-invitation").forEach(button => button.addEventListener("click", async () => {
-    const status = document.getElementById("invitationActionStatus");
-    if (button.dataset.invitationAction === "revoke" && !confirm("Revoke this invitation? The user will not be able to enter this organisation.")) return;
-    button.disabled = true; status.textContent = `${button.dataset.invitationAction === "resend" ? "Resending" : "Revoking"} invitation‚Ä¶`;
-    try {
-      await authService.database.manageOrganizationInvitation(button.dataset.invitationId, button.dataset.invitationAction);
-      authenticatedContext = await authService.restore(state.activeOrganizationId); renderAuthenticatedWorkspace();
-    } catch { status.textContent = "The invitation action could not be completed."; button.disabled = false; }
-  }));
-  bindSetupForm("supportAuthorizationForm", values => authService.database.authorizeSupportAccess(context, { supportUserId:values.get("supportUserId"), reason:values.get("reason"), hours:values.get("hours") }));
-}
-
-function bindSetupForm(id, submit) {
-  document.getElementById(id)?.addEventListener("submit", async event => { event.preventDefault(); const form = event.currentTarget, status = form.querySelector(".auth-status"); status.textContent = "Saving‚Ä¶"; try { await submit(new FormData(form)); authenticatedContext = await authService.restore(state.activeOrganizationId); renderAuthenticatedWorkspace(); } catch { status.textContent = "This change could not be saved. Check your authorised scope and the entered details."; } });
-}
-
-function demoWorkflowHtml(sector = demoSector(), journey = demoJourney()) {
-  return `<section class="card demo-workflow-card"><div class="section-heading"><div><span class="eyebrow">COMPETENCY JOURNEY</span><h3>Learn ‚Üí Validate ‚Üí Observe ‚Üí Approve ‚Üí Renew</h3></div><span class="status-chip ${journey.renewalScheduled ? "status-success" : "status-warning"}">${journey.renewalScheduled ? "Cycle complete" : "In progress"}</span></div><ol class="demo-workflow-steps">${demoStageStatus(journey, sector).map(([label, done, detail], index) => `<li class="${done ? "is-complete" : ""}"><span>${done ? "‚úì" : index + 1}</span><div><strong>${label}</strong><small>${escapeHtml(detail)}</small></div></li>`).join("")}</ol></section>`;
-}
-
-function demoWorkspaceHero(eyebrow, title, description, sector = demoSector()) {
-  return `<section class="dashboard-hero demo-workspace-hero"><div class="dashboard-welcome"><span class="eyebrow">${escapeHtml(eyebrow)}</span><h2>${escapeHtml(title)}</h2><p>${escapeHtml(description)}</p><div class="demo-context"><span>${escapeHtml(sector.organization)}</span><span>${escapeHtml(sector.facility)}</span><span>${escapeHtml(departmentName(state.selectedDepartment))}</span></div></div><div class="demo-session-controls"><span class="demo-mode-badge">GUIDED DEMO ¬∑ SAMPLE DATA</span><button class="link-button" data-demo-action="reset">Reset Demo</button><button class="link-button" data-demo-action="change">Change Demo Workspace</button><button class="link-button" data-demo-action="exit">Exit Demo</button></div></section>`;
-}
-
-function renderDemoWorkspace() {
-  if (state.currentUser?.mode !== "demo") return routeSignedInUser();
-  const sector = demoSector(state.currentUser.sector);
-  if (!sector) return renderLogin();
-  state.demoSector = sector.id;
-  state.currentUser.sector = sector.id;
-  if (!sector.departments.some(item => item.id === state.selectedDepartment)) state.selectedDepartment = sector.departments[0].id;
-  const allowedViews = demoNavigation(state.currentUser.role).map(([id]) => id);
-  if (!allowedViews.includes(state.activeWorkspaceView)) state.activeWorkspaceView = "home";
-  saveState();
-  const kind = demoRoleKind(state.currentUser.role, sector);
-  if (kind === "management") return renderDemoManagementWorkspace(sector);
-  if (kind === "trainer") return renderDemoTrainerWorkspace(sector);
-  renderDemoWorkerWorkspace(sector);
-}
-
-function renderDemoWorkerWorkspace(sector) {
-  const journey = demoJourney(sector.id), view = state.activeWorkspaceView || "home";
-  const role = sector.roles.find(item => item.value === state.currentUser.role)?.label || workplaceRoleLabel(state.currentUser.role);
-  const learned = journey.learnedModules.length >= sector.pathway.modules.length;
-  let content;
-  if (view === "training") {
-    const modules = sector.pathway.modules.map((module, index) => { const complete = journey.learnedModules.includes(module.id); return `<article class="card demo-module-card"><div class="module-card-head"><span class="module-number">${String(index + 1).padStart(2, "0")}</span><span class="module-duration">${escapeHtml(module.duration)}</span></div><span class="eyebrow">${escapeHtml(module.type)}</span><h3>${escapeHtml(module.title)}</h3><p>This sample module demonstrates the Canvas-style sequence. Local approved content always replaces demonstration text.</p><div class="module-meta"><span class="badge ${complete ? "badge-complete" : "badge-not-started"}">${complete ? "Learned" : "Not started"}</span><button class="btn ${complete ? "btn-secondary" : ""} complete-demo-module" data-module="${escapeHtml(module.id)}" ${complete ? "disabled" : ""}>${complete ? "Complete" : "Mark learning complete"}</button></div></article>`; }).join("");
-    content = `${demoWorkspaceHero("YOUR LEARNING", sector.pathway.title, `${role} pathway ¬∑ ${sector.pathway.description}`, sector)}<section class="demo-action-bar"><div><strong>${journey.learnedModules.length}/${sector.pathway.modules.length} modules learned</strong><small>Complete learning before knowledge validation.</small></div><button class="btn" id="completeAllLearning" ${learned ? "disabled" : ""}>Complete required learning</button></section><div class="grid grid-2 demo-module-grid">${modules}</div><section class="card demo-validation-card"><span class="eyebrow">VALIDATE</span><h3>Knowledge check</h3><p>Confirm understanding before the pathway can move to practical observation.</p><button class="btn" id="validateDemoKnowledge" ${!learned || journey.validated ? "disabled" : ""}>${journey.validated ? `Passed ¬∑ ${journey.score}%` : "Complete knowledge check"}</button>${!learned ? '<p class="form-guidance">Finish every required module first.</p>' : ""}</section>${sector.id === "hospital" && state.currentUser.role === "pca" ? '<section class="card hospital-detail-link"><span class="eyebrow">HOSPITAL DETAIL</span><h3>Existing Operating Theatre pathway</h3><p>The original six Hospital modules, lessons and quizzes remain available.</p><button class="btn btn-secondary" id="openDetailedHospitalPathway">Open detailed pathway</button></section>' : ""}${demoWorkflowHtml(sector, journey)}`;
-  } else {
-    content = `${demoWorkspaceHero("WORKER HOME", `Welcome, ${state.currentUser.name}`, `${role} ¬∑ Your assigned learning, due work and competency status in one place.`, sector)}<div class="stats-grid demo-stats"><div class="stat-card"><span>Assigned pathways</span><strong>1</strong></div><div class="stat-card"><span>Learning progress</span><strong>${Math.round(journey.learnedModules.length / sector.pathway.modules.length * 100)}%</strong></div><div class="stat-card"><span>Knowledge result</span><strong>${journey.validated ? `${journey.score}%` : "‚Äî"}</strong></div><div class="stat-card"><span>Competency</span><strong>${journey.approved ? "Current" : "Pending"}</strong></div></div><section class="card assigned-pathway-card"><div><span class="eyebrow">ASSIGNED PATHWAY</span><h3>${escapeHtml(sector.pathway.title)}</h3><p>${escapeHtml(sector.pathway.description)}</p><div class="area-progress"><span style="width:${Math.round(journey.learnedModules.length / sector.pathway.modules.length * 100)}%"></span></div><small>Due 30 September 2026 ¬∑ Published sample version 1.0</small></div><button class="btn demo-route" data-demo-view="training">Open pathway</button></section>${demoWorkflowHtml(sector, journey)}`;
-  }
-  renderShell(content);
-  bindDemoCommonActions();
-  document.querySelectorAll(".complete-demo-module").forEach(button => button.addEventListener("click", () => { const modules = new Set(journey.learnedModules); modules.add(button.dataset.module); recordDemoJourney("Learning completed", `${sector.pathway.modules.find(item => item.id === button.dataset.module)?.title} completed by ${state.currentUser.name}.`, { learnedModules:[...modules] }); renderDemoWorkerWorkspace(sector); }));
-  document.getElementById("completeAllLearning")?.addEventListener("click", () => { recordDemoJourney("Learning completed", `All required ${sector.pathway.title} modules completed.`, { learnedModules:sector.pathway.modules.map(item => item.id) }); renderDemoWorkerWorkspace(sector); });
-  document.getElementById("validateDemoKnowledge")?.addEventListener("click", () => { recordDemoJourney("Knowledge validated", "Knowledge check passed at 90% and pathway released for observation.", { validated:true, score:90 }); renderDemoWorkerWorkspace(sector); });
-  document.getElementById("openDetailedHospitalPathway")?.addEventListener("click", () => { state.selectedDepartment = "operating-theatre"; saveState(); renderLearnerDashboard(); });
-}
-
-function renderDemoTrainerWorkspace(sector) {
-  const journey = demoJourney(sector.id), view = state.activeWorkspaceView || "home";
-  const role = sector.roles.find(item => item.value === state.currentUser.role)?.label || "Trainer";
-  const worker = sector.people.find(item => !/Trainer|Educator|Coach|Manager/.test(item.role)) || sector.people[0];
-  let content;
-  if (view === "staff") {
-    content = `${demoWorkspaceHero("TRAINEES", "Assigned workers", `${role} access is limited to assigned people and departments.`, sector)}<section class="card trainee-profile demo-trainee-card"><div class="section-heading"><div><span class="eyebrow">${escapeHtml(worker.id)}</span><h3>${escapeHtml(worker.name)}</h3><p>${escapeHtml(worker.role)} ¬∑ ${escapeHtml(worker.department)}</p></div><span class="status-chip ${journey.validated ? "status-warning" : "status-neutral"}">${journey.observed ? "Observed" : journey.validated ? "Ready for observation" : "Learning in progress"}</span></div>${demoWorkflowHtml(sector, journey)}<div class="profile-actions"><button class="btn demo-route" data-demo-view="training">Open assessment guidance</button></div></section>`;
-  } else if (view === "training") {
-    content = `${demoWorkspaceHero("PRACTICAL ASSESSMENT", "Observation and recommendation", `Record observable evidence for ${worker.name}, then send the recommendation to Management.`, sector)}<section class="card demo-observation-card"><span class="eyebrow">OBSERVE</span><h3>${escapeHtml(sector.pathway.title)}</h3><p>Knowledge validation: <strong>${journey.validated ? `Passed ¬∑ ${journey.score}%` : "Not ready"}</strong></p>${!journey.validated ? '<button class="btn btn-secondary" id="prepareObservationDemo">Complete sample learning and validation</button>' : ""}<label>Practical observation<textarea id="demoObservationNote" placeholder="Record specific, observable workplace evidence">${escapeHtml(journey.observation || "")}</textarea></label><label>Outcome<select id="demoObservationOutcome"><option>Competent</option><option>Needs Development</option><option>Not Observed</option></select></label><button class="btn" id="recordDemoObservation" ${!journey.validated || journey.observed ? "disabled" : ""}>${journey.observed ? "Recommendation sent to Management" : "Record observation and recommend"}</button><p class="trust-note">Trainers can recommend; Management retains final approval.</p></section>${demoWorkflowHtml(sector, journey)}`;
-  } else {
-    content = `${demoWorkspaceHero("TRAINER HOME", `Welcome, ${state.currentUser.name}`, `${role} ¬∑ Monitor assigned learners and complete practical assessment.`, sector)}<div class="stats-grid demo-stats"><div class="stat-card"><span>Assigned workers</span><strong>2</strong></div><div class="stat-card"><span>Ready to observe</span><strong>${journey.validated && !journey.observed ? 1 : 0}</strong></div><div class="stat-card"><span>Sent to Management</span><strong>${journey.observed && !journey.approved ? 1 : 0}</strong></div><div class="stat-card"><span>Current competency</span><strong>${journey.approved ? 1 : 0}</strong></div></div><section class="card assigned-pathway-card"><div><span class="eyebrow">NEXT ASSESSMENT</span><h3>${escapeHtml(worker.name)}</h3><p>${escapeHtml(sector.pathway.title)} ¬∑ ${journey.validated ? "Knowledge validated" : "Waiting for learning"}</p></div><button class="btn demo-route" data-demo-view="staff">View trainee</button></section>${demoWorkflowHtml(sector, journey)}`;
-  }
-  renderShell(content);
-  bindDemoCommonActions();
-  document.getElementById("prepareObservationDemo")?.addEventListener("click", () => { recordDemoJourney("Learning and validation prepared", "Sample learner completed every module and passed the knowledge check at 90%.", { learnedModules:sector.pathway.modules.map(item => item.id), validated:true, score:90 }); renderDemoTrainerWorkspace(sector); });
-  document.getElementById("recordDemoObservation")?.addEventListener("click", () => { const note = document.getElementById("demoObservationNote").value.trim(); if (!note) return alert("Record observable evidence before submitting the recommendation."); recordDemoJourney("Practical observation recorded", `${document.getElementById("demoObservationOutcome").value}: ${note}`, { observed:true, observation:note }); renderDemoTrainerWorkspace(sector); });
-}
-
-function renderDemoManagementWorkspace(sector) {
-  const journey = demoJourney(sector.id), view = state.activeWorkspaceView || "home";
-  const worker = sector.people.find(item => !/Trainer|Educator|Coach|Manager/.test(item.role)) || sector.people[0];
-  const pending = journey.observed && !journey.approved ? 1 : 0;
-  let content;
-  if (view === "training") {
-    content = `${demoWorkspaceHero("TRAINING", "Pathways and competency decisions", "Assign published pathways, review trainer evidence, approve competency and schedule renewal.", sector)}<section class="workspace-home-grid"><article class="card"><span class="eyebrow">PUBLISHED PATHWAY</span><h3>${escapeHtml(sector.pathway.title)}</h3><p>${escapeHtml(sector.pathway.description)}</p><dl class="demo-pathway-meta"><div><dt>Modules</dt><dd>${sector.pathway.modules.length}</dd></div><div><dt>Assigned workers</dt><dd>2</dd></div><div><dt>Version</dt><dd>1.0</dd></div></dl><button class="btn btn-secondary" id="assignDemoPathway">Assign to sample worker</button></article><article class="card approval-card"><span class="eyebrow">MANAGEMENT APPROVAL</span><h3>${escapeHtml(worker.name)}</h3><p>${journey.observed ? escapeHtml(journey.observation) : "Waiting for the trainer's practical observation and recommendation."}</p><button class="btn" id="approveDemoCompetency" ${!journey.observed || journey.approved ? "disabled" : ""}>${journey.approved ? "Competency approved" : "Approve competency"}</button><button class="btn btn-secondary" id="scheduleDemoRenewal" ${!journey.approved || journey.renewalScheduled ? "disabled" : ""}>${journey.renewalScheduled ? `Renewal ${journey.renewalDate}` : "Schedule 12-month renewal"}</button></article></section>${demoWorkflowHtml(sector, journey)}`;
-  } else if (view === "staff") {
-    const rows = sector.people.map(person => `<tr class="demo-staff-row" data-search="${escapeHtml(`${person.name} ${person.id} ${person.role} ${person.department}`.toLowerCase())}"><td><span class="staff-identity"><strong>${escapeHtml(person.name)}</strong><small>${escapeHtml(person.id)}</small></span></td><td>${escapeHtml(person.role)}</td><td>${escapeHtml(person.department)}</td><td>${person.progress}%</td><td><span class="status-chip ${person.status === "Active" ? "status-success" : "status-warning"}">${escapeHtml(person.status)}</span></td></tr>`).join("");
-    content = `${demoWorkspaceHero("STAFF", "People and permissions", "Search the sample directory and review role, department, training and account status.", sector)}<section class="card"><div class="section-heading"><div><span class="eyebrow">ORGANISATION DIRECTORY</span><h3>${sector.people.length} sample people</h3></div><button class="btn" id="demoInviteStaff">Invite staff</button></div><label class="search-filter">Search people<input id="demoStaffSearch" type="search" placeholder="Name, employee ID, role or department"></label><div class="table-wrap"><table class="staff-table"><thead><tr><th>Staff member</th><th>Role</th><th>Department</th><th>Progress</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div><p id="demoStaffEmpty" class="empty-state" hidden>No people match this search.</p></section>`;
-  } else if (view === "reports") {
-    content = `${demoWorkspaceHero("REPORTS", "Readiness and compliance", "Monitor pathway completion, pending decisions, current competency and renewal status.", sector)}<div class="stats-grid demo-stats"><div class="stat-card"><span>Assigned staff</span><strong>${sector.people.length}</strong></div><div class="stat-card"><span>Learning complete</span><strong>${journey.learnedModules.length >= sector.pathway.modules.length ? 1 : 0}</strong></div><div class="stat-card"><span>Pending approval</span><strong>${pending}</strong></div><div class="stat-card"><span>Renewals scheduled</span><strong>${journey.renewalScheduled ? 1 : 0}</strong></div></div><section class="reports-grid"><article class="card report-panel"><span class="eyebrow">PATHWAY READINESS</span><h3>${escapeHtml(sector.pathway.title)}</h3><ul>${demoStageStatus(journey, sector).map(([label, done, detail]) => `<li><span>${done ? "‚úì" : "‚óã"}</span>${label}<strong>${escapeHtml(detail)}</strong></li>`).join("")}</ul></article><article class="card report-panel"><span class="eyebrow">AUDIT HISTORY</span><h3>Lifecycle activity</h3><div class="audit-feed">${journey.history.map(item => `<article><strong>${escapeHtml(item.action)}</strong><span>${escapeHtml(item.detail)}</span><small>${escapeHtml(item.at)}</small></article>`).join("") || '<p class="empty-state">Complete a workflow action to create an audit entry.</p>'}</div></article></section>${demoWorkflowHtml(sector, journey)}`;
-  } else {
-    content = `${demoWorkspaceHero("MANAGEMENT HOME", `${sector.organization} workspace`, "Review priorities, workforce readiness and the actions that need a Management decision.", sector)}<div class="stats-grid demo-stats"><div class="stat-card"><span>Active staff</span><strong>${sector.people.length}</strong></div><div class="stat-card"><span>Published pathways</span><strong>1</strong></div><div class="stat-card"><span>Awaiting approval</span><strong>${pending}</strong></div><div class="stat-card"><span>Compliance alerts</span><strong>${journey.renewalScheduled ? 0 : 1}</strong></div></div><section class="workspace-home-grid"><section class="card"><span class="eyebrow">PRIORITY ACTIONS</span><h3>What needs attention</h3><button class="workspace-route demo-route" data-demo-view="training"><span>‚úì</span><div><strong>${pending ? "Competency ready for approval" : "Training and competency"}</strong><small>${pending ? `${worker.name} has trainer evidence ready` : "Review pathway and workflow status"}</small></div><b>‚Üí</b></button><button class="workspace-route demo-route" data-demo-view="staff"><span>‚ôô</span><div><strong>People and permissions</strong><small>${sector.people.length} sample staff profiles</small></div><b>‚Üí</b></button><button class="workspace-route demo-route" data-demo-view="reports"><span>‚ñ•</span><div><strong>Compliance report</strong><small>Learning, approval and renewal evidence</small></div><b>‚Üí</b></button></section><section class="card"><span class="eyebrow">SAMPLE ORGANISATION</span><h3>${escapeHtml(sector.facility)}</h3><p>${escapeHtml(sector.description)}</p><dl class="demo-pathway-meta"><div><dt>Sector</dt><dd>${escapeHtml(sector.name)}</dd></div><div><dt>Departments</dt><dd>${sector.departments.length}</dd></div><div><dt>Roles</dt><dd>${sector.roles.length}</dd></div></dl></section></section>${demoWorkflowHtml(sector, journey)}`;
-  }
-  renderShell(content);
-  bindDemoCommonActions();
-  document.getElementById("assignDemoPathway")?.addEventListener("click", () => alert(`${sector.pathway.title} is assigned to ${worker.name} in this sample workspace.`));
-  document.getElementById("approveDemoCompetency")?.addEventListener("click", () => { recordDemoJourney("Competency approved", `Management approved ${worker.name} after reviewing learning, validation and observation evidence.`, { approved:true }); renderDemoManagementWorkspace(sector); });
-  document.getElementById("scheduleDemoRenewal")?.addEventListener("click", () => { const renewal = new Date(); renewal.setFullYear(renewal.getFullYear() + 1); const date = renewal.toLocaleDateString("en-AU", { day:"numeric", month:"short", year:"numeric" }); recordDemoJourney("Renewal scheduled", `Competency renewal scheduled for ${date}.`, { renewalScheduled:true, renewalDate:date }); renderDemoManagementWorkspace(sector); });
-  document.getElementById("demoStaffSearch")?.addEventListener("input", event => { let visible = 0; document.querySelectorAll(".demo-staff-row").forEach(row => { row.hidden = !row.dataset.search.includes(event.target.value.toLowerCase()); if (!row.hidden) visible++; }); document.getElementById("demoStaffEmpty").hidden = visible > 0; });
-  document.getElementById("demoInviteStaff")?.addEventListener("click", () => alert("Guided Demo keeps invitations local. Authenticated organisation invitations use the protected Supabase service and RLS policies."));
-}
-
-function bindDemoCommonActions() {
-  document.querySelectorAll(".demo-route").forEach(button => button.addEventListener("click", () => { state.activeWorkspaceView = button.dataset.demoView; saveState(); renderDemoWorkspace(); }));
-}
-
-function routeCurrentUser() {
-  normalizeCurrentUserRole();
-  const role = state.currentUser?.role;
-
-  if (state.currentUser?.mode === "demo") return renderDemoWorkspace();
-
-  if (role === "pca") {
-    renderLearnerDashboard();
-  } else if (role === "pca-trainer" || role === "cleaner-trainer") {
-    renderTrainerDashboard();
-  } else {
-    renderRoleWorkspace(role);
-  }
-}
-
-function renderRoleWorkspace(role) {
-  const isManagement = role === "management";
-  const isTrainer = role === "cleaner-trainer";
-  const title = isManagement
-    ? "Management Workspace"
-    : isTrainer
-      ? "Cleaner Trainer Workspace"
-      : "Cleaner Training";
-  const description = isManagement
-    ? "Review workforce training pathways, learner progress and competency status from one place."
-    : isTrainer
-      ? "Cleaner learner progress, assessments and practical competency sign-offs will be managed here."
-      : "Your role-specific healthcare cleaning modules will appear here without mixing them with PCA training.";
-
-  if (isManagement) {
-    renderManagementDashboard();
-    return;
-  }
-
-  renderShell(`
-    <section class="department-heading" id="home">
-      <span class="eyebrow">${escapeHtml(departmentName(state.selectedDepartment))}</span>
-      <h2>${role === "cleaner" ? "Cleaner Training Hub" : title}</h2>
-      <p>${description}</p>
-    </section>
-    <section class="card pathway-ready-card" id="training">
-      <span class="badge badge-in-progress">Pathway ready</span>
-      <h3>${workplaceRoleLabel(role)} access is now separated</h3>
-      <p class="small">Approved role-specific modules can be added here next. Your existing PCA training remains unchanged.</p>
-    </section>
-  `);
-}
-
-function renderManagementDashboard() {
-  if (state.currentUser?.role !== "management") return routeSignedInUser();
-  const store = managementStore(), actor = currentManager(store);
-  const department = DEPARTMENTS.find(item => item.id === state.selectedDepartment);
-  if (!department) return renderDepartmentSelection();
-  if (!store.actorCanAccess(actor, department.id)) { state.selectedDepartment = actor.departments[0] || null; saveState(); return state.selectedDepartment ? renderManagementDashboard() : renderShell('<section class="card access-blocked"><h2>No department access</h2><p>Ask Management to assign a department.</p></section>'); }
-  const hospitalWide = actor.level === "Hospital Administrator";
-  const report = MANAGEMENT_REPORTS[state.selectedDepartment];
-  const records = workflowRecords().filter(item => item.department === state.selectedDepartment);
-  const visibleStaff = store.data.staff.filter(person => hospitalWide || person.departments.some(id => actor.departments.includes(id)));
-  const departmentOptions = DEPARTMENTS.filter(d => actor.departments.includes(d.id)).map(d => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join("");
-  const identity = person => `<span class="staff-identity"><strong>${escapeHtml(person.name)}</strong><small>${escapeHtml(person.id)}</small></span>`;
-  const staffDepartmentRows = visibleStaff.filter(p => ["PCA", "Cleaner"].includes(p.role)).map(p => `<div class="assignment-control" data-id="${p.id}">${identity(p)}<span>${p.role}</span><label><span>Department</span><select class="staff-department"><option value="">Choose department</option>${DEPARTMENTS.filter(d => actor.departments.includes(d.id)).map(d => `<option value="${d.id}" ${p.departments.includes(d.id) ? "selected" : ""}>${escapeHtml(d.name)}</option>`).join("")}</select></label><button class="btn btn-secondary save-staff-department">Confirm</button></div>`).join("");
-  const trainerDepartmentRows = visibleStaff.filter(p => p.role.includes("Trainer")).map(p => `<div class="assignment-control" data-id="${p.id}">${identity(p)}<span>${p.role}</span><fieldset class="department-checks"><legend>Departments</legend>${DEPARTMENTS.filter(d => actor.departments.includes(d.id)).map(d => `<label><input type="checkbox" value="${d.id}" ${p.departments.includes(d.id) ? "checked" : ""}> ${escapeHtml(d.name)}</label>`).join("")}</fieldset><button class="btn btn-secondary save-trainer-departments">Confirm</button></div>`).join("");
-  const staffTrainerRows = visibleStaff.filter(p => ["PCA", "Cleaner"].includes(p.role)).map(p => { const required = `${p.role} Trainer`; const compatible = visibleStaff.filter(t => t.role === required && p.departments.some(d => t.departments.includes(d))); return `<div class="assignment-control" data-id="${p.id}">${identity(p)}<span>${p.role}</span><label><span>Trainer</span><select class="staff-trainer"><option value="">Choose trainer</option>${compatible.map(t => { const cap=store.trainerCapacity(t.id); return `<option value="${t.id}" ${p.trainerId===t.id?"selected":""}>${escapeHtml(t.name)} ¬∑ ${t.id} (${cap.active}/${cap.capacity})</option>`; }).join("")}</select></label><button class="btn btn-secondary save-staff-trainer">Review and confirm</button></div>`; }).join("");
-  const recommendations = records.filter(item => item.status === "Sent to Management").map(item => `<article class="review-card" data-id="${item.id}"><div><strong>${escapeHtml(item.name)}</strong><span>${item.role} ¬∑ ${escapeHtml(item.feedback || "Trainer recommendation")}</span></div><label>Management feedback<textarea class="management-feedback" placeholder="Required when requesting reassessment"></textarea></label><div><button class="btn approve-signoff">Approve</button><button class="btn btn-danger reassess-signoff">Request reassessment</button></div></article>`).join("");
-  const staffRows = visibleStaff.map(person => { const trainer=store.data.staff.find(p=>p.id===person.trainerId), manager=store.data.managers.find(p=>p.id===person.managerId), overdue=store.data.assignments.some(a=>a.staffId===person.id && a.dueDate < new Date().toISOString().slice(0,10) && a.managementApprovalStatus!=="Approved"); return `<tr class="directory-row" data-search="${escapeHtml((person.name+' '+person.id+' '+person.email).toLowerCase())}" data-role="${person.role}" data-department="${person.departments.join(' ')}" data-account="${person.accountStatus}" data-employment="${person.employmentStatus}" data-competency="${person.competencyStatus}" data-trainer="${trainer?.id||'unassigned'}" data-manager="${manager?.id||'unassigned'}" data-progress="${person.progress}" data-overdue="${overdue?'overdue':'current'}"><td><input type="checkbox" class="bulk-select" data-id="${person.id}" aria-label="Select ${escapeHtml(person.name)}"> <button class="link-button staff-profile" data-id="${person.id}">${identity(person)}</button></td><td>${person.role}</td><td>${person.departments.map(departmentName).map(escapeHtml).join(', ')}</td><td>${person.progress}%</td><td><span class="status-chip status-${person.accountStatus==='Suspended'?'danger':person.accountStatus==='Active'?'success':'warning'}">${person.accountStatus}</span></td></tr>`; }).join("");
-
-  renderShell(`
-    <section class="management-title" id="home"><div><h2>Management Dashboard</h2><p class="management-subtitle">${hospitalWide ? "Hospital-wide workspace" : `${escapeHtml(department.name)} ¬∑ Department management workspace`}</p></div><button class="btn btn-secondary" id="changeDepartmentBtn">Switch Department</button></section>
-    <div class="stats-grid management-stats"><div class="stat-card"><span>Total PCA staff</span><strong>${report.pca}</strong></div><div class="stat-card"><span>Total Cleaner staff</span><strong>${report.cleaners}</strong></div><div class="stat-card stat-complete"><span>Completed training</span><strong>${report.completed}</strong></div><div class="stat-card stat-overdue"><span>Overdue training</span><strong>${report.overdue}</strong></div></div>
-    <section class="card dashboard-card management-section" id="training"><div class="section-heading"><div><span class="eyebrow">WORKFORCE ASSIGNMENTS</span><h3>Assignments</h3></div><span class="small">Role and capacity checked</span></div><p class="readonly-note">Assign staff and trainers to departments, then connect each staff member with the appropriate trainer.</p><div class="assignment-groups"><section><h4>1. Staff department assignments</h4><div class="assignment-list">${staffDepartmentRows}</div></section><section><h4>2. Trainer department assignments</h4><div class="assignment-list">${trainerDepartmentRows}</div></section><section><h4>3. Staff-to-trainer assignments</h4><p class="small">Trainer capacity is shown before confirmation. Selecting a new trainer replaces the current assignment.</p><div class="assignment-list">${staffTrainerRows}</div></section></div></section>
-    <section class="card dashboard-card management-section" id="reports"><div class="section-heading"><div><span class="eyebrow">FINAL APPROVAL</span><h3>Sign-off recommendations</h3></div><span class="count-badge">${records.filter(item=>item.status==="Sent to Management").length}</span></div><div class="review-list">${recommendations || '<p class="empty-state">No recommendations awaiting Management.</p>'}</div></section>
-    <section class="card dashboard-card management-section" id="staff"><div class="section-heading"><div><span class="eyebrow">STAFF DIRECTORY</span><h3>Profiles and assignments</h3></div><button class="btn" id="inviteStaff">Invite staff</button></div>
-      <div class="directory-filters"><label class="search-filter"><span>Name, employee ID or email</span><input id="staffSearch" type="search" placeholder="Search staff"></label>${[["roleFilter","Role","All roles",["PCA","Cleaner","PCA Trainer","Cleaner Trainer"]],["departmentFilter","Department","All departments",DEPARTMENTS.filter(d=>actor.departments.includes(d.id)).map(d=>[d.id,d.name])],["accountFilter","Account status","All account statuses",store.ACCOUNT_STATUSES],["employmentFilter","Employment status","All employment statuses",store.EMPLOYMENT_STATUSES],["competencyFilter","Competency status","All competencies",["Not Started","In Progress","Approved","Reassessment Required"]],["trainerFilter","Trainer","All trainers",visibleStaff.filter(p=>p.role.includes('Trainer')).map(p=>[p.id,p.name])],["managerFilter","Manager","All managers",store.data.managers.map(p=>[p.id,p.name])],["progressFilter","Training progress","All progress",[["0-49","0‚Äì49%"],["50-99","50‚Äì99%"],["100","100%"]]],["overdueFilter","Overdue status","All due dates",[["overdue","Overdue"],["current","Current"]]]].map(([id,label,all,values])=>`<label><span>${label}</span><select id="${id}"><option value="all">${all}</option>${values.map(v=>Array.isArray(v)?`<option value="${v[0]}">${escapeHtml(v[1])}</option>`:`<option>${v}</option>`).join('')}</select></label>`).join('')}</div>
-      <div class="bulk-bar"><strong id="selectionCount">0 selected</strong><label><span class="sr-only">Bulk action</span><select id="bulkAction"><option value="">Bulk action</option><option value="Suspended">Suspend access</option><option value="Archived">Archive accounts</option></select></label><button class="btn btn-secondary" id="applyBulk" disabled>Review and apply</button></div><div class="table-wrap"><table class="staff-table"><thead><tr><th>Staff member</th><th>Role</th><th>Department</th><th>Progress</th><th>Account</th></tr></thead><tbody>${staffRows}</tbody></table></div><p id="emptyDirectory" class="empty-state" hidden>No staff match these filters.</p><div id="staffProfilePanel"></div></section>
-    <section class="card dashboard-card management-section" id="audit"><div class="section-heading"><div><span class="eyebrow">PERMANENT HISTORY</span><h3>Audit history</h3></div><span class="small">Read only</span></div><div class="audit-feed">${store.data.audit.slice(0,20).map(a=>`<article><strong>${escapeHtml(a.action)}</strong><span class="staff-identity"><strong>${escapeHtml(a.staffName)}</strong><small>${escapeHtml(a.staffId)}</small></span><span>By ${escapeHtml(a.actor)} (${escapeHtml(a.actorRole)})</span><small>${escapeHtml(a.at)} ¬∑ ${escapeHtml(departmentName(a.department)||'Hospital-wide workspace')}</small></article>`).join('') || '<p class="empty-state">No management changes recorded yet.</p>'}</div></section>
-    <section class="card coming-soon"><h3>Training content coming soon</h3><p>Management can monitor training and approve competency, but cannot edit clinical training content.</p></section>`);
-
-  const persist = () => { state.managementData=store.data; saveState(); };
-  const confirmChange = (message, action) => { if (!confirm(message)) return; try { action(); persist(); renderManagementDashboard(); } catch (error) { alert(error.message); } };
-  document.querySelectorAll('.save-staff-department').forEach(btn=>btn.addEventListener('click',()=>{const row=btn.closest('.assignment-control'),id=row.dataset.id,value=row.querySelector('select').value;confirmChange(`Assign ${id} to ${departmentName(value)}?`,()=>store.assignDepartments(actor,id,[value]));}));
-  document.querySelectorAll('.save-trainer-departments').forEach(btn=>btn.addEventListener('click',()=>{const row=btn.closest('.assignment-control'),id=row.dataset.id,values=[...row.querySelectorAll('input:checked')].map(x=>x.value);confirmChange(`Confirm ${values.length} department assignment(s) for ${id}?`,()=>store.assignDepartments(actor,id,values));}));
-  document.querySelectorAll('.save-staff-trainer').forEach(btn=>btn.addEventListener('click',()=>{const row=btn.closest('.assignment-control'),id=row.dataset.id,trainerId=row.querySelector('select').value;if(!trainerId)return alert('Choose a compatible trainer.');const cap=store.trainerCapacity(trainerId);confirmChange(`Assign trainer ${trainerId} to ${id}? Capacity: ${cap.active}/${cap.capacity}.`,()=>store.assignTrainer(actor,id,trainerId,cap.atCapacity));}));
-  const filters=[['role','roleFilter'],['department','departmentFilter'],['account','accountFilter'],['employment','employmentFilter'],['competency','competencyFilter'],['trainer','trainerFilter'],['manager','managerFilter'],['overdue','overdueFilter']];
-  const filterDirectory=()=>{let shown=0;document.querySelectorAll('.directory-row').forEach(row=>{const progress=document.getElementById('progressFilter').value,p=Number(row.dataset.progress),progressOK=progress==='all'||(progress==='100'?p===100:progress==='0-49'?p<50:p>=50&&p<100);const ok=row.dataset.search.includes(document.getElementById('staffSearch').value.toLowerCase())&&progressOK&&filters.every(([key,id])=>document.getElementById(id).value==='all'||row.dataset[key].includes(document.getElementById(id).value));row.hidden=!ok;if(ok)shown++;});document.getElementById('emptyDirectory').hidden=shown>0;};
-  document.querySelectorAll('.directory-filters input,.directory-filters select').forEach(el=>el.addEventListener(el.tagName==='INPUT'?'input':'change',filterDirectory));
-  const updateBulk=()=>{const count=document.querySelectorAll('.bulk-select:checked').length;document.getElementById('selectionCount').textContent=`${count} selected`;document.getElementById('applyBulk').disabled=!count||!document.getElementById('bulkAction').value;};
-  document.querySelectorAll('.bulk-select').forEach(el=>el.addEventListener('change',updateBulk)); document.getElementById('bulkAction').addEventListener('change',updateBulk);
-  document.getElementById('applyBulk').addEventListener('click',()=>{const ids=[...document.querySelectorAll('.bulk-select:checked')].map(el=>el.dataset.id),status=document.getElementById('bulkAction').value;confirmChange(`Apply ${status} to ${ids.map(id=>store.data.staff.find(p=>p.id===id)?.name+' ¬∑ '+id).join(', ')}?`,()=>store.bulk(actor,ids,{accountStatus:status},true));});
-  document.getElementById('inviteStaff').addEventListener('click',async()=>{ const Service=globalThis.SkillWardServices?.InvitationService; const result=Service ? await new Service().invite({email:'',role:'PCA',departmentId:department.id}) : {message:'Staff invitations are not available in this development integration. A protected Management service must be deployed first.'}; alert(result.message); });
-  document.querySelectorAll('.staff-profile').forEach(button=>button.addEventListener('click',()=>{const person=store.data.staff.find(p=>p.id===button.dataset.id),trainer=store.data.staff.find(p=>p.id===person.trainerId);document.getElementById('staffProfilePanel').innerHTML=`<article class="staff-detail"><span class="eyebrow">STAFF PROFILE</span><h3>${escapeHtml(person.name)}</h3><span class="employee-id">${person.id}</span><p>${escapeHtml(person.email)}</p><dl><div><dt>Role</dt><dd>${person.role}</dd></div><div><dt>Department</dt><dd>${person.departments.map(departmentName).join(', ')}</dd></div><div><dt>Trainer</dt><dd>${trainer?`${escapeHtml(trainer.name)}<small>${trainer.id}</small>`:'Not assigned'}</dd></div><div><dt>Account</dt><dd>${person.accountStatus}</dd></div></dl></article>`;}));
-  document.querySelectorAll('.approve-signoff,.reassess-signoff').forEach(button=>button.addEventListener('click',()=>{const card=button.closest('.review-card'),record=workflowRecords().find(item=>item.id===card.dataset.id),reassess=button.classList.contains('reassess-signoff'),feedback=card.querySelector('.management-feedback').value.trim();if(reassess&&!feedback)return alert('Enter feedback for the trainer before requesting reassessment.');record.status=reassess?'Reassessment Required':'Approved';record.feedback=feedback||'Management approved final competency.';saveState();renderManagementDashboard();}));
-}
-
-function renderDepartmentSelection() {
-  const managementSelection = state.currentUser?.role === "management";
-  const departmentCards = DEPARTMENTS.map(department => `
-    <article class="department-card ${department.active || managementSelection ? "department-active" : "department-planned"}">
-      <div class="department-card-top">
-        <span class="department-icon" aria-hidden="true">${departmentIcon(department.id)}</span>
-        <span class="department-status ${department.active || managementSelection ? "status-active" : "status-planned"}">
-          ${department.active || managementSelection ? "Available" : "Coming soon"}
-        </span>
-      </div>
-      <div>
-        <h3>${department.name}</h3>
-        <p>${department.summary}</p>
-      </div>
-      <div class="department-card-footer">
-        <span>${department.detail}</span>
-        ${department.active || managementSelection
-          ? `<button class="btn open-department" data-id="${department.id}">Open department</button>`
-          : `<button class="btn btn-disabled" disabled>In development</button>`}
-      </div>
-    </article>
-  `).join("");
-
-  renderShell(`
-    <section class="department-heading">
-      <span class="eyebrow">TRAINING DIRECTORY</span>
-      <h2>Choose your department</h2>
-      <p>Open the learning pathway assigned to your role. Additional departments will be introduced as their content is approved.</p>
-    </section>
-
-    <div class="department-grid">${departmentCards}</div>
-
-    <div class="platform-note">
-      <strong>One platform, multiple departments.</strong>
-      <span>SkillWard keeps role-based learning, competency and progress in one consistent experience.</span>
-    </div>
-  `);
-
-  document.querySelectorAll(".open-department").forEach(button => {
-    button.addEventListener("click", () => {
-      state.selectedDepartment = button.dataset.id;
-      saveState();
-      routeCurrentUser();
-    });
-  });
-}
-
-function renderLearnerDashboard() {
-  const progress = overallProgress();
-  const completedLessons = TRAINING_MODULES.filter(module => getModuleState(module.id).lessonComplete).length;
-  const passed = passedModules();
-  const remaining = TRAINING_MODULES.length - passed;
-
-  const areaCards = TRAINING_AREAS.map((area, index) => {
-    const areaModules = modulesForArea(area.id);
-    const areaPassed = areaModules.filter(module => getModuleState(module.id).quizPassed).length;
-    const areaPercent = Math.round((areaPassed / areaModules.length) * 100);
-    return `
-      <article class="card training-area-card">
-        <div class="training-area-top">
-          <span class="area-code">${area.code}</span>
-          <span class="small">AREA ${index + 1}</span>
-        </div>
-        <div>
-          <h3>${area.name}</h3>
-          <span class="area-full-name">${area.fullName}</span>
-          <p>${area.summary}</p>
-        </div>
-        <div class="area-progress"><span style="width:${areaPercent}%"></span></div>
-        <div class="module-meta">
-          <span class="small">${areaPassed}/${areaModules.length} modules complete</span>
-          <button class="btn open-area" data-id="${area.id}">Open area</button>
-        </div>
-      </article>
-    `;
-  }).join("");
-
-  renderShell(`
-    <section class="dashboard-hero" id="home">
-      <div class="dashboard-welcome">
-        <span class="eyebrow">${escapeHtml(departmentName(state.selectedDepartment))}</span>
-        <h2>PCA Training Hub</h2>
-        <p>Welcome, ${escapeHtml(state.learnerName)}</p>
-        <p>Choose your assigned work area and continue the Operating Theatre & Recovery learning pathway.</p>
-      </div>
-      <div class="progress-ring" style="--progress:${progress * 3.6}deg" aria-label="${progress}% overall progress">
-        <div><strong>${progress}%</strong><span>complete</span></div>
-      </div>
-    </section>
-
-    <div class="stats-grid">
-      <div class="stat-card"><span>Lessons viewed</span><strong>${completedLessons}/${TRAINING_MODULES.length}</strong></div>
-      <div class="stat-card"><span>Knowledge checks</span><strong>${passed}/${TRAINING_MODULES.length}</strong></div>
-      <div class="stat-card"><span>Modules remaining</span><strong>${remaining}</strong></div>
-    </div>
-
-    <section class="patient-journey" aria-labelledby="patientJourneyTitle">
-      <div class="journey-heading">
-        <div>
-          <span class="eyebrow">PATIENT JOURNEY</span>
-          <h3 id="patientJourneyTitle">From ward pickup to safe return</h3>
-        </div>
-        <span class="journey-caption">Operating Theatre & Recovery pathway</span>
-      </div>
-      <ol class="journey-track">
-        <li>
-          <span class="journey-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M3 18V8m0 7h18v3M6 15v-4h5a3 3 0 0 1 3 3v1"/><circle cx="8" cy="8" r="2"/></svg>
-          </span>
-          <span class="journey-copy"><small>01</small><strong>Ward pickup</strong><span>Collect assigned patient</span></span>
-        </li>
-        <li>
-          <span class="journey-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M8 4h8v3H8zM6 6h12v15H6z"/><path d="M9 12h6m-3-3v6"/></svg>
-          </span>
-          <span class="journey-copy"><small>02</small><strong>PRA</strong><span>Patient Reception Area</span></span>
-        </li>
-        <li>
-          <span class="journey-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M4 17h16M6 17v3m12-3v3M7 14h10l2 3H5l2-3Z"/><path d="M12 3v3m-4-1 2 2m6-2-2 2M8 12a4 4 0 0 1 8 0"/></svg>
-          </span>
-          <span class="journey-copy"><small>03</small><strong>Theatre</strong><span>Prep-area support</span></span>
-        </li>
-        <li>
-          <span class="journey-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z"/><path d="m8 12 2-1 2 3 2-5 2 3"/></svg>
-          </span>
-          <span class="journey-copy"><small>04</small><strong>Recovery</strong><span>Post-procedure care</span></span>
-        </li>
-        <li>
-          <span class="journey-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M4 18V9l8-6 8 6v9H4Z"/><path d="M8 18v-5h8v5M3 21h18"/></svg>
-          </span>
-          <span class="journey-copy"><small>05</small><strong>Return to ward</strong><span>Assist safe transport</span></span>
-        </li>
-      </ol>
-    </section>
-
-    <div class="section-heading" id="training">
-      <div><span class="eyebrow">OPERATING THEATRE & RECOVERY</span><h3>Choose a training area</h3></div>
-      <span class="small">3 areas ¬∑ ${TRAINING_MODULES.length} modules</span>
-    </div>
-    <div class="grid grid-3">${areaCards}</div>
-
-    <div class="section-title">
-      <h3>Final practical competency</h3>
-    </div>
-
-    <section class="card">
-      <p>${state.practicalSignoff
-        ? "Your practical competency has been signed off."
-        : "A trainer must observe your practical work after you complete the required online modules."}</p>
-      <span class="badge ${state.practicalSignoff ? "badge-complete" : "badge-in-progress"}">
-        ${state.practicalSignoff ? "Signed off" : "Pending"}
-      </span>
-    </section>
-
-    <p class="footer-note">Training content must be reviewed and approved by the relevant hospital teams before workplace use.</p>
-  `);
-
-  document.querySelectorAll(".open-area").forEach(btn => {
-    btn.addEventListener("click", () => {
-      currentAreaId = btn.dataset.id;
-      renderAreaDashboard(currentAreaId);
-    });
-  });
-}
-
-function renderAreaDashboard(areaId) {
-  const area = getArea(areaId);
-  if (!area) {
-    renderLearnerDashboard();
-    return;
-  }
-
-  currentAreaId = areaId;
-  const areaModules = modulesForArea(areaId);
-  const completed = areaModules.filter(module => getModuleState(module.id).quizPassed).length;
-
-  renderShell(`
-    <button class="btn btn-secondary" id="backBtn">‚Üê Back to training areas</button>
-
-    <section class="area-hero">
-      <div class="area-code area-code-large">${area.code}</div>
-      <div>
-        <span class="eyebrow">OPERATING THEATRE & RECOVERY</span>
-        <h2>${area.name}</h2>
-        <p>${area.fullName}</p>
-      </div>
-      <div class="area-completion"><strong>${completed}/${areaModules.length}</strong><span>complete</span></div>
-    </section>
-
-    <div class="area-workflow-note">
-      <strong>Your role in this area</strong>
-      <span>${area.summary}</span>
-    </div>
-
-    <div class="section-heading">
-      <div><span class="eyebrow">AREA TRAINING</span><h3>Lessons and knowledge checks</h3></div>
-      <span class="small">${areaModules.length} modules</span>
-    </div>
-    <div class="grid grid-2">${areaModules.map(moduleCard).join("")}</div>
-
-    <p class="footer-note">Draft training content must be reviewed and approved by the relevant hospital teams before workplace use.</p>
-  `);
-
-  document.getElementById("backBtn").addEventListener("click", renderLearnerDashboard);
-  bindModuleButtons();
-}
-
-function renderLesson(moduleId) {
-  const module = TRAINING_MODULES.find(m => m.id === moduleId);
-  const m = getModuleState(moduleId);
-
-  renderShell(`
-    <button class="btn btn-secondary" id="backBtn">‚Üê Back to ${getArea(module.area)?.name || "training area"}</button>
-
-    <article class="card lesson" style="margin-top:16px;">
-      <div class="small">${module.duration}</div>
-      <h2>${module.title}</h2>
-
-      <h3>Learning objective</h3>
-      <p>${module.lesson.objective}</p>
-
-      <h3>Why this matters</h3>
-      <p>${module.lesson.why}</p>
-
-      <div class="notice">
-        Always follow your organisation's current approved procedures. Local requirements take priority if they differ from this module.
-      </div>
-
-      <h3>Planned training video</h3>
-      <div class="video-placeholder" data-planned-content="true">
-        <div>
-          <strong>Approved media not yet available</strong>
-          <p class="small">This is a planned content area, not a playable video. An approved workplace training video can be added after clinical review.</p>
-        </div>
-      </div>
-
-      <h3>Approved process structure</h3>
-      <ol>${module.lesson.steps.map(step => `<li>${step}</li>`).join("")}</ol>
-
-      <h3>Common mistakes</h3>
-      <ul>${module.lesson.mistakes.map(item => `<li>${item}</li>`).join("")}</ul>
-
-      <button class="btn" id="completeLessonBtn">
-        ${m.lessonComplete ? "Continue to quiz" : "Mark lesson complete"}
-      </button>
-    </article>
-  `);
-
-  document.getElementById("backBtn").addEventListener("click", () => renderAreaDashboard(module.area));
-  document.getElementById("completeLessonBtn").addEventListener("click", () => {
-    setModuleState(moduleId, { lessonComplete: true });
-    renderQuiz(moduleId);
-  });
-}
-
-function renderQuiz(moduleId) {
-  const module = TRAINING_MODULES.find(m => m.id === moduleId);
-
-  const questions = module.quiz.map((item, index) => `
-    <fieldset>
-      <legend><strong>${index + 1}. ${item.q}</strong></legend>
-      ${item.options.map((option, optionIndex) => `
-        <label class="quiz-option">
-          <input type="radio" name="q${index}" value="${optionIndex}" />
-          ${option}
-        </label>
-      `).join("")}
-    </fieldset>
-  `).join("");
-
-  renderShell(`
-    <button class="btn btn-secondary" id="backBtn">‚Üê Back to lesson</button>
-
-    <form class="card lesson" id="quizForm" style="margin-top:16px;">
-      <h2>${module.title}: Knowledge Check</h2>
-      <p class="small">Pass mark: 80%</p>
-      ${questions}
-      <button class="btn" type="submit">Submit quiz</button>
-      <div id="quizResult"></div>
-    </form>
-  `);
-
-  document.getElementById("backBtn").addEventListener("click", () => renderLesson(moduleId));
-
-  document.getElementById("quizForm").addEventListener("submit", event => {
-    event.preventDefault();
-
-    let correct = 0;
-    let answered = 0;
-
-    module.quiz.forEach((item, index) => {
-      const selected = document.querySelector(`input[name="q${index}"]:checked`);
-      if (selected) {
-        answered++;
-        if (Number(selected.value) === item.answer) correct++;
-      }
-    });
-
-    const result = document.getElementById("quizResult");
-
-    if (answered !== module.quiz.length) {
-      result.className = "result result-fail";
-      result.textContent = "Please answer every question.";
-      return;
-    }
-
-    const score = Math.round((correct / module.quiz.length) * 100);
-    const passed = score >= 80;
-    setModuleState(moduleId, { quizPassed: passed, quizScore: score });
-
-    result.className = `result ${passed ? "result-pass" : "result-fail"}`;
-    result.innerHTML = passed
-      ? `Passed: ${score}%. <button type="button" class="btn" id="dashboardBtn" style="margin-left:10px;">Return to ${getArea(module.area)?.name || "training area"}</button>`
-      : `Score: ${score}%. Review the lesson and try again.`;
-
-    document.getElementById("dashboardBtn")?.addEventListener("click", () => renderAreaDashboard(module.area));
-  });
-}
-
-function renderTrainerDashboard() {
-  const role = state.currentUser?.role;
-  if (!role?.includes("trainer")) return routeSignedInUser();
-  const assigned = assignedDepartmentsForCurrentTrainer();
-  if (!assigned.includes(state.selectedDepartment)) {
-    state.selectedDepartment = assigned[0] || null;
-    saveState();
-  }
-  const roleLabel = role === "pca-trainer" ? "PCA" : "Cleaner";
-  const records = workflowRecords().filter(item => item.role === roleLabel && assigned.includes(item.department));
-  const activeRecords = records.filter(item => item.department === state.selectedDepartment);
-  const options = assigned.map(id => `<option value="${id}" ${id === state.selectedDepartment ? "selected" : ""}>${escapeHtml(departmentName(id))}</option>`).join("");
-  const rows = activeRecords.map(item => `<tr class="trainee-row" data-search="${escapeHtml((item.name + ' ' + item.id).toLowerCase())}" data-progress="${item.progress === 100 ? 'complete' : 'in-progress'}" data-overdue="${item.overdue}" data-review="${escapeHtml(item.reviewStatus.toLowerCase().replaceAll(' ', '-'))}" data-signoff="${escapeHtml(item.status.toLowerCase().replaceAll(' ', '-'))}"><td><button class="link-button open-profile staff-identity" data-id="${item.id}"><strong>${escapeHtml(item.name)}</strong><small>${item.id}</small></button></td><td>${item.progress}%</td><td>${item.knowledge.at(-1)?.score || 0}%</td><td><span class="status-chip status-${statusTone(item.status)}">${item.status}</span></td><td>${item.overdue ? '<span class="status-chip status-danger">Overdue</span>' : 'On track'}</td></tr>`).join("");
-  renderShell(`
-    <section class="dashboard-hero trainer-hero" id="home"><div class="dashboard-welcome"><span class="eyebrow">${escapeHtml(departmentName(state.selectedDepartment))}</span><h2>${roleLabel} Trainer Workspace</h2><p>Monitor progress, record observations and recommend sign-off.</p></div><div class="trainer-identity"><span>Assigned departments</span><strong>${assigned.length}</strong></div></section>
-    ${assigned.length ? `<section class="department-switcher"><label>Department<select id="trainerDepartment">${options}</select></label><span>${assigned.map(departmentName).map(escapeHtml).join(" ¬∑ ")}</span></section>` : '<section class="card alert-danger"><h3>No department assigned</h3><p>Ask Management to assign a department.</p></section>'}
-    <div class="stats-grid trainer-stats"><div class="stat-card"><span>${roleLabel} trainees</span><strong>${activeRecords.length}</strong></div><div class="stat-card"><span>Pending reviews</span><strong>${activeRecords.filter(i => i.status === 'Ready for Trainer Review' || i.status === 'Reassessment Required').length}</strong></div><div class="stat-card stat-overdue"><span>Overdue training</span><strong>${activeRecords.filter(i => i.overdue).length}</strong></div><div class="stat-card"><span>Recommendations sent</span><strong>${activeRecords.filter(i => i.status === 'Sent to Management').length}</strong></div></div>
-    <section class="card dashboard-card" id="staff"><div class="section-heading"><div><span class="eyebrow">TRAINEES</span><h3>Training and competency</h3></div></div><div class="trainer-filters"><input id="traineeSearch" type="search" placeholder="Search trainees"><select id="progressFilter"><option value="all">All progress</option><option value="complete">Complete</option><option value="in-progress">In progress</option></select><select id="overdueFilter"><option value="all">All due dates</option><option value="true">Overdue</option><option value="false">On track</option></select><select id="reviewFilter"><option value="all">All reviews</option><option value="pending-review">Pending review</option><option value="reassessment">Reassessment</option></select><select id="signoffFilter"><option value="all">All sign-offs</option><option value="sent-to-management">Sent to Management</option><option value="approved">Approved</option></select></div><div class="table-wrap"><table><thead><tr><th>Trainee</th><th>Progress</th><th>Latest result</th><th>Sign-off</th><th>Due</th></tr></thead><tbody>${rows}</tbody></table></div><p id="noTrainees" class="empty-state" ${activeRecords.length ? 'hidden' : ''}>No ${roleLabel} trainees in this assigned department.</p></section>
-    <section class="card coming-soon" id="training"><h3>Training content coming soon</h3><p>Trainer access is assessment-only. Content editing and Management settings are unavailable.</p></section><div id="profilePanel"></div>
-  `);
-  document.getElementById("trainerDepartment")?.addEventListener("change", event => { if (assigned.includes(event.target.value)) { state.selectedDepartment = event.target.value; saveState(); renderTrainerDashboard(); } });
-  const applyFilters = () => { let visible = 0; document.querySelectorAll(".trainee-row").forEach(row => { const match = row.dataset.search.includes(document.getElementById("traineeSearch").value.toLowerCase()) && ["progress", "overdue", "review", "signoff"].every(key => { const value = document.getElementById(`${key}Filter`).value; return value === "all" || row.dataset[key] === value; }); row.hidden = !match; if (match) visible++; }); document.getElementById("noTrainees").hidden = visible > 0; };
-  document.querySelectorAll(".trainer-filters input, .trainer-filters select").forEach(control => control.addEventListener(control.tagName === "INPUT" ? "input" : "change", applyFilters));
-  document.querySelectorAll(".open-profile").forEach(button => button.addEventListener("click", () => renderTraineeProfile(button.dataset.id)));
-}
-
-function renderTraineeProfile(id) {
-  const record = workflowRecords().find(item => item.id === id);
-  const allowed = record && record.role === (state.currentUser.role === "pca-trainer" ? "PCA" : "Cleaner") && assignedDepartmentsForCurrentTrainer().includes(record.department);
-  if (!allowed) return alert("You do not have access to this trainee or department.");
-  const history = record.history.map(item => `<li><div><strong>${escapeHtml(item.action)}</strong><span>${escapeHtml(item.actor)} ¬∑ ${escapeHtml(item.role)} ¬∑ ${escapeHtml(item.at)}</span></div><p>${escapeHtml(item.detail || '‚Äî')}</p><small>${escapeHtml(item.previousStatus)} ‚Üí ${escapeHtml(item.newStatus)}</small></li>`).join("");
-  document.getElementById("profilePanel").innerHTML = `<section class="card trainee-profile" id="reports"><div class="section-heading"><div><span class="eyebrow">TRAINEE PROFILE</span><h3>${escapeHtml(record.name)}</h3><span class="employee-id">${escapeHtml(record.id)}</span><p>${record.role} ¬∑ ${escapeHtml(departmentName(record.department))}</p></div><span class="status-chip status-${statusTone(record.status)}">${record.status}</span></div><div class="profile-grid"><div><h4>Modules</h4><strong>${record.modules.completed.length} completed ¬∑ ${record.modules.remaining.length} remaining</strong><p>${escapeHtml(record.modules.remaining.join(", ") || "All required modules completed")}</p></div><div><h4>Knowledge checks</h4>${record.knowledge.map(k => `<p>${escapeHtml(k.module)} <strong>${k.score}%</strong></p>`).join("")}</div><div><h4>Practical observations</h4>${record.observations.map(o => `<p><strong>${escapeHtml(o.result)}</strong> ¬∑ ${escapeHtml(o.date)}<br>${escapeHtml(o.note)}</p>`).join("") || '<p>No observation recorded.</p>'}</div><div><h4>Trainer / Management feedback</h4><p class="${record.status === 'Reassessment Required' ? 'alert-text' : ''}">${escapeHtml(record.feedback || "No feedback yet.")}</p></div></div><label>Assessment observation<textarea id="assessmentNote" placeholder="Record observable competency evidence"></textarea></label><div class="profile-actions"><button class="btn" id="recordObservation">Record observation</button><button class="btn" id="recommendSignoff" ${record.progress < 100 || !['Ready for Trainer Review','Reassessment Required'].includes(record.status) ? 'disabled' : ''}>Submit recommendation</button></div><h4>Activity history</h4><ol class="activity-history">${history}</ol></section>`;
-  document.getElementById("profilePanel").scrollIntoView({ behavior: "smooth" });
-  document.getElementById("recordObservation").addEventListener("click", () => { const note = document.getElementById("assessmentNote").value.trim(); if (!note) return alert("Enter an observation first."); record.observations.unshift({ date: new Date().toLocaleString("en-AU"), result: "Observed", note }); record.feedback = note; record.history.unshift({ actor: state.currentUser.name, role: workplaceRoleLabel(state.currentUser.role), action: "Recorded competency observation", at: new Date().toLocaleString("en-AU"), detail: note, previousStatus: record.status, newStatus: record.status }); saveState(); renderTraineeProfile(id); });
-  document.getElementById("recommendSignoff").addEventListener("click", () => { const previous = record.status; const detail = document.getElementById("assessmentNote").value.trim() || record.feedback || "Competency recommended"; record.status = "Sent to Management"; record.reviewStatus = "Management review"; record.feedback = detail; record.history.unshift({ actor: state.currentUser.name, role: workplaceRoleLabel(state.currentUser.role), action: "Submitted sign-off recommendation", at: new Date().toLocaleString("en-AU"), detail, previousStatus: previous, newStatus: record.status }); saveState(); renderTrainerDashboard(); });
-}
-
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
-async function bootstrap() {
-  if (!globalThis.SkillWardServices) return state.currentUser ? routeSignedInUser() : renderLogin();
-  authService = new globalThis.SkillWardServices.AuthService();
-  const invitation = globalThis.SkillWardInvitation?.parseInvitationCallback(globalThis.location.href);
-  if (invitation?.requested) return processInvitationCallback(invitation);
-  const recovery = globalThis.SkillWardRecovery.parseRecoveryCallback(globalThis.location.href);
-  if (recovery.requested) return processRecoveryCallback(recovery);
-  if (new URLSearchParams(location.search).get("demo") === "1") {
-    state.currentUser = null; state.selectedDepartment = null; saveState();
-    return renderGuidedDemoEntry();
-  }
-  if (globalThis.SkillWardRecovery.isRecoveryPending(sessionStorage)) {
-    const session = await authService.recoverySession();
-    if (session?.user) return renderPasswordUpdate();
-    globalThis.SkillWardRecovery.clearRecoveryPending(sessionStorage);
-    return renderRecoveryInvalid();
-  }
-  if (state.currentUser?.mode === "demo" || (state.currentUser && !state.currentUser.mode)) return routeSignedInUser();
-  renderShell('<section class="card"><h2>Loading SkillWard‚Ä¶</h2><p>Resolving your secure session and workplace access.</p></section>');
-  authService.onChange((event) => {
-    if (event === "SIGNED_OUT" || event === "TOKEN_REFRESHED" && !authenticatedContext) {
-      authenticatedContext = null;
-      renderAccessState("SESSION_EXPIRED");
-    }
-  });
-  try {
-    const restored = await authService.restore(state.activeOrganizationId);
-    if (restored) return acceptResolvedEntry(restored);
-  } catch (error) {
-    await authService.signOut();
-    if (["ACCOUNT_SUSPENDED", "ACCOUNT_ARCHIVED", "MEMBERSHIP_EXPIRED", "MISSING_MEMBERSHIP", "MISSING_PROFILE", "INVITATION_EXPIRED", "ACCESS_DENIED"].includes(error.message)) return renderAccessState(error.message);
-    return renderAccessState("SYSTEM_UNAVAILABLE");
-  }
-  renderLogin();
-}
-async function processInvitationCallback(invitation) {
-  renderShell('<section class="card recovery-card"><h2>Opening your secure invitation‚Ä¶</h2><p>Please wait while SkillWard verifies the one-time link.</p></section>');
-  try {
-    await authService.establishInvitation(invitation);
-    history.replaceState({}, "", "/app/");
-    const result = await authService.restore();
-    if (!result || result.entryState !== "invitation") return renderInvitationInvalid("used");
-    renderInvitationSetup(result);
-  } catch {
-    renderInvitationInvalid(invitation.errorCode ? "expired" : "invalid");
-  }
-}
-function renderInvitationInvalid(reason = "invalid") {
-  const heading = reason === "used" ? "Invitation already used" : reason === "expired" ? "Invitation expired" : "Invitation unavailable";
-  renderShell(`<section class="card recovery-card"><h2>${heading}</h2><p class="auth-status" role="alert">This invitation is invalid, expired, revoked or has already been used.</p><p>Ask your Organisation Administrator to resend the invitation, or sign in if your account is already active.</p><button class="btn" id="invitationSignIn">Go to Sign In</button></section>`);
-  document.getElementById("invitationSignIn")?.addEventListener("click", () => renderLogin());
-}
-async function processRecoveryCallback(recovery) {
-  renderShell('<section class="card recovery-card"><h2>Opening your secure recovery link‚Ä¶</h2><p>Please wait while SkillWard verifies the link.</p></section>');
-  try {
-    await authService.establishRecovery(recovery);
-    globalThis.SkillWardRecovery.markRecoveryPending(sessionStorage);
-    history.replaceState({}, "", location.pathname);
-    renderPasswordUpdate();
-  } catch {
-    renderRecoveryInvalid();
-  }
-}
-function renderRecoveryInvalid() {
-  renderShell('<section class="card recovery-card"><h2>Recovery link unavailable</h2><p class="auth-status" role="alert">This recovery link is invalid, expired or has already been used.</p><button class="btn" id="requestRecovery">Request another recovery email</button></section>');
-  document.getElementById("requestRecovery").addEventListener("click", () => renderLogin("", true));
-}
-function renderPasswordUpdate() {
-  renderShell(`<section class="card recovery-card"><h2>Create new password</h2><p>Use at least 12 characters with upper-case, lower-case and a number.</p><form id="updatePasswordForm"><label><span>New password</span><span class="password-control"><input id="newPassword" type="password" autocomplete="new-password" minlength="12" required><button class="link-button password-toggle" type="button" data-for="newPassword">Show</button></span></label><label><span>Confirm new password</span><span class="password-control"><input id="confirmPassword" type="password" autocomplete="new-password" minlength="12" required><button class="link-button password-toggle" type="button" data-for="confirmPassword">Show</button></span></label><p id="recoveryError" class="auth-status" role="alert"></p><button class="btn" type="submit">Save new password</button></form></section>`);
-  document.querySelectorAll(".password-toggle").forEach(button => button.addEventListener("click", () => { const input=document.getElementById(button.dataset.for), showing=input.type==="text"; input.type=showing?"password":"text"; button.textContent=showing?"Show":"Hide"; }));
-  document.getElementById("updatePasswordForm").addEventListener("submit", async event => { event.preventDefault(); const password=document.getElementById("newPassword").value, confirmation=document.getElementById("confirmPassword").value, error=document.getElementById("recoveryError"), button=event.currentTarget.querySelector("button[type=submit]"); if(password.length<12 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password) || password!==confirmation){ error.textContent="Use at least 12 characters with upper-case, lower-case and a number, and make both entries match."; return; } button.disabled=true; try { await authService.updatePassword(password); globalThis.SkillWardRecovery.clearRecoveryPending(sessionStorage); await authService.signOut(); renderLogin("Password updated successfully. Sign in with your new password."); } catch { error.textContent=authMessage("RECOVERY_INVALID"); button.disabled=false; } });
-}
-bootstrap();
+Y™Áäx-ÆÈ‹j◊ù¢Îi∫⁄+äßj[hëÈ‹¢ÈÌÁ›;Ì:-jZ.∂õ≠ñ)ﬁ≥V6ˆÁ7B“Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&"ì∞†¶6ˆÁ7BFVfV«E7FFR“∞¢7W'&VÁEW6W#¢ÁV∆¬¿¢6V∆V7FVDFW'F÷VÁC¢ÁV∆¬¿¢7FófT˜&vÊó¶Fñˆ‰ñC¢ÁV∆¬¿¢7FófUv˜&∑76UfñWs¢&Üˆ÷R"¿¢˜&vÊó¶FñˆÂ6WGW7FW¢&ñFVÁFóGí"¿¢FV÷ı6V7F˜#¢&Ü˜7óF¬"¿¢FV÷Ù¶˜W&ÊWó3¢∑“¿¢∆V&ÊW$Ê÷S¢%7Ffb∆V&ÊW""¿¢÷ˆGV∆U&ˆw&W73¢∑“¿¢&7Fñ6≈6ñvÊˆfc¢f«6R¿¢G&ñÊW$6ˆ÷÷VÁG3¢""¿¢G&ñÊW$76ñvÊ÷VÁG3¢ÁV∆¬¿¢G&ñÊVU&V6˜&G3¢ÁV∆¬¿¢÷ÊvV÷VÁDFF¢ÁV∆¿ß”∞†¶6ˆÁ7BDU%D‘TÂE2“∞¢∞¢ñC¢&˜W&FñÊr◊FÜVG&R"¿¢6ˆFS¢$ıB"¿¢Ê÷S¢$˜W&FñÊrFÜVG&Rb&V6˜fW'í"¿¢7V÷÷'ì¢%4ˆÊ&ˆ&FñÊr¬FÜVG&RÊB&V6˜fW'ív˜&∂f∆˜w2¬6∆VÊñÊr¬6fWGíÊB&7Fñ6¬6ˆ◊WFVÊ7í‚"¿¢FWFñ√¢#b÷ˆGV∆W2"¿¢7FófS¢G'VP¢“¿¢∞¢ñC¢&Fí◊7W&vW'í"¿¢6ˆFS¢$E2"¿¢Ê÷S¢$Fí7W&vW'í"¿¢7V÷÷'ì¢%FñVÁB&W&Fñˆ‚¬÷˜fV÷VÁB¬Fñ«í&VFñÊW72ÊBFí◊7W&vW'í7W˜'Bv˜&∂f∆˜w2‚"¿¢FWFñ√¢%∆ÊÊVB"¿¢7FófS¢f«6P¢“¿¢∞¢ñC¢&7WFR◊7W&vñ6¬◊VÊóB"¿¢6ˆFS¢$5R"¿¢Ê÷S¢$7WFR7W&vñ6¬VÊóB"¿¢7V÷÷'ì¢%47W˜'B¬FñVÁBf∆˜r¬WVó÷VÁB&VFñÊW72ÊB7WFR7W&vñ6¬VÊóBv˜&∂f∆˜w2‚"¿¢FWFñ√¢%∆ÊÊVB"¿¢7FófS¢f«6P¢“¿¢∞¢ñC¢&Fñ«ó6ó2"¿¢6ˆFS¢$Dí"¿¢Ê÷S¢$Fñ«ó6ó2"¿¢7V÷÷'ì¢%FñVÁB7W˜'B¬G&VF÷VÁB÷&V&VFñÊW72¬6∆VÊñÊrÊBFñ«ó6ó2v˜&∂f∆˜w2‚"¿¢FWFñ√¢%∆ÊÊVB"¿¢7FófS¢f«6P¢“¿¢∞¢ñC¢&v7G&Ú"¿¢6ˆFS¢$t"¿¢Ê÷S¢$v7G&Ú"¿¢7V÷÷'ì¢%&ˆ6VGW&R÷&V&W&Fñˆ‚¬FñVÁB7W˜'B¬6∆VÊñÊrÊBv7G&Úv˜&∂f∆˜w2‚"¿¢FWFñ√¢%∆ÊÊVB"¿¢7FófS¢f«6P¢“¿¢∞¢ñC¢&V÷W&vVÊ7í÷FW'F÷VÁB"¿¢6ˆFS¢$TB"¿¢Ê÷S¢$V÷W&vVÊ7íFW'F÷VÁB"¿¢7V÷÷'ì¢$FW'F÷VÁB&VFñÊW72¬W&vVÁBFñVÁBG&Á7˜'B¬6fWGíÊBV÷W&vVÊ7ív˜&∂f∆˜w2‚"¿¢FWFñ√¢%∆ÊÊVB"¿¢7FófS¢f«6P¢–•”∞†¶6ˆÁ7Btı$µƒ4Uı$ÙƒU2“∞¢6¢%4"¿¢6∆VÊW#¢$6∆VÊW""¿¢&6&R◊v˜&∂W"#¢%W'6ˆÊ¬6&Rv˜&∂W""¿¢&vVB÷6&R÷6∆VÊW"#¢$VÁfó&ˆÊ÷VÁF¬6W'fñ6W2v˜&∂W""¿¢&vVB÷6&R◊G&ñÊW"#¢$6∆ñÊñ6¬VGV6F˜""¿¢'7W˜'B◊v˜&∂W"#¢$Fó6&ñ∆óGí7W˜'Bv˜&∂W""¿¢&Fó6&ñ∆óGí◊G&ñÊW"#¢%&7Fñ6R6ˆ6Ç"¿¢'6◊G&ñÊW"#¢%4G&ñÊW""¿¢&6∆VÊW"◊G&ñÊW"#¢$6∆VÊW"G&ñÊW""¿¢÷ÊvV÷VÁC¢$÷ÊvV÷VÁB ß”∞†¶6ˆÁ7BDU%D‘TÂEı4TƒT5DîÙÂı$ÙƒU2“ÊWr6WBÖ≤'6"¬&6∆VÊW"%“ì∞†¶6ˆÁ7B‰eÙïDT’2“∞¢≤&Üˆ÷R"¬$Üˆ÷R"¬.(»"%“¿¢≤'G&ñÊñÊr"¬%G&ñÊñÊr"¬.)kr%“¿¢≤'7Ffb"¬%7Ffb"¬.)ôí%“¿¢≤'&W˜'G2"¬%&W˜'G2"¬.)jR%–•”∞†¶gVÊ7Fñˆ‚FV÷ÙÊfñvFñˆ‚á&ˆ∆Rí∞¢6ˆÁ7B∂ñÊB“FV÷ı&ˆ∆T∂ñÊBá&ˆ∆Rì∞¢ñbÜ∂ñÊB””“'v˜&∂W""í&WGW&‚µ≤&Üˆ÷R"¬$Üˆ÷R"¬.(»"%“¬≤'G&ñÊñÊr"¬%G&ñÊñÊr"¬.)kr%’”∞¢ñbÜ∂ñÊB””“'G&ñÊW""í&WGW&‚µ≤&Üˆ÷R"¬$Üˆ÷R"¬.(»"%“¬≤'7Ffb"¬%G&ñÊVW2"¬.)ôí%“¬≤'G&ñÊñÊr"¬$wVñFÊ6R"¬.)kr%’”∞¢ñbá&ˆ∆R””“&÷ÊvV÷VÁB"í&WGW&‚‰eÙïDT’3∞¢&WGW&‚µ≤&Üˆ÷R"¬$Üˆ÷R"¬.(»"%’”∞ß–†¶6ˆÁ7BUDÑTÂDî4DTEÙ‰eÙïDT’2“∞¢%6∂ñ∆≈v&B7WW"F÷ñÊó7G&F˜"#¢µ≤&Üˆ÷R"¬$Üˆ÷R"¬.(»"%“¬≤&∆VG2"¬$FV÷Ú&WVW7G2"¬.)xr%’“¿¢$˜&vÊó6Fñˆ‚F÷ñÊó7G&F˜"#¢µ≤&Üˆ÷R"¬$Üˆ÷R"¬.(»"%“¬≤'Fávó2"¬%Fávó2"¬.)kr%“¬≤'V˜∆R"¬%V˜∆R"¬.)ôí%“¬≤&6ˆ◊WFVÊ7í"¬$6ˆ◊WFVÊ7í"¬.)…2%“¬≤'&W˜'G2"¬%&W˜'G2"¬.)jR%“¬≤&F÷ñ‚"¬$F÷ñ‚"¬.)©í%’“¿¢$f6ñ∆óGíF÷ñÊó7G&F˜"#¢µ≤&Üˆ÷R"¬$÷ÊvV÷VÁBÜˆ÷R"¬.(»"%“¬≤'G&ñÊñÊr"¬%G&ñÊñÊr"¬.)kr%“¬≤'7Ffb"¬%7Ffb"¬.)ôí%“¬≤'&W˜'G2"¬%&W˜'G2"¬.)jR%’“¿¢$FW'F÷VÁB÷ÊvW"#¢µ≤&Üˆ÷R"¬$÷ÊvV÷VÁBÜˆ÷R"¬.(»"%“¬≤'G&ñÊñÊr"¬%G&ñÊñÊr"¬.)kr%“¬≤'7Ffb"¬%7Ffb"¬.)ôí%“¬≤'&W˜'G2"¬%&W˜'G2"¬.)jR%’“¿¢$6ˆÁFVÁBF÷ñÊó7G&F˜"ÙVGV6F˜"#¢µ≤&Üˆ÷R"¬$6ˆÁFVÁBÜˆ÷R"¬.(»"%“¬≤'Fávó2"¬%Fávó2"¬.)kr%“¬≤'&W˜'G2"¬%&W˜'G2"¬.)jR%’“¿¢v˜&∂W#¢µ≤&Üˆ÷R"¬$Üˆ÷R"¬.(»"%’“¬G&ñÊW#¢µ≤&Üˆ÷R"¬$Üˆ÷R"¬.(»"%’“¬÷ÊvV÷VÁC¢µ≤&Üˆ÷R"¬$Üˆ÷R"¬.(»"%’–ß”∞†¶gVÊ7Fñˆ‚WFÜVÁFñ6FVDÊfñvFñˆ‚á&ˆ∆Rí∞¢ñbÑUDÑTÂDî4DTEÙ‰eÙïDT’5∑&ˆ∆U“í&WGW&‚UDÑTÂDî4DTEÙ‰eÙïDT’5∑&ˆ∆U”∞¢ñbÖ≤%4"¬$6∆VÊW""¬%7W˜'Bv˜&∂W"%“ÊñÊ6«VFW2á&ˆ∆Ríí&WGW&‚UDÑTÂDî4DTEÙ‰eÙïDT’2Áv˜&∂W#∞¢ñbá&ˆ∆SÚÊñÊ6«VFW2Ç%G&ñÊW""íí&WGW&‚UDÑTÂDî4DTEÙ‰eÙïDT’2ÁG&ñÊW#∞¢&WGW&‚UDÑTÂDî4DTEÙ‰eÙïDT’2Ê÷ÊvV÷VÁC∞ß–†¶gVÊ7Fñˆ‚v˜&∑∆6U&ˆ∆T∆&V¬á&ˆ∆Rí∞¢&WGW&‚tı$µƒ4Uı$ÙƒU5∑&ˆ∆U“«¬&ˆ∆R«¬%7Ffb÷V÷&W"#∞ß–†¶gVÊ7Fñˆ‚FV÷ı6V7F˜"ÜñB“7FFRÊ7W'&VÁEW6W#ÚÁ6V7F˜"«¬7FFRÊFV÷ı6V7F˜"í∞¢&WGW&‚v∆ˆ&≈FÜó2Â4¥îƒ≈t$EÙDT‘ıı4T5Dı%3ÚÂ∂ñE“«¬v∆ˆ&≈FÜó2Â4¥îƒ≈t$EÙDT‘ıı4T5Dı%3ÚÊÜ˜7óF√∞ß–†¶gVÊ7Fñˆ‚FV÷ı&ˆ∆T∂ñÊBá&ˆ∆R“7FFRÊ7W'&VÁEW6W#ÚÁ&ˆ∆R¬6V7F˜"“FV÷ı6V7F˜"Çíí∞¢&WGW&‚6V7F˜#ÚÁ&ˆ∆W2ÊfñÊBÜóFV“”‚óFV“Áf«VR””“&ˆ∆RìÚÊ∂ñÊ@¢«¬á&ˆ∆R””“&÷ÊvV÷VÁB"Ú&÷ÊvV÷VÁB"¢&ˆ∆SÚÊñÊ6«VFW2Ç'G&ñÊW""íÚ'G&ñÊW""¢'v˜&∂W""ì∞ß–†¶gVÊ7Fñˆ‚FV÷Ù¶˜W&ÊWíá6V7F˜$ñB“7FFRÊ7W'&VÁEW6W#ÚÁ6V7F˜"«¬7FFRÊFV÷ı6V7F˜"í∞¢ñbÇ7FFRÊFV÷Ù¶˜W&ÊWó2«¬GóVˆb7FFRÊFV÷Ù¶˜W&ÊWó2”“&ˆ&¶V7B"í7FFRÊFV÷Ù¶˜W&ÊWó2“∑”∞¢ñbÇ7FFRÊFV÷Ù¶˜W&ÊWó5∑6V7F˜$ñE“í∞¢7FFRÊFV÷Ù¶˜W&ÊWó5∑6V7F˜$ñE““∞¢∆V&ÊVD÷ˆGV∆W3¢µ“¬f∆ñFFVC¢f«6R¬66˜&S¢¬ˆ'6W'fVC¢f«6R¿¢ˆ'6W'fFñˆ„¢""¬&˜fVC¢f«6R¬&VÊWv≈66ÜVGV∆VC¢f«6R¬&VÊWvƒFFS¢""¿¢Üó7F˜'ì¢µ–¢”∞¢–¢&WGW&‚7FFRÊFV÷Ù¶˜W&ÊWó5∑6V7F˜$ñE”∞ß–†¶gVÊ7Fñˆ‚&V6˜&DFV÷Ù¶˜W&ÊWíÜ7Fñˆ‚¬FWFñ¬¬F6Ç“∑“í∞¢6ˆÁ7B¶˜W&ÊWí“FV÷Ù¶˜W&ÊWíÇì∞¢ˆ&¶V7BÊ76ñv‚Ü¶˜W&ÊWí¬F6Çì∞¢¶˜W&ÊWíÊÜó7F˜'íÁVÁ6ÜñgBá≤7Fñˆ‚¬FWFñ¬¬C¢ÊWrFFRÇíÁFÙ∆ˆ6∆U7G&ñÊrÇ&V‚‘R"í“ì∞¢6fU7FFRÇì∞ß–†¶gVÊ7Fñˆ‚FV÷ı7FvU7FGW2Ü¶˜W&ÊWí“FV÷Ù¶˜W&ÊWíÇí¬6V7F˜"“FV÷ı6V7F˜"Çíí∞¢6ˆÁ7B∆V&ÊVB“¶˜W&ÊWíÊ∆V&ÊVD÷ˆGV∆W2Ê∆VÊwFÇ„“6V7F˜"ÁFávíÊ÷ˆGV∆W2Ê∆VÊwFÉ∞¢&WGW&‚∞¢≤$∆V&‚"¬∆V&ÊVB¬∆V&ÊVBÚ%&WVó&VB÷ˆGV∆W26ˆ◊∆WFR"¢G∂¶˜W&ÊWíÊ∆V&ÊVD÷ˆGV∆W2Ê∆VÊwFá“ÚG∑6V7F˜"ÁFávíÊ÷ˆGV∆W2Ê∆VÊwFá“÷ˆGV∆W26ˆ◊∆WFV“¿¢≤%f∆ñFFR"¬¶˜W&ÊWíÁf∆ñFFVB¬¶˜W&ÊWíÁf∆ñFFVBÚG∂¶˜W&ÊWíÁ66˜&W“R∂Ê˜v∆VFvR&W7V«F¢$∂Ê˜v∆VFvR6ÜV6≤&WVó&VB%“¿¢≤$ˆ'6W'fR"¬¶˜W&ÊWíÊˆ'6W'fVB¬¶˜W&ÊWíÊˆ'6W'fVBÚ%&7Fñ6¬ˆ'6W'fFñˆ‚&V6˜&FVB"¢%G&ñÊW"ˆ'6W'fFñˆ‚&WVó&VB%“¿¢≤$&˜fR"¬¶˜W&ÊWíÊ&˜fVB¬¶˜W&ÊWíÊ&˜fVBÚ$÷ÊvV÷VÁB&˜f¬&V6˜&FVB"¢$÷ÊvV÷VÁBFV6ó6ñˆ‚&WVó&VB%“¿¢≤%&VÊWr"¬¶˜W&ÊWíÁ&VÊWv≈66ÜVGV∆VB¬¶˜W&ÊWíÁ&VÊWv≈66ÜVGV∆VBÚ&VÊWv¬G∂¶˜W&ÊWíÁ&VÊWvƒFFW÷¢%&VÊWv¬FFR&WVó&VB%–¢”∞ß–†¶gVÊ7Fñˆ‚Ê˜&÷∆ó¶T7W'&VÁEW6W%&ˆ∆RÇí∞¢6ˆÁ7B&ˆ∆R“7FFRÊ7W'&VÁEW6W#ÚÁ&ˆ∆S∞†¢ñbá&ˆ∆R””“&∆V&ÊW""«¬&ˆ∆R””“'G&ñÊW""í∞¢7FFRÊ7W'&VÁEW6W"Á&ˆ∆R“&ˆ∆R””“'G&ñÊW""Ú'6◊G&ñÊW""¢'6#∞¢6fU7FFRÇì∞¢–ß–†¶gVÊ7Fñˆ‚v˜&∂f∆˜u&V6˜&G2Çí∞¢ñbÇ'&íÊó4'&íá7FFRÁG&ñÊVU&V6˜&G2íí7FFRÁG&ñÊVU&V6˜&G2“•4Ù‚Á'6RÑ•4Ù‚Á7G&ñÊvñgíÖE$î‰TUı$T4ı$E2íì∞¢&WGW&‚7FFRÁG&ñÊVU&V6˜&G3∞ß–†¶gVÊ7Fñˆ‚76ñvÊ÷VÁDFó&V7F˜'íÇí∞¢ñbÇ'&íÊó4'&íá7FFRÁG&ñÊW$76ñvÊ÷VÁG2íí7FFRÁG&ñÊW$76ñvÊ÷VÁG2“•4Ù‚Á'6RÑ•4Ù‚Á7G&ñÊvñgíÖE$î‰U%ÙDï$T5Dı%ííì∞¢&WGW&‚7FFRÁG&ñÊW$76ñvÊ÷VÁG3∞ß–†¶gVÊ7Fñˆ‚÷ÊvV÷VÁE7F˜&RÇí∞¢ñbÇ7FFRÊ÷ÊvV÷VÁDFFí7FFRÊ÷ÊvV÷VÁDFF“•4Ù‚Á'6RÑ•4Ù‚Á7G&ñÊvñgíÖ4¥îƒ≈t$EÙ‘‰tT‘TÂEı4’ƒRíì∞¢&WGW&‚6∂ñ∆≈v&D÷ÊvV÷VÁBÊ7&VFU7F˜&Rá7FFRÊ÷ÊvV÷VÁDFFì∞ß–†¶gVÊ7Fñˆ‚7W'&VÁD÷ÊvW"á7F˜&R“÷ÊvV÷VÁE7F˜&RÇíí∞¢&WGW&‚7F˜&RÊFFÊ÷ÊvW'2ÊfñÊBÜóFV“”‚óFV“ÊÊ÷RÁFÙ∆˜vW$66RÇí””“7FFRÊ7W'&VÁEW6W"ÊÊ÷RÁFÙ∆˜vW$66RÇíí«¬7F˜&RÊFFÊ÷ÊvW'2ÊfñÊBÜóFV“”‚óFV“Ê∆WfV¬””“$Ü˜7óF¬F÷ñÊó7G&F˜""bbóFV“Ê66˜VÁE7FGW2””“$7FófR"ì∞ß–†¶gVÊ7Fñˆ‚7W'&VÁEG&ñÊW%&V6˜&BÇí∞¢6ˆÁ7B&ˆ∆R“7FFRÊ7W'&VÁEW6W#ÚÁ&ˆ∆S∞¢6ˆÁ7BÊ÷VB“76ñvÊ÷VÁDFó&V7F˜'íÇíÊfñÊBÜóFV“”‚óFV“Á&ˆ∆R””“&ˆ∆RbbóFV“ÊÊ÷RÁFÙ∆˜vW$66RÇí””“7FFRÊ7W'&VÁEW6W"ÊÊ÷RÁFÙ∆˜vW$66RÇíì∞¢&WGW&‚Ê÷VB«¬76ñvÊ÷VÁDFó&V7F˜'íÇíÊfñÊBÜóFV“”‚óFV“Á&ˆ∆R””“&ˆ∆Rì∞ß–†¶gVÊ7Fñˆ‚76ñvÊVDFW'F÷VÁG4f˜$7W'&VÁEG&ñÊW"Çí∞¢&WGW&‚7W'&VÁEG&ñÊW%&V6˜&BÇìÚÊFW'F÷VÁG2«¬µ”∞ß–†¶gVÊ7Fñˆ‚FW'F÷VÁDÊ÷RÜñBí∞¢&WGW&‚DU%D‘TÂE2ÊfñÊBÜóFV“”‚óFV“ÊñB””“ñBìÚÊÊ÷P¢«¬FV÷ı6V7F˜"ÇìÚÊFW'F÷VÁG2ÊfñÊBÜóFV“”‚óFV“ÊñB””“ñBìÚÊÊ÷P¢«¬WFÜVÁFñ6FVD6ˆÁFWáCÚÊFW'F÷VÁDFWFñ«3ÚÊfñÊBÜóFV“”‚óFV“ÊñB””“ñBìÚÊÊ÷R«¬ñC∞ß–†¶gVÊ7Fñˆ‚7FGW5FˆÊRá7FGW2í∞¢ñbá7FGW2””“$&˜fVB"í&WGW&‚'7V66W72#∞¢ñbá7FGW2””“%&V76W76÷VÁB&WVó&VB"í&WGW&‚&FÊvW"#∞¢&WGW&‚7FGW2””“$Ê˜B7F'FVB"Ú&ÊWWG&¬"¢'v&ÊñÊr#∞ß–†¶gVÊ7Fñˆ‚v˜&∑76TÜVFW"áW6W"¬FW'F÷VÁBí∞¢ñbÇW6W"í&WGW&‚$ÜV«FÜ6&Rv˜&∂f˜&6RG&ñÊñÊr#∞¢ñbáW6W"Ê÷ˆFR””“&FV÷Ú"í&WGW&‚G∂FV÷ı6V7F˜"áW6W"Á6V7F˜"ìÚÊ˜&vÊó¶Fñˆ‚«¬$wVñFVBFV÷Ú'“+rG∂FV÷ı6V7F˜"áW6W"Á6V7F˜"ìÚÊÊ÷R«¬$6&R'÷∞¢ñbáW6W"Á&ˆ∆R””“'∆Ff˜&“÷F÷ñ‚"í&WGW&‚%∆Ff˜&“F÷ñÊó7G&Fñˆ‚#∞¢ñbáW6W"Á&ˆ∆R””“&÷ÊvV÷VÁB"í∞¢&WGW&‚$ÜV«FÜ6&Rv˜&∂f˜&6RG&ñÊñÊr#∞¢–¢6ˆÁ7B∆&V«2“∞¢6¢%4G&ñÊñÊráV""¿¢6∆VÊW#¢$6∆VÊW"G&ñÊñÊráV""¿¢'6◊G&ñÊW"#¢%4G&ñÊW"v˜&∑76R"¿¢&6∆VÊW"◊G&ñÊW"#¢$6∆VÊW"G&ñÊW"v˜&∑76R ¢”∞¢&WGW&‚G∂FW'F÷VÁCÚÊÊ÷R«¬$76ñvÊVBFW'F÷VÁB'“+rG∂∆&V«5∑W6W"Á&ˆ∆U“«¬$ÜV«FÜ6&Rv˜&∂f˜&6RG&ñÊñÊr'÷∞ß–†¶gVÊ7Fñˆ‚&˜WFU6ñvÊVDñÂW6W"Çí∞¢Ê˜&÷∆ó¶T7W'&VÁEW6W%&ˆ∆RÇì∞†¢ñbá7FFRÊ7W'&VÁEW6W#ÚÊ÷ˆFR””“&FV÷Ú"í∞¢&VÊFW$FV÷ıv˜&∑76RÇì∞¢&WGW&„∞¢–†¢6ˆÁ7B∂Ê˜v‚“7FFRÊ7W'&VÁEW6W#ÚÁ&ˆ∆R””“&÷ÊvV÷VÁB ¢Ú÷ÊvV÷VÁE7F˜&RÇíÊFFÊ÷ÊvW'2ÊfñÊBÜóFV“”‚óFV“ÊÊ÷RÁFÙ∆˜vW$66RÇí””“7FFRÊ7W'&VÁEW6W"ÊÊ÷RÁFÙ∆˜vW$66RÇíê¢¢÷ÊvV÷VÁE7F˜&RÇíÊFFÁ7FfbÊfñÊBÜóFV“”‚óFV“ÊÊ÷RÁFÙ∆˜vW$66RÇí””“7FFRÊ7W'&VÁEW6W#ÚÊÊ÷SÚÁFÙ∆˜vW$66RÇíì∞¢ñbÜ∂Ê˜v‚bb≤%7W7VÊFVB"¬$&6ÜófVB%“ÊñÊ6«VFW2Ü∂Ê˜v‚Ê66˜VÁE7FGW2íí∞¢&VÊFW%6ÜV∆¬Ü«6V7Fñˆ‚6∆73“&6&B66W72÷&∆ˆ6∂VB#„∆É#‰66W72VÊfñ∆&∆S¬ˆÉ#„«‚G∂∂Ê˜v‚Ê66˜VÁE7FGW2””“%7W7VÊFVB"Ú%ñ˜W"66W72ó27W7VÊFVB‚6ˆÁF7B÷ÊvV÷VÁBf˜"76ó7FÊ6R‚"¢%FÜó266˜VÁBó2&6ÜófVBÊB6ÊÊ˜B6ñv‚ñ‚‚'”¬˜„¬˜6V7Fñˆ„Êì∞¢&WGW&„∞¢–†¢ñbá7FFRÊ7W'&VÁEW6W#ÚÁ&ˆ∆SÚÊñÊ6«VFW2Ç'G&ñÊW""íí∞¢6ˆÁ7B76ñvÊVB“76ñvÊVDFW'F÷VÁG4f˜$7W'&VÁEG&ñÊW"Çì∞¢ñbÇ76ñvÊVBÊñÊ6«VFW2á7FFRÁ6V∆V7FVDFW'F÷VÁBíí7FFRÁ6V∆V7FVDFW'F÷VÁB“76ñvÊVE≥“«¬ÁV∆√∞¢6fU7FFRÇì∞¢–†¢ñbá7FFRÊ7W'&VÁEW6W#ÚÁ&ˆ∆R””“&÷ÊvV÷VÁB"bb7FFRÁ6V∆V7FVDFW'F÷VÁBí∞¢6ˆÁ7B7F˜"“7W'&VÁD÷ÊvW"Çì∞¢7FFRÁ6V∆V7FVDFW'F÷VÁB“7F˜#ÚÊFW'F÷VÁG3ÚÂ≥“«¬ÁV∆√∞¢6fU7FFRÇì∞¢–¢ñbá7FFRÊ7W'&VÁEW6W#ÚÁ&ˆ∆R””“&÷ÊvV÷VÁB"í∞¢6ˆÁ7B7F˜"“7W'&VÁD÷ÊvW"Çì∞¢ñbÇ7F˜#ÚÊFW'F÷VÁG3ÚÊñÊ6«VFW2á7FFRÁ6V∆V7FVDFW'F÷VÁBíí∞¢7FFRÁ6V∆V7FVDFW'F÷VÁB“7F˜#ÚÊFW'F÷VÁG3ÚÂ≥“«¬ÁV∆√∞¢6fU7FFRÇì∞¢–¢–†¢ñbÑDU%D‘TÂEı4TƒT5DîÙÂı$ÙƒU2ÊÜ2á7FFRÊ7W'&VÁEW6W"Á&ˆ∆Ríbb7FFRÁ6V∆V7FVDFW'F÷VÁBí∞¢&VÊFW$FW'F÷VÁE6V∆V7Fñˆ‚Çì∞¢&WGW&„∞¢–†¢&˜WFT7W'&VÁEW6W"Çì∞ß–†¶gVÊ7Fñˆ‚FW'F÷VÁDñ6ˆ‚ÜFW'F÷VÁDñBí∞¢6ˆÁ7BFá2“∞¢&˜W&FñÊr◊FÜVG&R#¢ ¢«FÇC“$”BfÉd”bgc6”"”7c4”r6É√"4ÉV√"”5¢"Û‡¢«FÇC“$”"Gc6“”B„R“„R"&”r”"”"$”ÇBBÇ"ÛÊ¿¢&Fí◊7W&vW'í#¢ ¢∆6ó&6∆R7É“#""7ì“#""#“#B"Û‡¢«FÇC“$”"'c6”Gc4”"&É6”BÉ4”RV√"&”"&””B”"$”rv¬”"""ÛÊ¿¢&7WFR◊7W&vñ6¬◊VÊóB#¢ ¢«FÇC“$”2ÖcÜ”vÉác4”bWb”FÉV2227c"Û‡¢«FÇC“$”RÜÉ&“””c""ÛÊ¿¢&Fñ«ó6ó2#¢ ¢«FÇC“$”"53b„Rí„Rb„RFR„RR„R3r„Rí„R"2"5¢"Û‡¢«FÇC“$”v3„ÇB„"B„Ç”„b"ÛÊ¿¢&v7G&Ú#¢ ¢«FÇC“$”7cf3„"“„Ç"„"”""„b”"„"„Ç”22„2”"R„2„""„BB„22„Bb„b""„Ç”„r2„"”B„Ç"„B”r„B“„b”"„"”2„í"”B„Ç"Û‡¢«FÇC“$”rb„v3„2""„R"B„2"ÛÊ¿¢&V÷W&vVÊ7í÷FW'F÷VÁB#¢ ¢«FÇC“$”Ç6ÉácVÉWcÜÇ”WcTÉáb”TÉ5cÜÉUc5¢"Û‡¢«FÇC“&”b"2”"2"”R"6É2"ÛÊ ¢”∞†¢&WGW&‚«7frfñWt&˜É“##B#B"fˆ7W6&∆S“&f«6R"&ñ÷ÜñFFV„“'G'VR"fñ∆√“&ÊˆÊR"7G&ˆ∂S“&7W'&VÁD6ˆ∆˜""7G&ˆ∂R◊vñGFÉ“#„Ç"7G&ˆ∂R÷∆ñÊV6“'&˜VÊB"7G&ˆ∂R÷∆ñÊV¶ˆñ„“'&˜VÊB#‚G∑Fá5∂FW'F÷VÁDñE“«¬"'”¬˜7fsÊ∞ß–†¶∆WB7FFR“∆ˆE7FFRÇì∞¶∆WB7W'&VÁD÷ˆGV∆TñB“ÁV∆√∞¶∆WB7W'&VÁD&VñB“ÁV∆√∞†¶gVÊ7Fñˆ‚∆ˆE7FFRÇí∞¢G'í∞¢6ˆÁ7B6fVB“•4Ù‚Á'6RÜ∆ˆ6≈7F˜&vRÊvWDóFV“Ç'6G&ñÊñÊuvV$c"íì∞¢&WGW&‚≤‚‚ÊFVfV«E7FFR¬‚‚‚á6fVB«¬∑“í”∞¢“6F6Ç∞¢&WGW&‚≤‚‚ÊFVfV«E7FFR”∞¢–ß–†¶gVÊ7Fñˆ‚6fU7FFRÇí∞¢∆ˆ6≈7F˜&vRÁ6WDóFV“Ç'6G&ñÊñÊuvV$c"¬•4Ù‚Á7G&ñÊvñgíá7FFRíì∞ß–†¶gVÊ7Fñˆ‚vWD÷ˆGV∆U7FFRÜñBí∞¢&WGW&‚7FFRÊ÷ˆGV∆U&ˆw&W75∂ñE“«¬∞¢∆W76ˆ‰6ˆ◊∆WFS¢f«6R¿¢Vó•76VC¢f«6R¿¢Vó•66˜&S¢ ¢”∞ß–†¶gVÊ7Fñˆ‚6WD÷ˆGV∆U7FFRÜñB¬F6Çí∞¢7FFRÊ÷ˆGV∆U&ˆw&W75∂ñE““≤‚‚ÊvWD÷ˆGV∆U7FFRÜñBí¬‚‚ÁF6Ç”∞¢6fU7FFRÇì∞ß–†¶gVÊ7Fñˆ‚˜fW&∆≈&ˆw&W72Çí∞¢6ˆÁ7BF˜F≈VÊóG2“E$î‰î‰uÙ‘ÙETƒU2Ê∆VÊwFÇ¢"≤∞¢∆WB6ˆ◊∆WFVB“7FFRÁ&7Fñ6≈6ñvÊˆfbÚ¢∞†¢E$î‰î‰uÙ‘ÙETƒU2Êf˜$V6ÇÜ÷ˆGV∆R”‚∞¢6ˆÁ7B““vWD÷ˆGV∆U7FFRÜ÷ˆGV∆RÊñBì∞¢ñbÜ“Ê∆W76ˆ‰6ˆ◊∆WFRí6ˆ◊∆WFVB≤≥∞¢ñbÜ“ÁVó•76VBí6ˆ◊∆WFVB≤≥∞¢“ì∞†¢&WGW&‚÷FÇÁ&˜VÊBÇÜ6ˆ◊∆WFVBÚF˜F≈VÊóG2í¢ì∞ß–†¶gVÊ7Fñˆ‚76VD÷ˆGV∆W2Çí∞¢&WGW&‚E$î‰î‰uÙ‘ÙETƒU2Êfñ«FW"Ü“”‚vWD÷ˆGV∆U7FFRÜ“ÊñBíÁVó•76VBíÊ∆VÊwFÉ∞ß–†¶gVÊ7Fñˆ‚vWD&VÜ&VñBí∞¢&WGW&‚E$î‰î‰uÙ$T2ÊfñÊBÜ&V”‚&VÊñB””“&VñBì∞ß–†¶gVÊ7Fñˆ‚÷ˆGV∆W4f˜$&VÜ&VñBí∞¢&WGW&‚E$î‰î‰uÙ‘ÙETƒU2Êfñ«FW"Ü÷ˆGV∆R”‚÷ˆGV∆RÊ&V””“&VñBì∞ß–†¶gVÊ7Fñˆ‚÷ˆGV∆T6&BÜ÷ˆGV∆Rí∞¢6ˆÁ7B““vWD÷ˆGV∆U7FFRÜ÷ˆGV∆RÊñBì∞¢6ˆÁ7B7FGW2““ÁVó•76V@¢Ú≤$6ˆ◊∆WFVB"¬&&FvR÷6ˆ◊∆WFR%–¢¢“Ê∆W76ˆ‰6ˆ◊∆WFP¢Ú≤%Vó¢&WVó&VB"¬&&FvR÷ñ‚◊&ˆw&W72%–¢¢≤$Ê˜B7F'FVB"¬&&FvR÷Ê˜B◊7F'FVB%”∞†¢&WGW&‚ ¢«6V7Fñˆ‚6∆73“&6&B÷ˆGV∆R÷6&B#‡¢∆Fób6∆73“&÷ˆGV∆R÷6&B÷ÜVB#‡¢«7‚6∆73“&÷ˆGV∆R÷ÁV÷&W"#‚Gµ7G&ñÊrÜ÷ˆGV∆RÊÁV÷&W"íÁE7F'BÉ"¬#"ó”¬˜7„‡¢«7‚6∆73“&÷ˆGV∆R÷GW&Fñˆ‚#‚G∂÷ˆGV∆RÊGW&FñˆÁ”¬˜7„‡¢¬ˆFóc‡¢∆Fóc‡¢∆Fób6∆73“'6÷∆¬#‰‘ÙETƒRG∂÷ˆGV∆RÊÁV÷&W'”¬ˆFóc‡¢∆É3‚G∂÷ˆGV∆RÁFóF∆W”¬ˆÉ3‡¢¬ˆFóc‡¢«‚G∂÷ˆGV∆RÁ7V÷÷'ó”¬˜‡¢∆Fób6∆73“&÷ˆGV∆R÷÷WF#‡¢«7‚6∆73“&&FvRG∑7FGW5≥◊“#‚G∑7FGW5≥◊”¬˜7„‡¢∆'WGFˆ‚6∆73“&'F‚˜V‚÷÷ˆGV∆R"FF÷ñC“"G∂÷ˆGV∆RÊñG“#‡¢G∂“Ê∆W76ˆ‰6ˆ◊∆WFRÚ$6ˆÁFñÁVR"¢%7F'B'–¢¬ˆ'WGFˆ„‡¢¬ˆFóc‡¢¬˜6V7Fñˆ„‡¢∞ß–†¶gVÊ7Fñˆ‚&ñÊD÷ˆGV∆T'WGFˆÁ2Çí∞¢Fˆ7V÷VÁBÁVW'ï6V∆V7F˜$∆¬Ç"Ê˜V‚÷÷ˆGV∆R"íÊf˜$V6ÇÜ'F‚”‚∞¢'F‚ÊFDWfVÁD∆ó7FVÊW"Ç&6∆ñ6≤"¬Çí”‚∞¢7W'&VÁD÷ˆGV∆TñB“'F‚ÊFF6WBÊñC∞¢7W'&VÁD&VñB“E$î‰î‰uÙ‘ÙETƒU2ÊfñÊBÜ÷ˆGV∆R”‚÷ˆGV∆RÊñB””“7W'&VÁD÷ˆGV∆TñBìÚÊ&V«¬7W'&VÁD&VñC∞¢&VÊFW$∆W76ˆ‚Ü7W'&VÁD÷ˆGV∆TñBì∞¢“ì∞¢“ì∞ß–†¶gVÊ7Fñˆ‚&VÊFW%6ÜV∆¬Ü6ˆÁFVÁBí∞¢6ˆÁ7BW6W"“WFÜVÁFñ6FVD6ˆÁFWáCÚÊW6W"«¬7FFRÊ7W'&VÁEW6W#∞¢6ˆÁ7BFW'F÷VÁB“DU%D‘TÂE2ÊfñÊBÜóFV“”‚óFV“ÊñB””“7FFRÁ6V∆V7FVDFW'F÷VÁBê¢«¬FV÷ı6V7F˜"áW6W#ÚÁ6V7F˜"ìÚÊFW'F÷VÁG2ÊfñÊBÜóFV“”‚óFV“ÊñB””“7FFRÁ6V∆V7FVDFW'F÷VÁBê¢«¬WFÜVÁFñ6FVD6ˆÁFWáCÚÊFW'F÷VÁDFWFñ«3ÚÊfñÊBÜóFV“”‚óFV“ÊñB””“7FFRÁ6V∆V7FVDFW'F÷VÁBì∞¢6ˆÁ7BWFÜVÁFñ6FVEv˜&∑76R“&ˆˆ∆V‚ÜWFÜVÁFñ6FVD6ˆÁFWáB«¬W6W#ÚÊ÷ˆFR””“&FV÷Ú"«¬áW6W"bbÜFW'F÷VÁB«¬W6W"Á&ˆ∆SÚÊñÊ6«VFW2Ç'G&ñÊW""íííì∞¢6ˆÁ7BÊfñvFñˆ‰óFV◊2“WFÜVÁFñ6FVD6ˆÁFWáBÚWFÜVÁFñ6FVDÊfñvFñˆ‚ÜWFÜVÁFñ6FVD6ˆÁFWáBÊ÷V÷&W'6ÜóÚÁ&ˆ∆Rí¢7FFRÊ7W'&VÁEW6W#ÚÊ÷ˆFR””“&FV÷Ú"ÚFV÷ÙÊfñvFñˆ‚áW6W#ÚÁ&ˆ∆Rí¢‰eÙïDT’3∞¢6ˆÁ7B7FófUfñWr“WFÜVÁFñ6FVD6ˆÁFWáB«¬7FFRÊ7W'&VÁEW6W#ÚÊ÷ˆFR””“&FV÷Ú"Úá7FFRÊ7FófUv˜&∑76UfñWr«¬&Üˆ÷R"í¢&Üˆ÷R#∞¢ñbÇÊfñvFñˆ‰óFV◊2Á6ˆ÷RÇÖ∂ñE“í”‚ñB””“7FófUfñWríí7FFRÊ7FófUv˜&∑76UfñWr“ÊfñvFñˆ‰óFV◊5≥’≥”∞¢6ˆÁ7BÊfñvFñˆ‚“ÊfñvFñˆ‰óFV◊2Ê÷ÇÖ∂ñB¬∆&V¬¬ñ6ˆÂ“í”‚ ¢∆'WGFˆ‚6∆73“'v˜&∑76R÷Êb÷óFV“G∂ñB””“á7FFRÊ7FófUv˜&∑76UfñWr«¬&Üˆ÷R"íÚ&ó2÷7FófR"¢"'“"FF÷Êc“"G∂ñG“"&ñ÷∆&V√“"G∂∆&V«“#‡¢«7‚&ñ÷ÜñFFV„“'G'VR#‚G∂ñ6ˆÁ”¬˜7„„«6÷∆√‚G∂∆&V«”¬˜6÷∆√‡¢¬ˆ'WGFˆ„‡¢íÊ¶ˆñ‚Ç""ì∞¢ÊñÊÊW$ÖD‘¬“ ¢∆Fób6∆73“'6ÜV∆¬G∂WFÜVÁFñ6FVEv˜&∑76RÚ&WFÜVÁFñ6FVB◊6ÜV∆¬"¢"'“G∂WFÜVÁFñ6FVD6ˆÁFWáBÚ&FF&6R◊v˜&∑76R"¢"'“#‡¢∆ÜVFW"6∆73“'F˜&"#‡¢∆Fób6∆73“&'&ÊB#‡¢∆Fób6∆73“&'&ÊB÷÷&≤#‡¢«7frfñWt&˜É“#CÇSB"fˆ7W6&∆S“&f«6R#‡¢«FóF∆SÂ6∂ñ∆≈v&C¬˜FóF∆S‡¢«FÇ6∆73“&∆ˆvÚ◊6ÜñV∆B"C“$”#B"CBócf32”Ç#"”##Ñ3"CrB3ÇB#Ucî√#B%¢"Û‡¢«FÇ6∆73“&∆ˆvÚ◊7ñ÷&ˆ¬"C“&”B„R#r„Rb„"b„"2”B"Û‡¢¬˜7fs‡¢¬ˆFóc‡¢∆Fób6∆73“&'&ÊB÷6˜í#‡¢∆ÉÂ6∂ñ∆≈v&C¬ˆÉ‡¢«‚G∂W66TáF÷¬áv˜&∑76TÜVFW"áW6W"¬FW'F÷VÁBíó”¬˜‡¢¬ˆFóc‡¢¬ˆFóc‡¢∆Fób6∆73“'F˜÷7FñˆÁ2#‡¢G∂WFÜVÁFñ6FVEv˜&∑76RÚ∆'WGFˆ‚6∆73“&Ê˜Fñfñ6Fñˆ‚÷'WGFˆ‚"&ñ÷∆&V√“$Ê˜Fñfñ6FñˆÁ2#„«7‚&ñ÷ÜñFFV„“'G'VR#Ó)xÛ¬˜7„„¬ˆ'WGFˆ„Ê¢"'–¢G∑W6W"Ú«7‚6∆73“'&ˆ∆R◊ñ∆¬#‚G∑v˜&∑∆6U&ˆ∆T∆&V¬áW6W"Á&ˆ∆Ró”¬˜7„Ê¢"'–¢G∂WFÜVÁFñ6FVD6ˆÁFWáCÚÊ˜&vÊó¶Fñˆ‚Ú«7‚6∆73“'v˜&∑76R÷˜&vÊó¶Fñˆ‚#‚G∂W66TáF÷¬ÜWFÜVÁFñ6FVD6ˆÁFWáBÊ˜&vÊó¶Fñˆ‚ÊÊ÷Ró”¬˜7„Ê¢"'–¢G∂WFÜVÁFñ6FVEv˜&∑76RÚ∆Fób6∆73“'&ˆfñ∆R÷6ˆÁG&ˆ¬#„∆'WGFˆ‚6∆73“'&ˆfñ∆R÷'WGFˆ‚"ñC“'&ˆfñ∆T'WGFˆ‚"&ñ÷∆&V√“$˜V‚&ˆfñ∆R÷VÁRf˜"G∂W66TáF÷¬áW6W"ÊÊ÷Ró“"&ñ÷Ü7˜W“&÷VÁR"&ñ÷WáÊFVC“&f«6R#„«7„‚G∂W66TáF÷¬áW6W"ÊÊ÷RíÊ6Ü$BÉíÁFıWW$66RÇó”¬˜7„„«7G&ˆÊs‚G∂W66TáF÷¬áW6W"ÊÊ÷Ró”¬˜7G&ˆÊs„∆"&ñ÷ÜñFFV„“'G'VR#Ó(»C¬ˆ#„¬ˆ'WGFˆ„„∆Fób6∆73“'&ˆfñ∆R÷÷VÁR"ñC“'&ˆfñ∆T÷VÁR"&ˆ∆S“&÷VÁR"ÜñFFV„„∆'WGFˆ‚GóS“&'WGFˆ‚"&ˆ∆S“&÷VÁVóFV“"FF◊&ˆfñ∆R÷7Fñˆ„“'&ˆfñ∆R#„«7„Ó)x≥¬˜7„„∆Fóc„«7G&ˆÊsÂ&ˆfñ∆S¬˜7G&ˆÊs„«6÷∆√ÂfñWrñ˜W"ñFVÁFóGíÊB&ˆ∆S¬˜6÷∆√„¬ˆFóc„¬ˆ'WGFˆ„„∆'WGFˆ‚GóS“&'WGFˆ‚"&ˆ∆S“&÷VÁVóFV“"FF◊&ˆfñ∆R÷7Fñˆ„“'v˜&∑76R#„«7„Ó)xs¬˜7„„∆Fóc„«7G&ˆÊsÂv˜&∑76S¬˜7G&ˆÊs„«6÷∆√‰6ÜÊvR6V7F˜"¬&ˆ∆R˜"˜&vÊó6Fñˆ„¬˜6÷∆√„¬ˆFóc„¬ˆ'WGFˆ„„∆'WGFˆ‚GóS“&'WGFˆ‚"&ˆ∆S“&÷VÁVóFV“"FF◊&ˆfñ∆R÷7Fñˆ„“'6ñvÊ˜WB"6∆73“'&ˆfñ∆R◊6ñvÊ˜WB#„«7„Ó(j£¬˜7„„∆Fóc„«7G&ˆÊsÂ6ñv‚˜WC¬˜7G&ˆÊs„«6÷∆√‰VÊBFÜó26W76ñˆ‚6V7W&V«ì¬˜6÷∆√„¬ˆFóc„¬ˆ'WGFˆ„„¬ˆFóc„¬ˆFócÊ¢W6W"Ú∆'WGFˆ‚6∆73“&'F‚'F‚◊6V6ˆÊF'í"ñC“&∆Vv7ï7vóF6Ö&ˆ∆T'F‚#Â7vóF6Ç&ˆ∆S¬ˆ'WGFˆ„Ê¢"'–¢¬ˆFóc‡¢¬ˆÜVFW#‡¢G∂WFÜVÁFñ6FVEv˜&∑76RÚ∆Êb6∆73“'6ñFR÷Êb"7Gñ∆S“"“÷Êb÷6˜VÁC¢G∂ÊfñvFñˆ‰óFV◊2Ê∆VÊwFá“"&ñ÷∆&V√“%&ñ÷'íÊfñvFñˆ‚#‚G∂ÊfñvFñˆÁ”¬ˆÊcÊ¢"'–¢∆÷ñ‚6∆73“'vR"ñC“&÷ñ‰6ˆÁFVÁB#‚G∂6ˆÁFVÁG”¬ˆ÷ñ„‡¢G∂WFÜVÁFñ6FVEv˜&∑76RÚ∆Êb6∆73“&&˜GFˆ“÷Êb"7Gñ∆S“"“÷Êb÷6˜VÁC¢G∂ÊfñvFñˆ‰óFV◊2Ê∆VÊwFá“"&ñ÷∆&V√“%&ñ÷'íÊfñvFñˆ‚#‚G∂ÊfñvFñˆÁ”¬ˆÊcÊ¢"'–¢∆fˆ˜FW"6∆73“'6óFR÷fˆ˜FW"#‡¢∆Fób6∆73“&fˆ˜FW"÷ñÊÊW"#‡¢«6∆73“&fˆ˜FW"÷6˜ó&ñváB#Ï*í##b6∂ñ∆≈v&B‚∆¬&ñváG2&W6W'fVB„¬˜‡¢∆Êb6∆73“&fˆ˜FW"÷∆ñÊ∑2"&ñ÷∆&V√“$∆Vv¬ÊB7W˜'B#‡¢∆á&Vc“"ˆ∆Vv¬˜&óf7íÚ#Â&óf7íˆ∆ñ7ì¬ˆ‡¢«7‚&ñ÷ÜñFFV„“'G'VR#Ï+s¬˜7„‡¢∆á&Vc“"ˆ∆Vv¬˜FW&◊2Ú#ÂFW&◊2ˆbW6S¬ˆ‡¢«7‚&ñ÷ÜñFFV„“'G'VR#Ï+s¬˜7„‡¢∆á&Vc“"ˆ∆Vv¬ˆ66W76ñ&ñ∆óGíÚ#‰66W76ñ&ñ∆óGì¬ˆ‡¢«7‚&ñ÷ÜñFFV„“'G'VR#Ï+s¬˜7„‡¢∆á&Vc“"ˆ6ˆÁF7BÚ#‰6ˆÁF7Bf◊≤7W˜'C¬ˆ‡¢¬ˆÊc‡¢«6∆73“&fˆ˜FW"÷Fó66∆ñ÷W"#Â6∂ñ∆≈v&Bó2v˜&∂f˜&6RG&ñÊñÊrÊB6ˆ◊WFVÊ7í∆Ff˜&“‚G&ñÊñÊr6ˆÁFVÁBFˆW2Ê˜B&W∆6Rv˜&∑∆6Rˆ∆ñ6ñW2¬6∆ñÊñ6¬wVñFV∆ñÊW2¬˜"&ˆfW76ñˆÊ¬ßVFvV÷VÁB„¬˜‡¢¬ˆFóc‡¢¬ˆfˆ˜FW#‡¢∆Fób6∆73“'&ˆfñ∆R÷Fñ∆ˆr÷&6∂G&˜"ñC“'&ˆfñ∆TFñ∆ˆr"ÜñFFV„„«6V7Fñˆ‚6∆73“'&ˆfñ∆R÷Fñ∆ˆr"&ˆ∆S“&Fñ∆ˆr"&ñ÷÷ˆF√“'G'VR"&ñ÷∆&V∆∆VF'ì“'&ˆfñ∆TFñ∆ˆuFóF∆R#„∆'WGFˆ‚6∆73“'&ˆfñ∆R÷Fñ∆ˆr÷6∆˜6R"ñC“&6∆˜6U&ˆfñ∆TFñ∆ˆr"&ñ÷∆&V√“$6∆˜6R#Ï9s¬ˆ'WGFˆ„„∆FóbñC“'&ˆfñ∆TFñ∆ˆt6ˆÁFVÁB#„¬ˆFóc„¬˜6V7Fñˆ„„¬ˆFóc‡¢¬ˆFóc‡¢∞†¢6ˆÁ7B7FófT∆&V¬“ÊfñvFñˆ‰óFV◊2ÊfñÊBÇÖ∂ñE“í”‚ñB””“7FFRÊ7FófUv˜&∑76UfñWrìÚÂ≥“«¬$Üˆ÷R#∞¢6ˆÁ7Bv˜&∑76TÊ÷R“WFÜVÁFñ6FVD6ˆÁFWáCÚÊ˜&vÊó¶Fñˆ„ÚÊÊ÷R«¬áW6W#ÚÊ÷ˆFR””“&FV÷Ú"ÚFV÷ı6V7F˜"áW6W"Á6V7F˜"ìÚÊ˜&vÊó¶Fñˆ‚¢""ì∞¢Fˆ7V÷VÁBÁFóF∆R“W6W"ÚG∂7FófT∆&V«“G∑v˜&∑76TÊ÷RÚ¬G∑v˜&∑76TÊ÷W÷¢"'“¬6∂ñ∆≈v&F¢%6ñv‚ñ‚¬6∂ñ∆≈v&B#∞†¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&∆Vv7ï7vóF6Ö&ˆ∆T'F‚"ìÚÊFDWfVÁD∆ó7FVÊW"Ç&6∆ñ6≤"¬Çí”‚∞¢7FFRÊ7W'&VÁEW6W"“ÁV∆√∞¢7FFRÁ6V∆V7FVDFW'F÷VÁB“ÁV∆√∞¢6fU7FFRÇì∞¢&VÊFW$∆ˆvñ‚Çì∞¢“ì∞†¢6ˆÁ7B&ˆfñ∆T'WGFˆ‚“Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ'&ˆfñ∆T'WGFˆ‚"ì∞¢6ˆÁ7B&ˆfñ∆T÷VÁR“Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ'&ˆfñ∆T÷VÁR"ì∞¢&ˆfñ∆T'WGFˆ„ÚÊFDWfVÁD∆ó7FVÊW"Ç&6∆ñ6≤"¬Çí”‚∞¢&ˆfñ∆T÷VÁRÊÜñFFV‚“&ˆfñ∆T÷VÁRÊÜñFFV„∞¢&ˆfñ∆T'WGFˆ‚Á6WDGG&ñ'WFRÇ&&ñ÷WáÊFVB"¬7G&ñÊrÇ&ˆfñ∆T÷VÁRÊÜñFFV‚íì∞¢“ì∞¢Fˆ7V÷VÁBÁVW'ï6V∆V7F˜$∆¬Ç%∂FF◊&ˆfñ∆R÷7FñˆÂ“"íÊf˜$V6ÇÜ'WGFˆ‚”‚'WGFˆ‚ÊFDWfVÁD∆ó7FVÊW"Ç&6∆ñ6≤"¬7ñÊ2Çí”‚∞¢&ˆfñ∆T÷VÁRÊÜñFFV‚“G'VS∞¢&ˆfñ∆T'WGFˆ‚Á6WDGG&ñ'WFRÇ&&ñ÷WáÊFVB"¬&f«6R"ì∞¢ñbÜ'WGFˆ‚ÊFF6WBÁ&ˆfñ∆T7Fñˆ‚””“'6ñvÊ˜WB"í&WGW&‚6ñv‰˜WD7W'&VÁEW6W"Çì∞¢˜VÂ&ˆfñ∆TFñ∆ˆrÜ'WGFˆ‚ÊFF6WBÁ&ˆfñ∆T7Fñˆ‚¬W6W"ì∞¢“íì∞¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&6∆˜6U&ˆfñ∆TFñ∆ˆr"ìÚÊFDWfVÁD∆ó7FVÊW"Ç&6∆ñ6≤"¬6∆˜6U&ˆfñ∆TFñ∆ˆrì∞¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ'&ˆfñ∆TFñ∆ˆr"ìÚÊFDWfVÁD∆ó7FVÊW"Ç&6∆ñ6≤"¬WfVÁB”‚≤ñbÜWfVÁBÁF&vWBÊñB””“'&ˆfñ∆TFñ∆ˆr"í6∆˜6U&ˆfñ∆TFñ∆ˆrÇì≤“ì∞¢Fˆ7V÷VÁBÁVW'ï6V∆V7F˜$∆¬Ç%∂FF÷FV÷Ú÷7FñˆÂ“"íÊf˜$V6ÇÜ'WGFˆ‚”‚'WGFˆ‚ÊFDWfVÁD∆ó7FVÊW"Ç&6∆ñ6≤"¬7ñÊ2Çí”‚∞¢ñbÜ'WGFˆ‚ÊFF6WBÊFV÷Ù7Fñˆ‚””“'&W6WB"í∞¢7FFRÊFV÷Ù¶˜W&ÊWó5∑7FFRÊ7W'&VÁEW6W"Á6V7F˜%““ÁV∆√∞¢FV÷Ù¶˜W&ÊWíá7FFRÊ7W'&VÁEW6W"Á6V7F˜"ì≤6fU7FFRÇì≤&VÊFW$FV÷ıv˜&∑76RÇì≤&WGW&„∞¢–¢ñbÜ'WGFˆ‚ÊFF6WBÊFV÷Ù7Fñˆ‚””“&6ÜÊvR"í&WGW&‚˜VÂ&ˆfñ∆TFñ∆ˆrÇ'v˜&∑76R"¬W6W"ì∞¢ñbÜ'WGFˆ‚ÊFF6WBÊFV÷Ù7Fñˆ‚””“&WÜóB"í∞¢7FFRÊ7W'&VÁEW6W"“ÁV∆√≤7FFRÁ6V∆V7FVDFW'F÷VÁB“ÁV∆√≤7FFRÊ7FófUv˜&∑76UfñWr“&Üˆ÷R#≤6fU7FFRÇì∞¢∆ˆ6Fñˆ‚Ê76ñv‚Ç"Ú"ì∞¢–¢“íì∞†¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&6ÜÊvTFW'F÷VÁD'F‚"ìÚÊFDWfVÁD∆ó7FVÊW"Ç&6∆ñ6≤"¬Çí”‚∞¢7FFRÁ6V∆V7FVDFW'F÷VÁB“ÁV∆√∞¢6fU7FFRÇì∞¢&VÊFW$FW'F÷VÁE6V∆V7Fñˆ‚Çì∞¢“ì∞†¢Fˆ7V÷VÁBÁVW'ï6V∆V7F˜$∆¬Ç"Áv˜&∑76R÷Êb÷óFV“"íÊf˜$V6ÇÜ'WGFˆ‚”‚∞¢'WGFˆ‚ÊFDWfVÁD∆ó7FVÊW"Ç&6∆ñ6≤"¬Çí”‚∞¢ñbÜWFÜVÁFñ6FVD6ˆÁFWáBí∞¢7FFRÊ7FófUv˜&∑76UfñWr“'WGFˆ‚ÊFF6WBÊÊc∞¢6fU7FFRÇì∞¢&VÊFW$WFÜVÁFñ6FVEv˜&∑76RÇì∞¢&WGW&„∞¢–¢ñbá7FFRÊ7W'&VÁEW6W#ÚÊ÷ˆFR””“&FV÷Ú"í∞¢7FFRÊ7FófUv˜&∑76UfñWr“'WGFˆ‚ÊFF6WBÊÊc∞¢6fU7FFRÇì∞¢&VÊFW$FV÷ıv˜&∑76RÇì∞¢&WGW&„∞¢–¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÜ'WGFˆ‚ÊFF6WBÊÊbìÚÁ67&ˆ∆ƒñÁFıfñWrá≤&VÜfñ˜#¢'6÷ˆ˜FÇ"¬&∆ˆ6≥¢'7F'B"“ì∞¢“ì∞¢“ì∞†ß–†¶7ñÊ2gVÊ7Fñˆ‚6ñv‰˜WD7W'&VÁEW6W"Çí∞¢vóBWFÖ6W'fñ6SÚÁ6ñv‰˜WBÇì∞¢6∆V%Fñ÷V˜WBÜñF∆U6W76ñˆÂFñ÷W"ì∞¢WFÜVÁFñ6FVD6ˆÁFWáB“ÁV∆√∞¢7FFRÊ7W'&VÁEW6W"“ÁV∆√∞¢7FFRÁ6V∆V7FVDFW'F÷VÁB“ÁV∆√∞¢7FFRÊ7FófT˜&vÊó¶Fñˆ‰ñB“ÁV∆√∞¢7FFRÊ7FófUv˜&∑76UfñWr“&Üˆ÷R#∞¢6fU7FFRÇì∞¢&VÊFW$∆ˆvñ‚Çì∞ß–†¶gVÊ7Fñˆ‚6∆˜6U&ˆfñ∆TFñ∆ˆrÇí∞¢6ˆÁ7BFñ∆ˆr“Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ'&ˆfñ∆TFñ∆ˆr"ì∞¢ñbÜFñ∆ˆríFñ∆ˆrÊÜñFFV‚“G'VS∞ß–†¶gVÊ7Fñˆ‚˜VÂ&ˆfñ∆TFñ∆ˆráfñWr¬W6W"í∞¢6ˆÁ7BFñ∆ˆr“Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ'&ˆfñ∆TFñ∆ˆr"í¬6ˆÁFVÁB“Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ'&ˆfñ∆TFñ∆ˆt6ˆÁFVÁB"ì∞¢ñbÇFñ∆ˆr«¬6ˆÁFVÁBí&WGW&„∞¢ñbáfñWr””“'&ˆfñ∆R"í∞¢6ˆÁ7B˜&vÊó¶Fñˆ‚“WFÜVÁFñ6FVD6ˆÁFWáCÚÊ˜&vÊó¶Fñˆ„ÚÊÊ÷R«¬FV÷ı6V7F˜"áW6W#ÚÁ6V7F˜"ìÚÊ˜&vÊó¶Fñˆ‚«¬%6∂ñ∆≈v&B#∞¢6ˆÁ7B6V7F˜"“WFÜVÁFñ6FVD6ˆÁFWáCÚÊ˜&vÊó¶Fñˆ„ÚÊ˜&vÊó¶FñˆÂ˜GóR«¬FV÷ı6V7F˜"áW6W#ÚÁ6V7F˜"ìÚÊÊ÷R«¬$ÜV«FÜ6&R#∞¢6ˆÁFVÁBÊñÊÊW$ÖD‘¬“«7‚6∆73“&WñV'&˜r#ÂîıU"$ÙdîƒS¬˜7„„∆É"ñC“'&ˆfñ∆TFñ∆ˆuFóF∆R#‚G∂W66TáF÷¬áW6W"ÊÊ÷Ró”¬ˆÉ#„∆Fób6∆73“'&ˆfñ∆R◊7V÷÷'í÷fF"#‚G∂W66TáF÷¬áW6W"ÊÊ÷RíÊ6Ü$BÉíÁFıWW$66RÇó”¬ˆFóc„∆F¬6∆73“'&ˆfñ∆R◊7V÷÷'í#„∆Fóc„∆GCÂ&ˆ∆S¬ˆGC„∆FC‚G∂W66TáF÷¬áv˜&∑∆6U&ˆ∆T∆&V¬áW6W"Á&ˆ∆Ríó”¬ˆFC„¬ˆFóc„∆Fóc„∆GCÂv˜&∑76S¬ˆGC„∆FC‚G∂W66TáF÷¬Ü˜&vÊó¶Fñˆ‚ó”¬ˆFC„¬ˆFóc„∆Fóc„∆GCÂ6V7F˜#¬ˆGC„∆FC‚G∂W66TáF÷¬á6V7F˜"ó”¬ˆFC„¬ˆFóc„∆Fóc„∆GCÂ6W76ñˆ„¬ˆGC„∆FC‚G∂WFÜVÁFñ6FVD6ˆÁFWáBÚ%6V7W&R˜&vÊó6Fñˆ‚66˜VÁB"¢$wVñFVBFV÷Ú+r6◊∆RFFˆÊ«í'”¬ˆFC„¬ˆFóc„¬ˆF√‚G∂WFÜVÁFñ6FVD6ˆÁFWáBÚs∆'WGFˆ‚6∆73“&∆ñÊ≤÷'WGFˆ‚&ˆfñ∆R◊6ñvÊ˜WB÷∆¬"ñC“'6ñv‰˜WD∆≈6W76ñˆÁ2#Â6ñv‚˜WBg&ˆ“∆¬FWfñ6W3¬ˆ'WGFˆ„‚r¢"'÷∞¢“V«6Rñbá7FFRÊ7W'&VÁEW6W#ÚÊ÷ˆFR””“&FV÷Ú"í∞¢6ˆÁ7B6V7F˜'2“ˆ&¶V7BÁf«VW2Üv∆ˆ&≈FÜó2Â4¥îƒ≈t$EÙDT‘ıı4T5Dı%2«¬∑“ì∞¢6ˆÁ7B6V∆V7FVB“FV÷ı6V7F˜"áW6W"Á6V7F˜"ì∞¢6ˆÁFVÁBÊñÊÊW$ÖD‘¬“«7‚6∆73“&WñV'&˜r#Âtı$µ54S¬˜7„„∆É"ñC“'&ˆfñ∆TFñ∆ˆuFóF∆R#Â7vóF6ÇFV÷Úv˜&∑76S¬ˆÉ#„«‰÷˜fR&WGvVV‚6V7F˜'2ÊB&ˆ∆W2vóFÜ˜WB6∆V&ñÊrFÜR6Ü&VB6ˆ◊WFVÊ7í¶˜W&ÊWí„¬˜„∆f˜&“ñC“&FV÷ıv˜&∑76Tf˜&“#„∆∆&V√Â6V7F˜#«6V∆V7BñC“&FV÷ıv˜&∑76U6V7F˜"#‚G∑6V7F˜'2Ê÷ÜóFV“”‚∆˜Fñˆ‚f«VS“"G∂óFV“ÊñG“"G∂óFV“ÊñB””“6V∆V7FVBÊñBÚ'6V∆V7FVB"¢"'”‚G∂W66TáF÷¬ÜóFV“ÊÊ÷Ró“+rG∂W66TáF÷¬ÜóFV“Ê˜&vÊó¶Fñˆ‚ó”¬ˆ˜Fñˆ„ÊíÊ¶ˆñ‚Ç""ó”¬˜6V∆V7C„¬ˆ∆&V√„∆∆&V√Â&ˆ∆S«6V∆V7BñC“&FV÷ıv˜&∑76U&ˆ∆R#„¬˜6V∆V7C„¬ˆ∆&V√„∆'WGFˆ‚6∆73“&'F‚"GóS“'7V&÷óB#‰˜V‚v˜&∑76S¬ˆ'WGFˆ„„¬ˆf˜&”Ê∞¢6ˆÁ7B6V7F˜%6V∆V7B“Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&FV÷ıv˜&∑76U6V7F˜""í¬&ˆ∆U6V∆V7B“Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&FV÷ıv˜&∑76U&ˆ∆R"ì∞¢6ˆÁ7B˜V∆FU&ˆ∆W2“Çí”‚≤6ˆÁ7B6V7F˜"“FV÷ı6V7F˜"á6V7F˜%6V∆V7BÁf«VRì≤&ˆ∆U6V∆V7BÊñÊÊW$ÖD‘¬“6V7F˜"Á&ˆ∆W2Ê÷á&ˆ∆R”‚∆˜Fñˆ‚f«VS“"G∑&ˆ∆RÁf«VW“"G∑6V7F˜"ÊñB””“6V∆V7FVBÊñBbb&ˆ∆RÁf«VR””“W6W"Á&ˆ∆RÚ'6V∆V7FVB"¢"'”‚G∂W66TáF÷¬á&ˆ∆RÊ∆&V¬ó”¬ˆ˜Fñˆ„ÊíÊ¶ˆñ‚Ç""ì≤”∞¢˜V∆FU&ˆ∆W2Çì≤6V7F˜%6V∆V7BÊFDWfVÁD∆ó7FVÊW"Ç&6ÜÊvR"¬˜V∆FU&ˆ∆W2ì∞¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&FV÷ıv˜&∑76Tf˜&“"íÊFDWfVÁD∆ó7FVÊW"Ç'7V&÷óB"¬WfVÁB”‚≤WfVÁBÁ&WfVÁDFVfV«BÇì≤6ˆÁ7B6V7F˜"“FV÷ı6V7F˜"á6V7F˜%6V∆V7BÁf«VRì≤7FFRÊFV÷ı6V7F˜"“6V7F˜"ÊñC≤7FFRÊ7W'&VÁEW6W"“≤‚‚Á7FFRÊ7W'&VÁEW6W"¬6V7F˜#ß6V7F˜"ÊñB¬&ˆ∆Sß&ˆ∆U6V∆V7BÁf«VR”≤7FFRÁ6V∆V7FVDFW'F÷VÁB“6V7F˜"ÊFW'F÷VÁG5≥“ÊñC≤7FFRÊ7FófUv˜&∑76UfñWr“&Üˆ÷R#≤6fU7FFRÇì≤&VÊFW$FV÷ıv˜&∑76RÇì≤“ì∞¢“V«6R∞¢6ˆÁ7B÷V÷&W'6Üó2“WFÜVÁFñ6FVD6ˆÁFWáCÚÊ÷V÷&W'6Üó2«¬µ”∞¢6ˆÁFVÁBÊñÊÊW$ÖD‘¬“«7‚6∆73“&WñV'&˜r#Âtı$µ54S¬˜7„„∆É"ñC“'&ˆfñ∆TFñ∆ˆuFóF∆R#Âñ˜W"WFÜ˜&ó6VBv˜&∑76W3¬ˆÉ#„«‰66W72&V÷ñÁ2∆ñ÷óFVBFÚ7FófR˜&vÊó6Fñˆ‚÷V÷&W'6Üó2„¬˜„∆Fób6∆73“'v˜&∑76R÷6Üˆñ6R÷∆ó7B#‚G∂÷V÷&W'6Üó2Ê÷ÜóFV“”‚∆'WGFˆ‚6∆73“'v˜&∑76R÷6Üˆñ6R"FF÷˜&vÊó¶Fñˆ„“"G∂W66TáF÷¬ÜóFV“Ê˜&vÊó¶FñˆÂˆñBó“#„«7G&ˆÊs‚G∂W66TáF÷¬ÜóFV“Ê˜&vÊó¶FñˆÁ3ÚÊÊ÷R«¬$˜&vÊó6Fñˆ‚"ó”¬˜7G&ˆÊs„«6÷∆√‚G∂W66TáF÷¬ÜóFV“Á&ˆ∆Ró”¬˜6÷∆√„¬ˆ'WGFˆ„ÊíÊ¶ˆñ‚Ç""í«¬∆Fób6∆73“'v˜&∑76R÷6Üˆñ6R#„«7G&ˆÊs‚G∂W66TáF÷¬ÜWFÜVÁFñ6FVD6ˆÁFWáCÚÊ˜&vÊó¶Fñˆ„ÚÊÊ÷R«¬$7W'&VÁBv˜&∑76R"ó”¬˜7G&ˆÊs„«6÷∆√‚G∂W66TáF÷¬ÜWFÜVÁFñ6FVD6ˆÁFWáCÚÊ÷V÷&W'6ÜóÚÁ&ˆ∆R«¬$WFÜ˜&ó6VB66W72"ó”¬˜6÷∆√„¬ˆFócÊ”¬ˆFócÊ∞¢Fˆ7V÷VÁBÁVW'ï6V∆V7F˜$∆¬Ç%∂FF÷˜&vÊó¶FñˆÂ“"íÊf˜$V6ÇÜ'WGFˆ‚”‚'WGFˆ‚ÊFDWfVÁD∆ó7FVÊW"Ç&6∆ñ6≤"¬7ñÊ2Çí”‚≤7FFRÊ7FófT˜&vÊó¶Fñˆ‰ñB“'WGFˆ‚ÊFF6WBÊ˜&vÊó¶Fñˆ„≤7FFRÊ7FófUv˜&∑76UfñWr“&Üˆ÷R#≤7FFRÁ6V∆V7FVDFW'F÷VÁB“ÁV∆√≤6fU7FFRÇì≤WFÜVÁFñ6FVD6ˆÁFWáB“vóBWFÖ6W'fñ6RÁ7vóF6Ñ˜&vÊó¶Fñˆ‚Ü'WGFˆ‚ÊFF6WBÊ˜&vÊó¶Fñˆ‚ì≤&VÊFW$WFÜVÁFñ6FVEv˜&∑76RÇì≤“íì∞¢–¢Fñ∆ˆrÊÜñFFV‚“f«6S∞¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ'6ñv‰˜WD∆≈6W76ñˆÁ2"ìÚÊFDWfVÁD∆ó7FVÊW"Ç&6∆ñ6≤"¬7ñÊ2Çí”‚∞¢vóBWFÖ6W'fñ6RÁ6ñv‰˜WDWfW'óvÜW&RÇì≤WFÜVÁFñ6FVD6ˆÁFWáB“ÁV∆√≤7FFRÊ7W'&VÁEW6W"“ÁV∆√≤6fU7FFRÇì≤&VÊFW$∆ˆvñ‚Ç%ñ˜RÜfR&VV‚6ñvÊVB˜WBg&ˆ“∆¬6W76ñˆÁ2‚"ì∞¢“ì∞¢6ˆÁFVÁBÁVW'ï6V∆V7F˜"Ç&'WGFˆ‚¬6V∆V7B"ìÚÊfˆ7W2Çì∞ß–†¶∆WBWFÖ6W'fñ6R“ÁV∆√∞¶∆WBWFÜVÁFñ6FVD6ˆÁFWáB“ÁV∆√∞¶∆WBñF∆U6W76ñˆÂFñ÷W"“ÁV∆√∞¶∆WBñF∆U6W76ñˆ‰÷ñÁWFW2“3∞¶∆WBñF∆U6W76ñˆ‰∆ó7FVÊW'4&˜VÊB“f«6S∞†¶gVÊ7Fñˆ‚6ˆÊfñwW&TñF∆U6W76ñˆ‚Ü÷ñÁWFW2í∞¢ñF∆U6W76ñˆ‰÷ñÁWFW2“÷FÇÊ÷ñ‚ÉCÉ¬÷FÇÊ÷ÇÉR¬ÁV÷&W"Ü÷ñÁWFW2í«¬3íì∞¢6ˆÁ7B&W6WB“Çí”‚∞¢6∆V%Fñ÷V˜WBÜñF∆U6W76ñˆÂFñ÷W"ì∞¢ñbÇWFÜVÁFñ6FVD6ˆÁFWáBí&WGW&„∞¢ñF∆U6W76ñˆÂFñ÷W"“6WEFñ÷V˜WBÜ7ñÊ2Çí”‚∞¢vóBWFÖ6W'fñ6RÊFF&6SÚÁ&V6˜&DWFÜVÁFñ6Fñˆ‰WfVÁBÇ'6W76ñˆÂˆWáó&VB"¬WFÜVÁFñ6FVD6ˆÁFWáCÚÊ˜&vÊó¶Fñˆ„ÚÊñB«¬ÁV∆¬¬≤&V6ˆ„¢&ñF∆U˜Fñ÷V˜WB"“ì∞¢vóBWFÖ6W'fñ6RÁ6ñv‰˜WBÇ&∆ˆ6¬"ì∞¢WFÜVÁFñ6FVD6ˆÁFWáB“ÁV∆√≤7FFRÊ7W'&VÁEW6W"“ÁV∆√≤7FFRÊ7FófT˜&vÊó¶Fñˆ‰ñB“ÁV∆√≤6fU7FFRÇì∞¢&VÊFW$66W757FFRÇ%4U54îÙÂÙUÖï$TB"ì∞¢“¬ñF∆U6W76ñˆ‰÷ñÁWFW2¢cì∞¢”∞¢ñbÇñF∆U6W76ñˆ‰∆ó7FVÊW'4&˜VÊBí∞¢≤'ˆñÁFW&F˜v‚"¬&∂WñF˜v‚"¬'F˜V6á7F'B%“Êf˜$V6ÇÜÊ÷R”‚Fˆ7V÷VÁBÊFDWfVÁD∆ó7FVÊW"ÜÊ÷R¬&W6WB¬≤76ófS¢G'VR“íì∞¢Fˆ7V÷VÁBÊFDWfVÁD∆ó7FVÊW"Ç'fó6ñ&ñ∆óGñ6ÜÊvR"¬Çí”‚≤ñbÜFˆ7V÷VÁBÁfó6ñ&ñ∆óGï7FFR””“'fó6ñ&∆R"í&W6WBÇì≤“ì∞¢ñF∆U6W76ñˆ‰∆ó7FVÊW'4&˜VÊB“G'VS∞¢–¢&W6WBÇì∞ß–†¶gVÊ7Fñˆ‚WFÑ÷W76vRÜ6ˆFRí∞¢6ˆÁ7B÷W76vW2“∞¢44ıTÂEı5U5T‰DTC¢%ñ˜W"66W72ó27W'&VÁF«í7W7VÊFVB‚6ˆÁF7B÷ÊvV÷VÁB‚"¿¢44ıTÂEÙ$4ÑïdTC¢%FÜó266˜VÁBó2ÊÚ∆ˆÊvW"7FófR‚6ˆÁF7B÷ÊvV÷VÁB‚"¿¢44ıTÂEÙîÂdïDTC¢%ñ˜W"66˜VÁB6WGWó2Ê˜B6ˆ◊∆WFR‚6ˆÁF7B÷ÊvV÷VÁB‚"¿¢‘ï54î‰uı$ÙdîƒS¢%ñ˜W"66˜VÁBó2Ê˜B6ˆÊfñwW&VBf˜"6∂ñ∆≈v&B‚6ˆÁF7B÷ÊvV÷VÁB‚"¿¢‘ï54î‰uÙ‘T‘$U%4Ñï¢%ñ˜W"66˜VÁBó2Ê˜B6ˆÊfñwW&VBf˜"6∂ñ∆≈v&B‚6ˆÁF7B÷ÊvV÷VÁB‚"¿¢‘T‘$U%4ÑïÙUÖï$TC¢%ñ˜W"WFÜ˜&ó6VBv˜&∑76R66W72Ü2Wáó&VB‚6ˆÁF7B÷ÊvV÷VÁB‚"¿¢îÂdïDDîÙÂÙUÖï$TC¢%ñ˜W"ñÁfóFFñˆ‚ó2Wáó&VB˜"VÊfñ∆&∆R‚6≤÷ÊvV÷VÁBFÚ&W6VÊBóB‚"¿¢îÂdïDDîÙÂÙîÂdƒîC¢%FÜó2ñÁfóFFñˆ‚ó2ñÁf∆ñB¬Wáó&VB˜"Ü2«&VGí&VV‚W6VB‚"¿¢44U55ÙDT‰îTC¢%ñ˜R&RÊ˜BWFÜ˜&ó6VBFÚ˜V‚FÜBv˜&∑76R‚"¿¢4Ù‰dîuU$DîÙÂÙ‘ï54î‰s¢%6V7W&R6ñv‚÷ñ‚ó2Ê˜B6ˆÊfñwW&VBf˜"FÜó2FW∆˜ñ÷VÁB‚"¿¢4ÙÂDUÖEı$TEÙdîƒTC¢%vR6˜V∆BÊ˜B∆ˆBñ˜W"v˜&∑∆6R66W72‚6ÜV6≤ñ˜W"6ˆÊÊV7Fñˆ‚˜"6ˆÁF7B÷ÊvV÷VÁB‚"¿¢4ÙÂDUÖEıD$ƒUıU$‘ï54îÙ„¢%vR6˜V∆BÊ˜B∆ˆBñ˜W"v˜&∑∆6R66W72‚6ÜV6≤ñ˜W"6ˆÊÊV7Fñˆ‚˜"6ˆÁF7B÷ÊvV÷VÁB‚"¿¢$T4ıdU%ïÙîÂdƒîC¢%FÜó2&V6˜fW'í∆ñÊ≤ó2ñÁf∆ñB˜"Ü2Wáó&VB‚&WVW7BÊWr∆ñÊ≤‚ ¢”∞¢&WGW&‚÷W76vW5∂6ˆFU“«¬%vR6˜V∆BÊ˜B6ñv‚ñ˜Rñ‚‚6ÜV6≤ñ˜W"FWFñ«2ÊBG'ívñ‚‚#∞ß–†¶gVÊ7Fñˆ‚&VÊFW$FW&V6FVDVÁG'íÜ÷W76vR“""í∞¢6ˆÁ7B6V7F˜$ñ6ˆ‚“á6V7F˜"í”‚∞¢6ˆÁ7Bñ6ˆÁ2“∞¢Ü˜7óF√¢«7frfñWt&˜É“#CÇCÇ"&ñ÷ÜñFFV„“'G'VR#„«FÇC“$”"C%cVBBB”FÉfBBBGc#t”rC&É3D”#cfÉácT”#Bác“”R”VÉ”rC%c3&ÉGc"Û„¬˜7fsÊ¿¢&vVB÷6&R#¢«7frfñWt&˜É“#CÇCÇ"&ñ÷ÜñFFV„“'G'VR#„«FÇC“$”Ç#"#BÜ√bGc#ÉÖc#%¢"Û„«FÇC“$”ÇC%c#ñÉ'c4”r#3"„B”2„R„2”2„Br“„r„r”"„rB„b”"„Br„r”„"B”B„"b„r”rÇ„R”"„Ç”„Ç”R„Ç”B„R”r”Ç„U¢"Û„¬˜7fsÊ¿¢Fó6&ñ∆óGì¢«7frfñWt&˜É“#CÇCÇ"&ñ÷ÜñFFV„“'G'VR#„∆6ó&6∆R7É“##B"7ì“#í"#“#B"Û„«FÇC“$”RvÉÑ”#BGc6””ÇF”Ç”BíD”"#v√"”b"b"Û„¬˜7fsÊ ¢”∞¢&WGW&‚ñ6ˆÁ5∑6V7F˜%”∞¢”∞†¢&VÊFW%6ÜV∆¬Ü ¢∆Fób6∆73“&VÁG'í÷WáW&ñVÊ6R#‡¢«6V7Fñˆ‚6∆73“&VÁG'í◊fñWrvV∆6ˆ÷R◊fñWr"ñC“'vV∆6ˆ÷UfñWr#‡¢∆Fób6∆73“'vV∆6ˆ÷R÷F÷˜7ÜW&R"&ñ÷ÜñFFV„“'G'VR#„«7‚6∆73“'vV∆6ˆ÷R÷˜&"vV∆6ˆ÷R÷˜&"÷ˆÊR#„¬˜7„„«7‚6∆73“'vV∆6ˆ÷R÷˜&"vV∆6ˆ÷R÷˜&"◊GvÚ#„¬˜7„„«7‚6∆73“'vV∆6ˆ÷R÷w&ñB#„¬˜7„„¬ˆFóc‡¢∆Fób6∆73“'vV∆6ˆ÷R÷6ˆÁFVÁB#‡¢∆Fób6∆73“'vV∆6ˆ÷R÷V÷&∆V“#„«7frfñWt&˜É“#CÇSB"fˆ7W6&∆S“&f«6R#„«FóF∆SÂ6∂ñ∆≈v&C¬˜FóF∆S„«FÇ6∆73“&∆ˆvÚ◊6ÜñV∆B"C“$”#B"CBócf32”Ç#"”##Ñ3"CrB3ÇB#Ucî√#B%¢"Û„«FÇ6∆73“&∆ˆvÚ◊7ñ÷&ˆ¬"C“&”B„R#r„Rb„"b„"2”B"Û„¬˜7fs„¬ˆFóc‡¢«6∆73“'vV∆6ˆ÷R÷∂ñ6∂W"#„«7„„¬˜7„‚v˜&∂f˜&6R∆V&ÊñÊr¬'Vñ«B&˜VÊB6&S¬˜‡¢∆É#ÂvV∆6ˆ÷RFÚ«7„Â6∂ñ∆≈v&C¬˜7„„¬ˆÉ#‡¢«6∆73“'vV∆6ˆ÷R÷∆VB#‰ˆÊRG'W7FVB∆Ff˜&“f˜"G&ñÊñÊr¬6ˆ◊WFVÊ7íÊB6ˆÊfñFVÁB&7Fñ6R7&˜726&R˜&vÊó6FñˆÁ2„¬˜‡¢∆Fób6∆73“'vV∆6ˆ÷R÷7FñˆÁ2#‡¢∆'WGFˆ‚6∆73“&'F‚vV∆6ˆ÷R◊&ñ÷'í"ñC“&vWE7F'FVD'F‚#‰vWB7F'FVB«7‚&ñ÷ÜñFFV„“'G'VR#Ó(i#¬˜7„„¬ˆ'WGFˆ„‡¢∆6∆73“'vV∆6ˆ÷R◊6V6ˆÊF'í"á&Vc“"ˆ&ˆˆ≤÷FV÷ÚÚ#‰f˜"˜&vÊó6FñˆÁ2«7‚&ñ÷ÜñFFV„“'G'VR#Ó(is¬˜7„„¬ˆ‡¢¬ˆFóc‡¢∆Fób6∆73“'vV∆6ˆ÷R◊G'W7B"&ñ÷∆&V√“%∆Ff˜&“6&ñ∆óFñW2#„«7„Â7G'V7GW&VB∆V&ÊñÊs¬˜7„„∆ì„¬ˆì„«7„‰6ˆ◊WFVÊ7íWfñFVÊ6S¬˜7„„∆ì„¬ˆì„«7„‰6ˆ◊∆ñÊ6Rfó6ñ&ñ∆óGì¬˜7„„¬ˆFóc‡¢¬ˆFóc‡¢∆6ñFR6∆73“'vV∆6ˆ÷R◊fó7V¬"&ñ÷ÜñFFV„“'G'VR#‡¢∆Fób6∆73“'fó7V¬÷6&Bfó7V¬÷6&B÷÷ñ‚#„«6÷∆√Âtı$¥dı$4R$TDî‰U53¬˜6÷∆√„«7G&ˆÊs‰∆V&ÊñÊrFÜB&V6ˆ÷W26ˆÊfñFVÁB&7Fñ6R„¬˜7G&ˆÊs„∆Fób6∆73“'fó7V¬◊&ˆw&W72#„«7„„¬˜7„„¬ˆFóc„∆Fób6∆73“'fó7V¬÷÷WG&ñ72#„∆Fóc„∆#„¬ˆ#„«6÷∆√‰∆V&„¬˜6÷∆√„¬ˆFóc„∆Fóc„∆#„#¬ˆ#„«6÷∆√Âf∆ñFFS¬˜6÷∆√„¬ˆFóc„∆Fóc„∆#„3¬ˆ#„«6÷∆√Â6ñv‚ˆfc¬˜6÷∆√„¬ˆFóc„¬ˆFóc„¬ˆFóc‡¢∆Fób6∆73“'fó7V¬÷6&Bfó7V¬÷6&B÷f∆ˆB#„«7„Ó)…3¬˜7„„∆Fóc„«7G&ˆÊs‰6ˆ◊WFVÊ7í&VGì¬˜7G&ˆÊs„«6÷∆√Âfó6ñ&∆R‚7G'V7GW&VB‚66˜VÁF&∆R„¬˜6÷∆√„¬ˆFóc„¬ˆFóc‡¢¬ˆ6ñFS‡¢¬˜6V7Fñˆ„‡†¢«6V7Fñˆ‚6∆73“&VÁG'í◊fñWr6V7F˜"◊fñWr"ñC“'6V7F˜%fñWr"ÜñFFV„‡¢∆'WGFˆ‚6∆73“&VÁG'í÷&6≤"ñC“&&6µFıvV∆6ˆ÷R"GóS“&'WGFˆ‚#„«7‚&ñ÷ÜñFFV„“'G'VR#Ó(i¬˜7„‚&6≥¬ˆ'WGFˆ„‡¢∆ÜVFW"6∆73“'6V7F˜"÷ÜVFñÊr#‡¢«6∆73“'vV∆6ˆ÷R÷∂ñ6∂W"#„«7„„¬˜7„‚6∂ñ∆≈v&BVÁfó&ˆÊ÷VÁG3¬˜‡¢∆É#‰6Üˆ˜6Rñ˜W"6V7F˜#¬ˆÉ#‡¢«Â6V∆V7BFÜR6&RVÁfó&ˆÊ÷VÁBñ˜RvÁBFÚVÁFW"‚ñ˜W"˜&vÊó6Fñˆ‚ÊBW&÷ó76ñˆÁ2&R6V7W&V«í6ˆÊÊV7FVBgFW"6ñv‚÷ñ‚„¬˜‡¢¬ˆÜVFW#‡¢∆Fób6∆73“'6V7F˜"÷w&ñB#‡¢∆'WGFˆ‚6∆73“'6V7F˜"÷6&B6V7F˜"÷6&B÷7FófRFV÷Ú◊6V7F˜"÷6&B"ñC“'6V∆V7DÜ˜7óF¬"FF◊6V7F˜#“&Ü˜7óF¬"GóS“&'WGFˆ‚#‡¢«7‚6∆73“'6V7F˜"◊7FGW26V7F˜"◊7FGW2÷∆ófR#„∆ì„¬ˆì‚fñ∆&∆S¬˜7„‡¢«7‚6∆73“'6V7F˜"÷ñ6ˆ‚#‚G∑6V7F˜$ñ6ˆ‚Ç&Ü˜7óF¬"ó”¬˜7„‡¢«7‚6∆73“'6V7F˜"÷6˜í#„«7G&ˆÊs‰Ü˜7óF√¬˜7G&ˆÊs„«6÷∆√‰6∆ñÊñ6¬7W˜'Bv˜&∂f˜&6RG&ñÊñÊr¬6ˆ◊WFVÊ7íÊBFW'F÷VÁB&VFñÊW72„¬˜6÷∆√„¬˜7„‡¢«7‚6∆73“'6V7F˜"÷'&˜r"&ñ÷ÜñFFV„“'G'VR#Ó(i#¬˜7„‡¢¬ˆ'WGFˆ„‡¢∆'WGFˆ‚6∆73“'6V7F˜"÷6&B6V7F˜"÷6&B÷7FófRFV÷Ú◊6V7F˜"÷6&B"ñC“'6V∆V7DvVD6&R"FF◊6V7F˜#“&vVB÷6&R"GóS“&'WGFˆ‚#‡¢«7‚6∆73“'6V7F˜"◊7FGW26V7F˜"◊7FGW2÷∆ófR#„∆ì„¬ˆì‚fñ∆&∆S¬˜7„‡¢«7‚6∆73“'6V7F˜"÷ñ6ˆ‚#‚G∑6V7F˜$ñ6ˆ‚Ç&vVB÷6&R"ó”¬˜7„‡¢«7‚6∆73“'6V7F˜"÷6˜í#„«7G&ˆÊs‰vVB6&S¬˜7G&ˆÊs„«6÷∆√‰6&Rv˜&∂f˜&6RˆÊ&ˆ&FñÊr¬6&ñ∆óGíÊB6ˆ◊∆ñÊ6R„¬˜6÷∆√„¬˜7„‡¢«7‚6∆73“'6V7F˜"÷'&˜r"&ñ÷ÜñFFV„“'G'VR#Ó(i#¬˜7„‡¢¬ˆ'WGFˆ„‡¢∆'WGFˆ‚6∆73“'6V7F˜"÷6&B6V7F˜"÷6&B÷7FófRFV÷Ú◊6V7F˜"÷6&B"ñC“'6V∆V7DFó6&ñ∆óGí"FF◊6V7F˜#“&Fó6&ñ∆óGí"GóS“&'WGFˆ‚#‡¢«7‚6∆73“'6V7F˜"◊7FGW26V7F˜"◊7FGW2÷∆ófR#„∆ì„¬ˆì‚fñ∆&∆S¬˜7„‡¢«7‚6∆73“'6V7F˜"÷ñ6ˆ‚#‚G∑6V7F˜$ñ6ˆ‚Ç&Fó6&ñ∆óGí"ó”¬˜7„‡¢«7‚6∆73“'6V7F˜"÷6˜í#„«7G&ˆÊs‰Fó6&ñ∆óGí7W˜'C¬˜7G&ˆÊs„«6÷∆√Â7W˜'B◊v˜&∂W"∆V&ÊñÊr¬&7Fñ6¬6&ñ∆óGíÊB6ˆÁFñÁVñÊrFWfV∆˜÷VÁB„¬˜6÷∆√„¬˜7„‡¢«7‚6∆73“'6V7F˜"÷'&˜r"&ñ÷ÜñFFV„“'G'VR#Ó(i#¬˜7„‡¢¬ˆ'WGFˆ„‡¢¬ˆFóc‡¢«6∆73“'6V7F˜"÷fˆ˜FÊ˜FR#‰∆¬VÁfó&ˆÊ÷VÁG2W6R6◊∆R˜&vÊó6FñˆÁ2ÊBG&ñÊñÊr6ˆÁFVÁBñ‚wVñFVBFV÷Ú‚&ˆGV7Fñˆ‚6ˆÁFVÁB&V÷ñÁ2˜&vÊó6Fñˆ‚÷6ˆÁG&ˆ∆∆VBÊB7V&¶V7BFÚ&˜f¬„¬˜‡¢¬˜6V7Fñˆ„‡†¢«6V7Fñˆ‚6∆73“&VÁG'í◊fñWrÜ˜7óF¬÷VÁG'í◊fñWr"ñC“&Ü˜7óF≈fñWr"ÜñFFV„‡¢∆'WGFˆ‚6∆73“&VÁG'í÷&6≤Ü˜7óF¬÷&6≤"ñC“&&6µFı6V7F˜'2"GóS“&'WGFˆ‚#„«7‚&ñ÷ÜñFFV„“'G'VR#Ó(i¬˜7„‚∆¬6V7F˜'3¬ˆ'WGFˆ„‡¢∆Fób6∆73“&∆ˆvñ‚÷∆ñ˜WBÜ˜7óF¬÷∆ˆvñ‚÷∆ñ˜WB#‡¢«6V7Fñˆ‚6∆73“&∆ˆvñ‚÷ñÁG&Ú#‡¢∆Fób6∆73“&ÜW&Ú÷÷˜Fñˆ‚"&ñ÷ÜñFFV„“'G'VR#„«7‚6∆73“&÷˜Fñˆ‚÷˜&"÷˜Fñˆ‚÷˜&"÷ˆÊR#„¬˜7„„«7‚6∆73“&÷˜Fñˆ‚÷˜&"÷˜Fñˆ‚÷˜&"◊GvÚ#„¬˜7„„«7‚6∆73“&÷˜Fñˆ‚÷w&ñB#„¬˜7„„¬ˆFóc‡¢∆Fób6∆73“&∆ˆvñ‚÷∆&V¬ÜW&Ú◊&WfV¬ÜW&Ú◊&WfV¬”#„«7„„¬˜7„‚∆"ñC“&VÁfó&ˆÊ÷VÁD∆&V¬#‰Ü˜7óF¬v˜&∂f˜&6RVÊ&∆V÷VÁC¬ˆ#„¬ˆFóc‡¢∆É"6∆73“&ÜW&Ú◊FóF∆R"ñC“&VÁfó&ˆÊ÷VÁEFóF∆R"&ñ÷∆&V√“$'Vñ∆Bñ˜W"6ˆÊfñFVÊ6R&Vf˜&Rñ˜W"fó'7B6ÜñgB#„«7‚6∆73“&ÜW&Ú÷∆ñÊRÜW&Ú◊&WfV¬ÜW&Ú◊&WfV¬”"#‰'Vñ∆Bñ˜W"6ˆÊfñFVÊ6S¬˜7„„«7‚6∆73“&ÜW&Ú÷∆ñÊRÜW&Ú÷66VÁBÜW&Ú◊&WfV¬ÜW&Ú◊&WfV¬”2#‰&Vf˜&Rñ˜W"fó'7B6ÜñgC«7‚6∆73“'GóñÊr÷7W'6˜""&ñ÷ÜñFFV„“'G'VR#„¬˜7„„¬˜7„„¬ˆÉ#‡¢«6∆73“&ÜW&Ú◊&WfV¬ÜW&Ú◊&WfV¬”B"ñC“&VÁfó&ˆÊ÷VÁDFW67&óFñˆ‚#Â7G'V7GW&VB¬&ˆ∆R÷&6VB∆V&ÊñÊrFÜBGW&Á2&˜fVBÜ˜7óF¬&ˆ6VGW&W2ñÁFÚ6ˆÊfñFVÁBv˜&∑∆6R&7Fñ6R„¬˜‡¢∆Fób6∆73“&∆V&ÊñÊr÷f∆˜r"&ñ÷∆&V√“%6∂ñ∆≈v&B∆V&ÊñÊr&ˆ6W72#„∆Fóc„«7„„¬˜7„„«7G&ˆÊs‰∆V&„¬˜7G&ˆÊs„«6÷∆√Â&ˆ∆R÷&6VBFávó3¬˜6÷∆√„¬ˆFóc„∆í&ñ÷ÜñFFV„“'G'VR#„¬ˆì„∆Fóc„«7„„#¬˜7„„«7G&ˆÊsÂf∆ñFFS¬˜7G&ˆÊs„«6÷∆√‰∂Ê˜v∆VFvR6ÜV6∑3¬˜6÷∆√„¬ˆFóc„∆í&ñ÷ÜñFFV„“'G'VR#„¬ˆì„∆Fóc„«7„„3¬˜7„„«7G&ˆÊsÂ6ñv‚ˆfc¬˜7G&ˆÊs„«6÷∆√‰ˆ'6W'fVB6ˆ◊WFVÊ7ì¬˜6÷∆√„¬ˆFóc„¬ˆFóc‡¢«6∆73“&∆ˆvñ‚◊∆Ff˜&“÷Ê˜FRÜW&Ú◊&WfV¬ÜW&Ú◊&WfV¬”R"ñC“&VÁfó&ˆÊ÷VÁDÊ˜FR#‰FW6ñvÊVBf˜"Ü˜7óF¬FV◊2¬G&ñÊW'2ÊBg&ˆÁF∆ñÊR7Ffb„¬˜‡¢¬˜6V7Fñˆ„‡¢«6V7Fñˆ‚6∆73“&6&B∆ˆvñ‚÷6&BÜ˜7óF¬÷66W72÷6&B"ñC“'v˜&∑76T6&B"FF÷VÁG'í◊G&Á6óFñˆ„“&∆ˆvñ‚÷f∆ó#‡¢∆Fób6∆73“&Ü˜7óF¬÷6&B÷ÜVFñÊr#„«7‚6∆73“'6V7F˜"÷÷ñÊí÷ñ6ˆ‚"ñC“&VÁfó&ˆÊ÷VÁDñ6ˆ‚#‚G∑6V7F˜$ñ6ˆ‚Ç&Ü˜7óF¬"ó”¬˜7„„∆Fóc„∆Fób6∆73“&66W72÷∆&V¬#„«7„„¬˜7„‚∆"ñC“&VÁfó&ˆÊ÷VÁD66W74∆&V¬#‰Ñı5ïD¬TÂdï$Ù‰‘TÂC¬ˆ#„¬ˆFóc„∆É#‰VÁFW"ñ˜W"v˜&∑76S¬ˆÉ#„¬ˆFóc„¬ˆFóc‡¢«6∆73“&∆ˆvñ‚÷6&B÷ñÁG&Ú#Â6ñv‚ñ‚6V7W&V«í˜"Wá∆˜&R6∂ñ∆≈v&BvóFÇ6◊∆RFF„¬˜‡¢G∂÷W76vRÚ«6∆73“&WFÇ◊7FGW2"&ˆ∆S“'7FGW2#‚G∂W66TáF÷¬Ü÷W76vRó”¬˜Ê¢"'–¢∆Fób6∆73“&VÁG'í÷˜FñˆÁ2"ñC“&VÁG'î˜FñˆÁ2#„∆'WGFˆ‚6∆73“&VÁG'í÷˜Fñˆ‚"ñC“'6Ü˜u6ñv‰ñ‚#„«7‚6∆73“&˜Fñˆ‚÷ñ6ˆ‚"&ñ÷ÜñFFV„“'G'VR#Ó(i#¬˜7„„«7G&ˆÊsÂ6ñv‚ñ‚FÚ6∂ñ∆≈v&C¬˜7G&ˆÊs„«6÷∆√ÂW6Rñ˜W"÷ÊvV÷VÁB÷ó77VVB66˜VÁB„¬˜6÷∆√„¬ˆ'WGFˆ„„∆'WGFˆ‚6∆73“&VÁG'í÷˜Fñˆ‚"ñC“'6Ü˜tFV÷Ú#„«7‚6∆73“&˜Fñˆ‚÷ñ6ˆ‚"&ñ÷ÜñFFV„“'G'VR#Ó)xs¬˜7„„«7G&ˆÊs‰Wá∆˜&RFV÷Ú÷ˆFS¬˜7G&ˆÊs„«6÷∆√Â&WfñWrv˜&∂f∆˜w2W6ñÊr6◊∆R'&˜w6W"FF„¬˜6÷∆√„¬ˆ'WGFˆ„„¬ˆFóc‡¢∆f˜&“ñC“'6ñv‰ñ‰f˜&“"6∆73“&66W72÷f˜&“"ÜñFFV‚Ê˜f∆ñFFS„∆É3Â6ñv‚ñ‚FÚ6∂ñ∆≈v&C¬ˆÉ3„∆∆&V√„«7„‰V÷ñ√¬˜7„„∆ñÁWBñC“&V÷ñƒñÁWB"GóS“&V÷ñ¬"WFˆ6ˆ◊∆WFS“'W6W&Ê÷R"ñÁWF÷ˆFS“&V÷ñ¬"&WVó&VBÛ„¬ˆ∆&V√„∆∆&V√„«7„Â77v˜&C¬˜7„„∆ñÁWBñC“'77v˜&DñÁWB"GóS“'77v˜&B"WFˆ6ˆ◊∆WFS“&7W'&VÁB◊77v˜&B"&WVó&VBÛ„¬ˆ∆&V√„«ñC“&WFÑW'&˜""6∆73“&WFÇ◊7FGW2"&ˆ∆S“&∆W'B#„¬˜„∆'WGFˆ‚6∆73“&'F‚'F‚◊vñFR∆ˆvñ‚◊7V&÷óB"GóS“'7V&÷óB#Â6ñv‚ñ‚«7‚&ñ÷ÜñFFV„“'G'VR#Ó(i#¬˜7„„¬ˆ'WGFˆ„„∆'WGFˆ‚6∆73“&∆ñÊ≤÷'WGFˆ‚"GóS“&'WGFˆ‚"ñC“&f˜&v˜E77v˜&B#‰f˜&v˜B77v˜&CÛ¬ˆ'WGFˆ„„∆'WGFˆ‚6∆73“&∆ñÊ≤÷'WGFˆ‚&6¥6Üˆñ6W2"GóS“&'WGFˆ‚#‰&6≤FÚ66W72˜FñˆÁ3¬ˆ'WGFˆ„„¬ˆf˜&”‡¢∆f˜&“ñC“&FV÷Ùf˜&“"6∆73“&66W72÷f˜&“"ÜñFFV„„∆É2ñC“&FV÷Ùf˜&’FóF∆R#‰Wá∆˜&RÜ˜7óF¬FV÷Û¬ˆÉ3„«6∆73“'6÷∆¬#‰Ê˜FÜñÊrñ‚FV÷Ú÷ˆFRó2w&óGFV‚FÚ7W&6R‚6◊∆RñÊf˜&÷Fñˆ‚7Fó2ˆÊ«íñ‚FÜó2'&˜w6W"„¬˜„∆∆&V√„«7„‰gV∆¬Ê÷S¬˜7„„∆ñÁWBñC“&Ê÷TñÁWB"GóS“'FWáB"WFˆ6ˆ◊∆WFS“&Ê÷R"∆6VÜˆ∆FW#“&RÊr‚∆WÇ6÷óFÇ"&WVó&VBÛ„¬ˆ∆&V√„∆∆&V√„«7„Âv˜&∑76R&ˆ∆S¬˜7„„«6V∆V7BñC“'&ˆ∆TñÁWB#„¬˜6V∆V7C„¬ˆ∆&V√„∆'WGFˆ‚6∆73“&'F‚'F‚◊vñFR∆ˆvñ‚◊7V&÷óB"GóS“'7V&÷óB#‰6ˆÁFñÁVRñ‚FV÷Ú÷ˆFR«7‚&ñ÷ÜñFFV„“'G'VR#Ó(i#¬˜7„„¬ˆ'WGFˆ„„∆'WGFˆ‚6∆73“&∆ñÊ≤÷'WGFˆ‚&6¥6Üˆñ6W2"GóS“&'WGFˆ‚#‰&6≤FÚ66W72˜FñˆÁ3¬ˆ'WGFˆ„„¬ˆf˜&”‡¢∆f˜&“ñC“'&W6WDf˜&“"6∆73“&66W72÷f˜&“"ÜñFFV„„∆É3Â&W6WB77v˜&C¬ˆÉ3„«6∆73“'6÷∆¬#‰VÁFW"ñ˜W"V÷ñ¬‚f˜"&óf7í¬FÜR6ˆÊfó&÷Fñˆ‚ó2«vó2FÜR6÷R„¬˜„∆∆&V√„«7„‰V÷ñ√¬˜7„„∆ñÁWBñC“'&W6WDV÷ñ¬"GóS“&V÷ñ¬"WFˆ6ˆ◊∆WFS“'W6W&Ê÷R"&WVó&VBÛ„¬ˆ∆&V√„∆'WGFˆ‚6∆73“&'F‚'F‚◊vñFR"GóS“'7V&÷óB#Â6VÊB&V6˜fW'í∆ñÊ≥¬ˆ'WGFˆ„„∆'WGFˆ‚6∆73“&∆ñÊ≤÷'WGFˆ‚&6¥6Üˆñ6W2"GóS“&'WGFˆ‚#‰&6≥¬ˆ'WGFˆ„„¬ˆf˜&”‡¢¬˜6V7Fñˆ„‡¢¬ˆFóc‡¢¬˜6V7Fñˆ„‡¢¬ˆFócÊì∞†¢6ˆÁ7BfñWw2“∞¢vV∆6ˆ÷S¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ'vV∆6ˆ÷UfñWr"í¿¢6V7F˜'3¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ'6V7F˜%fñWr"í¿¢Ü˜7óF√¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&Ü˜7óF≈fñWr"ê¢”∞¢6ˆÁ7B6Ü˜ufñWr“ÜÊ÷Rí”‚∞¢ˆ&¶V7BÊVÁG&ñW2áfñWw2íÊf˜$V6ÇÇÖ∂∂Wí¬fñWu“í”‚≤fñWrÊÜñFFV‚“∂Wí”“Ê÷S≤“ì∞¢vñÊF˜rÁ67&ˆ∆≈FÚá≤F˜¢¬&VÜfñ˜#¢'6÷ˆ˜FÇ"“ì∞¢Fˆ7V÷VÁBÁVW'ï6V∆V7F˜"Ü2G∂Ê÷R””“'vV∆6ˆ÷R"Ú&vWE7F'FVD'F‚"¢Ê÷R””“'6V7F˜'2"Ú'6V∆V7DÜ˜7óF¬"¢'6Ü˜u6ñv‰ñ‚'÷ìÚÊfˆ7W2á≤&WfVÁE67&ˆ∆√¢G'VR“ì∞¢”∞†¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&vWE7F'FVD'F‚"íÊFDWfVÁD∆ó7FVÊW"Ç&6∆ñ6≤"¬Çí”‚6Ü˜ufñWrÇ'6V7F˜'2"íì∞¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&&6µFıvV∆6ˆ÷R"íÊFDWfVÁD∆ó7FVÊW"Ç&6∆ñ6≤"¬Çí”‚6Ü˜ufñWrÇ'vV∆6ˆ÷R"íì∞¢∆WB6V∆V7FVE6V7F˜"“FV÷ı6V7F˜"á7FFRÊFV÷ı6V7F˜"ì∞¢6ˆÁ7B6ˆÊfñwW&TVÁfó&ˆÊ÷VÁB“6V7F˜$ñB”‚∞¢6V∆V7FVE6V7F˜"“FV÷ı6V7F˜"á6V7F˜$ñBì∞¢7FFRÊFV÷ı6V7F˜"“6V∆V7FVE6V7F˜"ÊñC∞¢6fU7FFRÇì∞¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&VÁfó&ˆÊ÷VÁD∆&V¬"íÁFWáD6ˆÁFVÁB“G∑6V∆V7FVE6V7F˜"ÊÊ÷W“v˜&∂f˜&6RVÊ&∆V÷VÁF∞¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&VÁfó&ˆÊ÷VÁDFW67&óFñˆ‚"íÁFWáD6ˆÁFVÁB“6V∆V7FVE6V7F˜"ÊFW67&óFñˆ„∞¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&VÁfó&ˆÊ÷VÁDÊ˜FR"íÁFWáD6ˆÁFVÁB“6◊∆R˜&vÊó6Fñˆ„¢G∑6V∆V7FVE6V7F˜"Ê˜&vÊó¶FñˆÁ“+rG∑6V∆V7FVE6V7F˜"Êf6ñ∆óGó÷∞¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&VÁfó&ˆÊ÷VÁDñ6ˆ‚"íÊñÊÊW$ÖD‘¬“6V7F˜$ñ6ˆ‚á6V∆V7FVE6V7F˜"ÊñBì∞¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&VÁfó&ˆÊ÷VÁD66W74∆&V¬"íÁFWáD6ˆÁFVÁB“G∑6V∆V7FVE6V7F˜"ÊÊ÷RÁFıWW$66RÇó“TÂdï$Ù‰‘TÂF∞¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&FV÷Ùf˜&’FóF∆R"íÁFWáD6ˆÁFVÁB“Wá∆˜&RG∑6V∆V7FVE6V7F˜"ÊÊ÷W“FV÷ˆ∞¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ'&ˆ∆TñÁWB"íÊñÊÊW$ÖD‘¬“6V∆V7FVE6V7F˜"Á&ˆ∆W2Ê÷á&ˆ∆R”‚∆˜Fñˆ‚f«VS“"G∑&ˆ∆RÁf«VW“#‚G∂W66TáF÷¬á&ˆ∆RÊ∆&V¬ó”¬ˆ˜Fñˆ„ÊíÊ¶ˆñ‚Ç""ì∞¢6Ü˜ufñWrÇ&Ü˜7óF¬"ì∞¢”∞¢Fˆ7V÷VÁBÁVW'ï6V∆V7F˜$∆¬Ç"ÊFV÷Ú◊6V7F˜"÷6&B"íÊf˜$V6ÇÜ'WGFˆ‚”‚'WGFˆ‚ÊFDWfVÁD∆ó7FVÊW"Ç&6∆ñ6≤"¬Çí”‚6ˆÊfñwW&TVÁfó&ˆÊ÷VÁBÜ'WGFˆ‚ÊFF6WBÁ6V7F˜"ííì∞¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&&6µFı6V7F˜'2"íÊFDWfVÁD∆ó7FVÊW"Ç&6∆ñ6≤"¬Çí”‚6Ü˜ufñWrÇ'6V7F˜'2"íì∞†¢6ˆÁ7B6Üˆñ6W2“Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&VÁG'î˜FñˆÁ2"ì∞¢6ˆÁ7Bf˜&◊2“≤'6ñv‰ñ‰f˜&“"¬&FV÷Ùf˜&“"¬'&W6WDf˜&“%“Ê÷ÜñB”‚Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÜñBíì∞¢6ˆÁ7B6Ü˜r“ñB”‚≤6Üˆñ6W2ÊÜñFFV‚“G'VS≤f˜&◊2Êf˜$V6ÇÜf˜&“”‚≤f˜&“ÊÜñFFV‚“f˜&“ÊñB”“ñC≤“ì≤”∞¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ'6Ü˜u6ñv‰ñ‚"íÊFDWfVÁD∆ó7FVÊW"Ç&6∆ñ6≤"¬Çí”‚6Ü˜rÇ'6ñv‰ñ‰f˜&“"íì∞¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ'6Ü˜tFV÷Ú"íÊFDWfVÁD∆ó7FVÊW"Ç&6∆ñ6≤"¬Çí”‚6Ü˜rÇ&FV÷Ùf˜&“"íì∞¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&f˜&v˜E77v˜&B"íÊFDWfVÁD∆ó7FVÊW"Ç&6∆ñ6≤"¬Çí”‚6Ü˜rÇ'&W6WDf˜&“"íì∞¢Fˆ7V÷VÁBÁVW'ï6V∆V7F˜$∆¬Ç"Ê&6¥6Üˆñ6W2"íÊf˜$V6ÇÜ'WGFˆ‚”‚'WGFˆ‚ÊFDWfVÁD∆ó7FVÊW"Ç&6∆ñ6≤"¬Çí”‚≤f˜&◊2Êf˜$V6ÇÜf˜&“”‚≤f˜&“ÊÜñFFV‚“G'VS≤“ì≤6Üˆñ6W2ÊÜñFFV‚“f«6S≤“íì∞¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&FV÷Ùf˜&“"íÊFDWfVÁD∆ó7FVÊW"Ç'7V&÷óB"¬7ñÊ2WfVÁB”‚≤WfVÁBÁ&WfVÁDFVfV«BÇì≤6ˆÁ7BÊ÷R“Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&Ê÷TñÁWB"íÁf«VRÁG&ñ“Çì≤ñbÇÊ÷Rí&WGW&„≤vóBWFÖ6W'fñ6SÚÁ6ñv‰˜WBÇì≤WFÜVÁFñ6FVD6ˆÁFWáB“ÁV∆√≤7FFRÊ7W'&VÁEW6W"“≤Ê÷R¬&ˆ∆S¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ'&ˆ∆TñÁWB"íÁf«VR¬÷ˆFS¢&FV÷Ú"¬6V7F˜#¢6V∆V7FVE6V7F˜"ÊñB”≤7FFRÊFV÷ı6V7F˜"“6V∆V7FVE6V7F˜"ÊñC≤7FFRÁ6V∆V7FVDFW'F÷VÁB“6V∆V7FVE6V7F˜"ÊFW'F÷VÁG5≥“ÊñC≤7FFRÊ7FófUv˜&∑76UfñWr“&Üˆ÷R#≤ñbá7FFRÊ7W'&VÁEW6W"Á&ˆ∆R””“'6"í7FFRÊ∆V&ÊW$Ê÷R“Ê÷S≤FV÷Ù¶˜W&ÊWíá6V∆V7FVE6V7F˜"ÊñBì≤6fU7FFRÇì≤&VÊFW$FV÷ıv˜&∑76RÇì≤“ì∞¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ'6ñv‰ñ‰f˜&“"íÊFDWfVÁD∆ó7FVÊW"Ç'7V&÷óB"¬7ñÊ2WfVÁB”‚≤WfVÁBÁ&WfVÁDFVfV«BÇì≤6ˆÁ7Bf˜&““WfVÁBÊ7W'&VÁEF&vWB¬'WGFˆ‚“f˜&“ÁVW'ï6V∆V7F˜"Ç&'WGFˆÂ∑GóS◊7V&÷óE“"í¬W'&˜"“Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&WFÑW'&˜""ì≤'WGFˆ‚ÊFó6&∆VB“G'VS≤W'&˜"ÁFWáD6ˆÁFVÁB“%6ñvÊñÊrñ‚6V7W&V«û(
+b#≤G'í≤7FFRÊ7W'&VÁEW6W"“ÁV∆√≤7FFRÁ6V∆V7FVDFW'F÷VÁB“ÁV∆√≤6fU7FFRÇì≤WFÜVÁFñ6FVD6ˆÁFWáB“vóBWFÖ6W'fñ6RÁ6ñv‰ñ‚ÜFˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&V÷ñƒñÁWB"íÁf«VR¬Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ'77v˜&DñÁWB"íÁf«VRì≤7FFRÊ7FófT˜&vÊó¶Fñˆ‰ñB“WFÜVÁFñ6FVD6ˆÁFWáBÊ˜&vÊó¶Fñˆ„ÚÊñB«¬ÁV∆√≤6fU7FFRÇì≤&VÊFW$WFÜVÁFñ6FVEv˜&∑76RÇì≤“6F6ÇÜRí≤W'&˜"ÁFWáD6ˆÁFVÁB“WFÑ÷W76vRÜRÊ÷W76vRì≤ñbÖ≤$‘ï54î‰uı$ÙdîƒR"¬$‘ï54î‰uÙ‘T‘$U%4Ñï%“ÊñÊ6«VFW2ÜRÊ÷W76vRíívóBWFÖ6W'fñ6SÚÁ6ñv‰˜WBÇì≤“fñÊ∆«í≤'WGFˆ‚ÊFó6&∆VB“f«6S≤““ì∞¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ'&W6WDf˜&“"íÊFDWfVÁD∆ó7FVÊW"Ç'7V&÷óB"¬7ñÊ2WfVÁB”‚≤WfVÁBÁ&WfVÁDFVfV«BÇì≤6ˆÁ7B'WGFˆ‚“WfVÁBÊ7W'&VÁEF&vWBÁVW'ï6V∆V7F˜"Ç&'WGFˆÂ∑GóS◊7V&÷óE“"ì≤'WGFˆ‚ÊFó6&∆VB“G'VS≤6ˆÁ7B&V6˜fW'ïW&¬“ÊWrU$¬Ü∆ˆ6Fñˆ‚Êá&Vbì≤&V6˜fW'ïW&¬Á6V&6Ç“"#≤&V6˜fW'ïW&¬ÊÜ6Ç“"#≤&V6˜fW'ïW&¬Á6V&6Ö&◊2Á6WBÇ'&V6˜fW'í"¬#"ì≤G'í≤vóBWFÖ6W'fñ6RÁ&W6WE77v˜&BÜFˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ'&W6WDV÷ñ¬"íÁf«VR¬&V6˜fW'ïW&¬ÁFı7G&ñÊrÇíì≤“6F6Ç∑“&VÊFW$∆ˆvñ‚Ç$ñb‚V∆ñvñ&∆R66˜VÁBWÜó7G2¬77v˜&B&V6˜fW'í∆ñÊ≤Ü2&VV‚6VÁB‚"ì≤“ì∞¢ñbÜ÷W76vRí6ˆÊfñwW&TVÁfó&ˆÊ÷VÁBá7FFRÊFV÷ı6V7F˜"«¬&Ü˜7óF¬"ì∞ß–†¶gVÊ7Fñˆ‚&WVW7FVEv˜&∑76UfñWrÇí∞¢6ˆÁ7B&WVW7FVB“ÊWrU$≈6V&6Ö&◊2Ü∆ˆ6Fñˆ‚Á6V&6ÇíÊvWBÇ'fñWr"ì∞¢&WGW&‚≤&Üˆ÷R"¬'G&ñÊñÊr"¬'7Ffb"¬'&W˜'G2"¬'Fávó2"¬'V˜∆R"¬&6ˆ◊WFVÊ7í"¬&F÷ñ‚"¬&∆VG2%“ÊñÊ6«VFW2á&WVW7FVBê¢Ú&WVW7FVB¢ÁV∆√∞ß–†¶gVÊ7Fñˆ‚«ï&WVW7FVEv˜&∑76UfñWrÜ6ˆÁFWáBí∞¢6ˆÁ7B&WVW7FVB“&WVW7FVEv˜&∑76UfñWrÇì∞¢6ˆÁ7B∆∆˜vVB“WFÜVÁFñ6FVDÊfñvFñˆ‚Ü6ˆÁFWáBÊ÷V÷&W'6ÜóÚÁ&ˆ∆RíÊ÷ÇÖ∂ñE“í”‚ñBì∞¢ñbá&WVW7FVBbb∆∆˜vVBÊñÊ6«VFW2á&WVW7FVBíí7FFRÊ7FófUv˜&∑76UfñWr“&WVW7FVC∞ß–†¶7ñÊ2gVÊ7Fñˆ‚66WE&W6ˆ«fVDVÁG'íá&W7V«Bí∞¢ñbá&W7V«CÚÊVÁG'ï7FFR””“'v˜&∑76R÷6Üˆñ6R"í&WGW&‚&VÊFW%v˜&∑76T6Üˆ˜6W"á&W7V«Bì∞¢ñbá&W7V«CÚÊVÁG'ï7FFR””“&ñÁfóFFñˆ‚"í&WGW&‚&VÊFW$ñÁfóFFñˆÂ6WGWá&W7V«Bì∞¢WFÜVÁFñ6FVD6ˆÁFWáB“&W7V«C∞¢7FFRÊ7W'&VÁEW6W"“ÁV∆√∞¢7FFRÊ7FófT˜&vÊó¶Fñˆ‰ñB“&W7V«BÊ˜&vÊó¶Fñˆ„ÚÊñB«¬ÁV∆√∞¢7FFRÁ6V∆V7FVDFW'F÷VÁB“ÁV∆√∞¢«ï&WVW7FVEv˜&∑76UfñWrá&W7V«Bì∞¢6fU7FFRÇì∞¢6ˆÊfñwW&TñF∆U6W76ñˆ‚á&W7V«BÊWFÖ6WGFñÊw3ÚÊñF∆U˜Fñ÷V˜WEˆ÷ñÁWFW2«¬3ì∞¢&VÊFW$WFÜVÁFñ6FVEv˜&∑76RÇì∞ß–†¶gVÊ7Fñˆ‚&VÊFW$∆ˆvñ‚Ü÷W76vR“""¬6Ü˜u&V6˜fW'í“f«6Rí∞¢&VÊFW%6ÜV∆¬Ü ¢∆Fób6∆73“&WFÇ÷VÁG'í◊c"#‡¢«6V7Fñˆ‚6∆73“&WFÇ÷VÁG'í◊7F˜'í"&ñ÷∆&V∆∆VF'ì“&WFÑVÁG'ïFóF∆R#‡¢∆Fób6∆73“&WFÇ÷VÁG'í÷÷&≤#„«7frfñWt&˜É“#CÇSB"&ñ÷ÜñFFV„“'G'VR#„«FÇ6∆73“&∆ˆvÚ◊6ÜñV∆B"C“$”#B"CBócf32”Ç#"”##Ñ3"CrB3ÇB#Ucî√#B%¢"Û„«FÇ6∆73“&∆ˆvÚ◊7ñ÷&ˆ¬"C“&”B„R#r„Rb„"b„"2”B"Û„¬˜7fs„¬ˆFóc‡¢«7‚6∆73“&WñV'&˜r#Â4T5U$Rtı$¥dı$4R44U53¬˜7„‡¢∆É"ñC“&WFÑVÁG'ïFóF∆R#Â6ñv‚ñ‚FÚñ˜W"6∂ñ∆≈v&Bv˜&∑76S¬ˆÉ#‡¢«Âñ˜W"˜&vÊó6Fñˆ‚¬6V7F˜"¬f6ñ∆óGí¬FW'F÷VÁBÊB&ˆ∆R&R&W6ˆ«fVBg&ˆ“WFÜ˜&ó6VB÷V÷&W'6Üó&V6˜&G2gFW"6ñv‚÷ñ‚„¬˜‡¢∆ˆ¬6∆73“&WFÇ÷VÁG'í÷77W&Ê6R#„∆∆ì„«7„„¬˜7„‰VÁFW"ñ˜W"66˜VÁBFWFñ«3¬ˆ∆ì„∆∆ì„«7„„#¬˜7„Â6∂ñ∆≈v&BfW&ñfñW27FófR66W73¬ˆ∆ì„∆∆ì„«7„„3¬˜7„Âñ˜W"6˜'&V7BF6Ü&ˆ&B˜VÁ3¬ˆ∆ì„¬ˆˆ√‡¢∆6∆73“&WFÇ÷FV÷Ú÷∆ñÊ≤"á&Vc“"ˆFV÷ÚÚ#„«7G&ˆÊs‰∆ˆˆ∂ñÊrf˜"wVñFVBFV÷ÛÛ¬˜7G&ˆÊs„«7„‰Wá∆˜&RÜ˜7óF¬¬vVB6&R˜"Fó6&ñ∆óGí7W˜'BvóFÇó6ˆ∆FVB6◊∆RFF(i#¬˜7„„¬ˆ‡¢¬˜6V7Fñˆ„‡¢«6V7Fñˆ‚6∆73“&6&BFó&V7B÷∆ˆvñ‚÷6&B#‡¢∆FóbñC“&∆ˆvñÂÊV¬"G∑6Ü˜u&V6˜fW'íÚ&ÜñFFV‚"¢"'”‡¢«7‚6∆73“&WñV'&˜r#‰44ıTÂB4ît‚î„¬˜7„„∆É#ÂvV∆6ˆ÷R&6≥¬ˆÉ#‡¢«6∆73“'6÷∆¬#ÂW6RFÜR66˜VÁBó77VVB'íñ˜W"˜&vÊó6Fñˆ‚„¬˜‡¢G∂÷W76vRÚ«6∆73“&WFÇ◊7FGW2WFÇ◊7FGW2◊7V66W72"&ˆ∆S“'7FGW2#‚G∂W66TáF÷¬Ü÷W76vRó”¬˜Ê¢"'–¢∆f˜&“ñC“'6ñv‰ñ‰f˜&“"6∆73“&66W72÷f˜&“"Ê˜f∆ñFFS‡¢∆∆&V√„«7„‰V÷ñ√¬˜7„„∆ñÁWBñC“&V÷ñƒñÁWB"GóS“&V÷ñ¬"WFˆ6ˆ◊∆WFS“'W6W&Ê÷R"ñÁWF÷ˆFS“&V÷ñ¬"&WVó&VBWFˆfˆ7W3„¬ˆ∆&V√‡¢∆∆&V√„«7„Â77v˜&C¬˜7„„«7‚6∆73“'77v˜&B÷6ˆÁG&ˆ¬#„∆ñÁWBñC“'77v˜&DñÁWB"GóS“'77v˜&B"WFˆ6ˆ◊∆WFS“&7W'&VÁB◊77v˜&B"&WVó&VC„∆'WGFˆ‚6∆73“&∆ñÊ≤÷'WGFˆ‚77v˜&B◊Fˆvv∆R"GóS“&'WGFˆ‚"FF÷f˜#“'77v˜&DñÁWB#Â6Ü˜s¬ˆ'WGFˆ„„¬˜7„„¬ˆ∆&V√‡¢«ñC“&WFÑW'&˜""6∆73“&WFÇ◊7FGW2"&ˆ∆S“&∆W'B#„¬˜‡¢∆'WGFˆ‚6∆73“&'F‚'F‚◊vñFR∆ˆvñ‚◊7V&÷óB"GóS“'7V&÷óB#Â6ñv‚ñ‚«7‚&ñ÷ÜñFFV„“'G'VR#Ó(i#¬˜7„„¬ˆ'WGFˆ„‡¢∆'WGFˆ‚6∆73“&∆ñÊ≤÷'WGFˆ‚"GóS“&'WGFˆ‚"ñC“&f˜&v˜E77v˜&B#‰f˜&v˜B77v˜&CÛ¬ˆ'WGFˆ„‡¢¬ˆf˜&”‡¢¬ˆFóc‡¢∆FóbñC“'&V6˜fW'ïÊV¬"G∑6Ü˜u&V6˜fW'íÚ""¢&ÜñFFV‚'”‡¢«7‚6∆73“&WñV'&˜r#Â55tı$B$T4ıdU%ì¬˜7„„∆É#Â&W6WBñ˜W"77v˜&C¬ˆÉ#‡¢«6∆73“'6÷∆¬#‰VÁFW"ñ˜W"V÷ñ¬FG&W72‚FÜR6ˆÊfó&÷Fñˆ‚ó2FV∆ñ&W&FV«íFÜR6÷Rf˜"WfW'í&WVW7B„¬˜‡¢∆f˜&“ñC“'&W6WDf˜&“"6∆73“&66W72÷f˜&“#‡¢∆∆&V√„«7„‰V÷ñ√¬˜7„„∆ñÁWBñC“'&W6WDV÷ñ¬"GóS“&V÷ñ¬"WFˆ6ˆ◊∆WFS“'W6W&Ê÷R"&WVó&VC„¬ˆ∆&V√‡¢«ñC“'&W6WE7FGW2"6∆73“&WFÇ◊7FGW2"&ˆ∆S“'7FGW2#„¬˜‡¢∆'WGFˆ‚6∆73“&'F‚'F‚◊vñFR"GóS“'7V&÷óB#Â6VÊB&V6˜fW'í∆ñÊ≥¬ˆ'WGFˆ„‡¢∆'WGFˆ‚6∆73“&∆ñÊ≤÷'WGFˆ‚"ñC“&&6µFı6ñv‰ñ‚"GóS“&'WGFˆ‚#‰&6≤FÚ6ñv‚ñ„¬ˆ'WGFˆ„‡¢¬ˆf˜&”‡¢¬ˆFóc‡¢«6∆73“&WFÇ◊6V7W&óGí÷Ê˜FR#Â&˜FV7FVB'í7W&6RWFÇ&FR∆ñ÷óG2ÊB˜&vÊó6Fñˆ‚◊66˜VBFF&6RW&÷ó76ñˆÁ2„¬˜‡¢¬˜6V7Fñˆ„‡¢¬ˆFócÊì∞†¢Fˆ7V÷VÁBÁVW'ï6V∆V7F˜$∆¬Ç"Á77v˜&B◊Fˆvv∆R"íÊf˜$V6ÇÜ'WGFˆ‚”‚'WGFˆ‚ÊFDWfVÁD∆ó7FVÊW"Ç&6∆ñ6≤"¬Çí”‚∞¢6ˆÁ7BñÁWB“Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÜ'WGFˆ‚ÊFF6WBÊf˜"í¬6Ü˜vñÊr“ñÁWBÁGóR””“'FWáB#∞¢ñÁWBÁGóR“6Ü˜vñÊrÚ'77v˜&B"¢'FWáB#∞¢'WGFˆ‚ÁFWáD6ˆÁFVÁB“6Ü˜vñÊrÚ%6Ü˜r"¢$ÜñFR#∞¢“íì∞¢6ˆÁ7B∆ˆvñÂÊV¬“Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&∆ˆvñÂÊV¬"í¬&V6˜fW'ïÊV¬“Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ'&V6˜fW'ïÊV¬"ì∞¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&f˜&v˜E77v˜&B"ìÚÊFDWfVÁD∆ó7FVÊW"Ç&6∆ñ6≤"¬Çí”‚∞¢∆ˆvñÂÊV¬ÊÜñFFV‚“G'VS≤&V6˜fW'ïÊV¬ÊÜñFFV‚“f«6S≤Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ'&W6WDV÷ñ¬"ìÚÊfˆ7W2Çì∞¢“ì∞¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&&6µFı6ñv‰ñ‚"ìÚÊFDWfVÁD∆ó7FVÊW"Ç&6∆ñ6≤"¬Çí”‚∞¢&V6˜fW'ïÊV¬ÊÜñFFV‚“G'VS≤∆ˆvñÂÊV¬ÊÜñFFV‚“f«6S≤Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&V÷ñƒñÁWB"ìÚÊfˆ7W2Çì∞¢“ì∞†¢∆WBfñ∆VDGFV◊G2“∞¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ'6ñv‰ñ‰f˜&“"ìÚÊFDWfVÁD∆ó7FVÊW"Ç'7V&÷óB"¬7ñÊ2WfVÁB”‚∞¢WfVÁBÁ&WfVÁDFVfV«BÇì∞¢6ˆÁ7Bf˜&““WfVÁBÊ7W'&VÁEF&vWB¬'WGFˆ‚“f˜&“ÁVW'ï6V∆V7F˜"Ç&'WGFˆÂ∑GóS◊7V&÷óE“"í¬W'&˜"“Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&WFÑW'&˜""ì∞¢'WGFˆ‚ÊFó6&∆VB“G'VS≤W'&˜"ÁFWáD6ˆÁFVÁB“%6ñvÊñÊrñ‚6V7W&V«û(
+b#∞¢G'í∞¢7FFRÊ7W'&VÁEW6W"“ÁV∆√≤7FFRÁ6V∆V7FVDFW'F÷VÁB“ÁV∆√≤6fU7FFRÇì∞¢6ˆÁ7B&W7V«B“vóBWFÖ6W'fñ6RÁ6ñv‰ñ‚ÜFˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&V÷ñƒñÁWB"íÁf«VRÁG&ñ“Çí¬Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ'77v˜&DñÁWB"íÁf«VRì∞¢fñ∆VDGFV◊G2“∞¢vóB66WE&W6ˆ«fVDVÁG'íá&W7V«Bì∞¢“6F6ÇÜ6VváBí∞¢ñbÖ≤$44ıTÂEı5U5T‰DTB"¬$44ıTÂEÙ$4ÑïdTB"¬$‘T‘$U%4ÑïÙUÖï$TB"¬$‘ï54î‰uÙ‘T‘$U%4Ñï"¬$îÂdïDDîÙÂÙUÖï$TB"¬$44U55ÙDT‰îTB%“ÊñÊ6«VFW2Ü6VváBÊ÷W76vRíí∞¢&WGW&‚&VÊFW$66W757FFRÜ6VváBÊ÷W76vRì∞¢–¢fñ∆VDGFV◊G2≥“∞¢W'&˜"ÁFWáD6ˆÁFVÁB“WFÑ÷W76vRÜ6VváBÊ÷W76vRì∞¢ñbÖ≤$‘ï54î‰uı$ÙdîƒR"¬$‘ï54î‰uÙ‘T‘$U%4Ñï%“ÊñÊ6«VFW2Ü6VváBÊ÷W76vRíívóBWFÖ6W'fñ6SÚÁ6ñv‰˜WBÇ&∆ˆ6¬"¬6VváBÊ÷W76vR”“$‘ï54î‰uı$ÙdîƒR"ì∞¢ñbÜfñ∆VDGFV◊G2„“2í∞¢W'&˜"ÁFWáD6ˆÁFVÁB“%FˆÚ÷ÁíVÁ7V66W76gV¬GFV◊G2‚vóB36V6ˆÊG2&Vf˜&RG'ññÊrvñ‚‚#∞¢6WEFñ÷V˜WBÇÇí”‚≤fñ∆VDGFV◊G2“≤'WGFˆ‚ÊFó6&∆VB“f«6S≤W'&˜"ÁFWáD6ˆÁFVÁB“"#≤“¬3ì∞¢&WGW&„∞¢–¢–¢'WGFˆ‚ÊFó6&∆VB“f«6S∞¢“ì∞†¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ'&W6WDf˜&“"ìÚÊFDWfVÁD∆ó7FVÊW"Ç'7V&÷óB"¬7ñÊ2WfVÁB”‚∞¢WfVÁBÁ&WfVÁDFVfV«BÇì∞¢6ˆÁ7B'WGFˆ‚“WfVÁBÊ7W'&VÁEF&vWBÁVW'ï6V∆V7F˜"Ç&'WGFˆÂ∑GóS◊7V&÷óE“"í¬7FGW2“Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ'&W6WE7FGW2"ì∞¢'WGFˆ‚ÊFó6&∆VB“G'VS≤7FGW2ÁFWáD6ˆÁFVÁB“%&WVW7FñÊr6V7W&R&V6˜fW'íV÷ñŒ(
+b#∞¢6ˆÁ7B&V6˜fW'ïW&¬“ÊWrU$¬Ç"ˆÚ"¬∆ˆ6Fñˆ‚Ê˜&ñvñ‚ì∞¢&V6˜fW'ïW&¬Á6V&6Ö&◊2Á6WBÇ'&V6˜fW'í"¬#"ì∞¢G'í≤vóBWFÖ6W'fñ6RÁ&W6WE77v˜&BÜFˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ'&W6WDV÷ñ¬"íÁf«VRÁG&ñ“Çí¬&V6˜fW'ïW&¬ÁFı7G&ñÊrÇíì≤“6F6Ç∑–¢7FGW2ÁFWáD6ˆÁFVÁB“$ñb‚V∆ñvñ&∆R66˜VÁBWÜó7G2¬77v˜&B&V6˜fW'í∆ñÊ≤Ü2&VV‚6VÁB‚#∞¢“ì∞ß–†¶gVÊ7Fñˆ‚&VÊFW$wVñFVDFV÷ÙVÁG'íÇí∞¢6ˆÁ7B6V7F˜'2“ˆ&¶V7BÁf«VW2Üv∆ˆ&≈FÜó2Â4¥îƒ≈t$EÙDT‘ıı4T5Dı%2«¬∑“ì∞¢&VÊFW%6ÜV∆¬Ü«6V7Fñˆ‚6∆73“&wVñFVB÷FV÷Ú÷VÁG'í#‡¢∆ÜVFW#„«7‚6∆73“&WñV'&˜r#‰uTîDTBDT‘Ú+r4’ƒRDD¬˜7„„∆É#‰6Üˆ˜6R6&RVÁfó&ˆÊ÷VÁC¬ˆÉ#„«‰FV÷Ú7FófóGí7Fó2ñ‚FÜó2'&˜w6W"ÊBÊWfW"w&óFW2FÚWFÜVÁFñ6FVB˜&vÊó6Fñˆ‚F&∆W2„¬˜„¬ˆÜVFW#‡¢∆Fób6∆73“&wVñFVB÷FV÷Ú◊6V7F˜"÷w&ñB#‚G∑6V7F˜'2Ê÷á6V7F˜"”‚∆'WGFˆ‚6∆73“&6&BwVñFVB÷FV÷Ú◊6V7F˜""FF÷FV÷Ú◊6V7F˜#“"G∂W66TáF÷¬á6V7F˜"ÊñBó“#„«7„‚G∂W66TáF÷¬á6V7F˜"ÊÊ÷Ró”¬˜7„„«7G&ˆÊs‚G∂W66TáF÷¬á6V7F˜"Ê˜&vÊó¶Fñˆ‚ó”¬˜7G&ˆÊs„«6÷∆√‚G∂W66TáF÷¬á6V7F˜"ÊFW67&óFñˆ‚ó”¬˜6÷∆√„∆#‰6Üˆ˜6RG∂W66TáF÷¬á6V7F˜"ÊÊ÷Ró“(i#¬ˆ#„¬ˆ'WGFˆ„ÊíÊ¶ˆñ‚Ç""ó”¬ˆFóc‡¢«6V7Fñˆ‚6∆73“&6&BwVñFVB÷FV÷Ú◊&ˆ∆R"ñC“&wVñFVDFV÷ı&ˆ∆R"ÜñFFV„„∆'WGFˆ‚6∆73“&∆ñÊ≤÷'WGFˆ‚"ñC“&&6µFÙFV÷ı6V7F˜'2"GóS“&'WGFˆ‚#Ó(i6ÜÊvR6V7F˜#¬ˆ'WGFˆ„„«7‚6∆73“&WñV'&˜r"ñC“&wVñFVDFV÷Ù∆&V¬#„¬˜7„„∆É3‰6Üˆ˜6R6◊∆R&ˆ∆S¬ˆÉ3„∆f˜&“ñC“&wVñFVDFV÷Ùf˜&“#„∆∆&V√„«7„Âñ˜W"Fó7∆íÊ÷S¬˜7„„∆ñÁWBñC“&Ê÷TñÁWB"GóS“'FWáB"WFˆ6ˆ◊∆WFS“&Ê÷R"f«VS“$FV÷ÚW6W""&WVó&VC„¬ˆ∆&V√„∆∆&V√„«7„‰FV÷Ú&ˆ∆S¬˜7„„«6V∆V7BñC“'&ˆ∆TñÁWB#„¬˜6V∆V7C„¬ˆ∆&V√„∆'WGFˆ‚6∆73“&'F‚'F‚◊vñFR"GóS“'7V&÷óB#‰˜V‚wVñFVBFV÷Û¬ˆ'WGFˆ„„¬ˆf˜&”„¬˜6V7Fñˆ„‡¢∆6∆73“&wVñFVB÷FV÷Ú÷WÜóB"á&Vc“"ˆÚ#‰WÜóBFV÷ÚÊB&WGW&‚FÚ6ñv‚ñ„¬ˆ‡¢¬˜6V7Fñˆ„Êì∞¢Fˆ7V÷VÁBÁFóF∆R“$wVñFVBFV÷Ú¬6∂ñ∆≈v&B#∞¢∆WB6V∆V7FVE6V7F˜"“ÁV∆√∞¢6ˆÁ7B6V7F˜$w&ñB“Fˆ7V÷VÁBÁVW'ï6V∆V7F˜"Ç"ÊwVñFVB÷FV÷Ú◊6V7F˜"÷w&ñB"í¬&ˆ∆UÊV¬“Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&wVñFVDFV÷ı&ˆ∆R"ì∞¢Fˆ7V÷VÁBÁVW'ï6V∆V7F˜$∆¬Ç%∂FF÷FV÷Ú◊6V7F˜%“"íÊf˜$V6ÇÜ'WGFˆ‚”‚'WGFˆ‚ÊFDWfVÁD∆ó7FVÊW"Ç&6∆ñ6≤"¬Çí”‚∞¢6V∆V7FVE6V7F˜"“FV÷ı6V7F˜"Ü'WGFˆ‚ÊFF6WBÊFV÷ı6V7F˜"ì∞¢7FFRÊFV÷ı6V7F˜"“6V∆V7FVE6V7F˜"ÊñC≤6fU7FFRÇì∞¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&wVñFVDFV÷Ù∆&V¬"íÁFWáD6ˆÁFVÁB“G∑6V∆V7FVE6V7F˜"ÊÊ÷W“+rG∑6V∆V7FVE6V7F˜"Ê˜&vÊó¶FñˆÁ÷∞¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ'&ˆ∆TñÁWB"íÊñÊÊW$ÖD‘¬“6V∆V7FVE6V7F˜"Á&ˆ∆W2Ê÷á&ˆ∆R”‚∆˜Fñˆ‚f«VS“"G∂W66TáF÷¬á&ˆ∆RÁf«VRó“#‚G∂W66TáF÷¬á&ˆ∆RÊ∆&V¬ó”¬ˆ˜Fñˆ„ÊíÊ¶ˆñ‚Ç""ì∞¢6V7F˜$w&ñBÊÜñFFV‚“G'VS≤&ˆ∆UÊV¬ÊÜñFFV‚“f«6S≤Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&Ê÷TñÁWB"íÊfˆ7W2Çì∞¢“íì∞¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&&6µFÙFV÷ı6V7F˜'2"ìÚÊFDWfVÁD∆ó7FVÊW"Ç&6∆ñ6≤"¬Çí”‚≤&ˆ∆UÊV¬ÊÜñFFV‚“G'VS≤6V7F˜$w&ñBÊÜñFFV‚“f«6S≤“ì∞¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&wVñFVDFV÷Ùf˜&“"ìÚÊFDWfVÁD∆ó7FVÊW"Ç'7V&÷óB"¬7ñÊ2WfVÁB”‚∞¢WfVÁBÁ&WfVÁDFVfV«BÇì≤ñbÇ6V∆V7FVE6V7F˜"í&WGW&„∞¢6ˆÁ7BÊ÷R“Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&Ê÷TñÁWB"íÁf«VRÁG&ñ“Çì≤ñbÇÊ÷Rí&WGW&„∞¢vóBWFÖ6W'fñ6SÚÁ6ñv‰˜WBÇ&∆ˆ6¬"¬f«6Rì≤WFÜVÁFñ6FVD6ˆÁFWáB“ÁV∆√∞¢7FFRÊ7W'&VÁEW6W"“≤Ê÷R¬&ˆ∆S¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ'&ˆ∆TñÁWB"íÁf«VR¬÷ˆFS¢&FV÷Ú"¬6V7F˜#¢6V∆V7FVE6V7F˜"ÊñB”∞¢7FFRÊFV÷ı6V7F˜"“6V∆V7FVE6V7F˜"ÊñC≤7FFRÁ6V∆V7FVDFW'F÷VÁB“6V∆V7FVE6V7F˜"ÊFW'F÷VÁG5≥“ÊñC≤7FFRÊ7FófUv˜&∑76UfñWr“&Üˆ÷R#∞¢FV÷Ù¶˜W&ÊWíá6V∆V7FVE6V7F˜"ÊñBì≤6fU7FFRÇì≤&VÊFW$FV÷ıv˜&∑76RÇì∞¢“ì∞ß–†¶gVÊ7Fñˆ‚&VÊFW%v˜&∑76T6Üˆ˜6W"ÜVÁG'íí∞¢&VÊFW%6ÜV∆¬Ü«6V7Fñˆ‚6∆73“'v˜&∑76R÷VÁG'í÷6&B6&B#„«7‚6∆73“&WñV'&˜r#‰UDÑı$ï4TBtı$µ54U3¬˜7„„∆É#‰6Üˆ˜6RvÜW&Rñ˜R&Rv˜&∂ñÊs¬ˆÉ#„«‚G∂W66TáF÷¬ÜVÁG'íÁ&ˆfñ∆RÊgV∆≈ˆÊ÷Ró“¬ñ˜W"66˜VÁBÜ2÷˜&RFÜ‚ˆÊR7FófR˜&vÊó6Fñˆ‚÷V÷&W'6Üó„¬˜„∆Fób6∆73“'v˜&∑76R÷6Üˆñ6R÷∆ó7B#‚G∂VÁG'íÊ÷V÷&W'6Üó2Ê÷Ü÷V÷&W'6Üó”‚∆'WGFˆ‚6∆73“'v˜&∑76R÷6Üˆñ6RVÁG'í◊v˜&∑76R÷6Üˆñ6R"FF÷VÁG'í÷˜&vÊó¶Fñˆ„“"G∂W66TáF÷¬Ü÷V÷&W'6ÜóÊ˜&vÊó¶FñˆÂˆñBó“#„«7„‚G∂W66TáF÷¬Ü÷V÷&W'6ÜóÊ˜&vÊó¶FñˆÁ3ÚÊ˜&vÊó¶FñˆÂ˜GóR«¬$˜&vÊó6Fñˆ‚"ó”¬˜7„„«7G&ˆÊs‚G∂W66TáF÷¬Ü÷V÷&W'6ÜóÊ˜&vÊó¶FñˆÁ3ÚÊÊ÷R«¬$˜&vÊó6Fñˆ‚v˜&∑76R"ó”¬˜7G&ˆÊs„«6÷∆√‚G∂W66TáF÷¬Ü÷V÷&W'6ÜóÁ&ˆ∆Ró”¬˜6÷∆√„¬ˆ'WGFˆ„ÊíÊ¶ˆñ‚Ç""ó”¬ˆFóc„∆'WGFˆ‚6∆73“&∆ñÊ≤÷'WGFˆ‚"ñC“&6Üˆ˜6W%6ñv‰˜WB#Â6ñv‚˜WC¬ˆ'WGFˆ„„¬˜6V7Fñˆ„Êì∞¢Fˆ7V÷VÁBÁFóF∆R“$6Üˆ˜6Rv˜&∑76R¬6∂ñ∆≈v&B#∞¢Fˆ7V÷VÁBÁVW'ï6V∆V7F˜$∆¬Ç%∂FF÷VÁG'í÷˜&vÊó¶FñˆÂ“"íÊf˜$V6ÇÜ'WGFˆ‚”‚'WGFˆ‚ÊFDWfVÁD∆ó7FVÊW"Ç&6∆ñ6≤"¬7ñÊ2Çí”‚∞¢'WGFˆ‚ÊFó6&∆VB“G'VS∞¢G'í≤vóB66WE&W6ˆ«fVDVÁG'íÜvóBWFÖ6W'fñ6RÁ7vóF6Ñ˜&vÊó¶Fñˆ‚Ü'WGFˆ‚ÊFF6WBÊVÁG'î˜&vÊó¶Fñˆ‚íì≤–¢6F6Ç≤&VÊFW$66W757FFRÇ$44U55ÙDT‰îTB"ì≤–¢“íì∞¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&6Üˆ˜6W%6ñv‰˜WB"ìÚÊFDWfVÁD∆ó7FVÊW"Ç&6∆ñ6≤"¬6ñv‰˜WD7W'&VÁEW6W"ì∞ß–†¶gVÊ7Fñˆ‚&VÊFW$ñÁfóFFñˆÂ6WGWÜVÁG'íí∞¢6ˆÁ7BñÁfóFFñˆ‚“VÁG'íÊñÁfóFFñˆ„∞¢6ˆÁ7B˜&vÊó¶Fñˆ‚“ñÁfóFFñˆ‚Ê˜&vÊó¶FñˆÁ3ÚÊÊ÷R«¬$ñÁfóFñÊr˜&vÊó6Fñˆ‚#∞¢6ˆÁ7Bf6ñ∆óGí“ñÁfóFFñˆ‚Êf6ñ∆óFñW3ÚÊÊ÷R«¬$˜&vÊó6Fñˆ‚◊vñFR#∞¢6ˆÁ7BFW'F÷VÁB“ñÁfóFFñˆ‚ÊFW'F÷VÁG3ÚÊÊ÷R«¬$Ê˜B76ñvÊVB#∞¢6ˆÁ7B77v˜&DfñV∆G2“ñÁfóFFñˆ‚ÊWÜó7FñÊuˆ66˜VÁBÚ""¢∆∆&V√„«7„‰7&VFR77v˜&C¬˜7„„«7‚6∆73“'77v˜&B÷6ˆÁG&ˆ¬#„∆ñÁWBñC“&ñÁfóFFñˆÂ77v˜&B"GóS“'77v˜&B"WFˆ6ˆ◊∆WFS“&ÊWr◊77v˜&B"÷ñÊ∆VÊwFÉ“#""&WVó&VC„∆'WGFˆ‚6∆73“&∆ñÊ≤÷'WGFˆ‚77v˜&B◊Fˆvv∆R"FF÷f˜#“&ñÁfóFFñˆÂ77v˜&B"GóS“&'WGFˆ‚#Â6Ü˜s¬ˆ'WGFˆ„„¬˜7„„¬ˆ∆&V√„∆∆&V√„«7„‰6ˆÊfó&“77v˜&C¬˜7„„∆ñÁWBñC“&ñÁfóFFñˆÂ77v˜&D6ˆÊfó&“"GóS“'77v˜&B"WFˆ6ˆ◊∆WFS“&ÊWr◊77v˜&B"÷ñÊ∆VÊwFÉ“#""&WVó&VC„¬ˆ∆&V√Ê∞¢&VÊFW%6ÜV∆¬Ü«6V7Fñˆ‚6∆73“&ñÁfóFFñˆ‚◊6WGW6&B#„«7‚6∆73“&WñV'&˜r#ÂdU$îdîTBîÂdïDDîÙ„¬˜7„„∆É#‚G∂ñÁfóFFñˆ‚ÊWÜó7FñÊuˆ66˜VÁBÚ$66WBñ˜W"6∂ñ∆≈v&Bv˜&∑76R"¢$7&VFRñ˜W"6∂ñ∆≈v&B66˜VÁB'”¬ˆÉ#„«Âñ˜W"66W72v276ñvÊVB'íG∂W66TáF÷¬Ü˜&vÊó¶Fñˆ‚ó“‚FÜR&ˆ∆RÊBv˜&∑∆6R66˜R6ÊÊ˜B&R6ÜÊvVBÜW&R„¬˜„∆F¬6∆73“&ñÁfóFFñˆ‚◊66˜R#„∆Fóc„∆GC‰˜&vÊó6Fñˆ„¬ˆGC„∆FC‚G∂W66TáF÷¬Ü˜&vÊó¶Fñˆ‚ó”¬ˆFC„¬ˆFóc„∆Fóc„∆GC‰f6ñ∆óGì¬ˆGC„∆FC‚G∂W66TáF÷¬Üf6ñ∆óGíó”¬ˆFC„¬ˆFóc„∆Fóc„∆GC‰FW'F÷VÁC¬ˆGC„∆FC‚G∂W66TáF÷¬ÜFW'F÷VÁBó”¬ˆFC„¬ˆFóc„∆Fóc„∆GCÂ&ˆ∆S¬ˆGC„∆FC‚G∂W66TáF÷¬ÜñÁfóFFñˆ‚ÊñÁFVÊFVE˜&ˆ∆Ró”¬ˆFC„¬ˆFóc„¬ˆF√„∆f˜&“ñC“&ñÁfóFFñˆÂ6WGWf˜&“#„∆∆&V√„«7„‰gV∆¬Ê÷S¬˜7„„∆ñÁWBñC“&ñÁfóFFñˆ‰gV∆ƒÊ÷R"f«VS“"G∂W66TáF÷¬ÜñÁfóFFñˆ‚ÊgV∆≈ˆÊ÷R«¬VÁG'íÁ&ˆfñ∆RÊgV∆≈ˆÊ÷Ró“"WFˆ6ˆ◊∆WFS“&Ê÷R"&WVó&VC„¬ˆ∆&V√‚G∑77v˜&DfñV∆G7”«ñC“&ñÁfóFFñˆ‰W'&˜""6∆73“&WFÇ◊7FGW2"&ˆ∆S“&∆W'B#„¬˜„∆'WGFˆ‚6∆73“&'F‚'F‚◊vñFR"GóS“'7V&÷óB#‚G∂ñÁfóFFñˆ‚ÊWÜó7FñÊuˆ66˜VÁBÚ$66WBñÁfóFFñˆ‚"¢$7&VFR66˜VÁBÊB6ˆÁFñÁVR'”¬ˆ'WGFˆ„„¬ˆf˜&”„¬˜6V7Fñˆ„Êì∞¢Fˆ7V÷VÁBÁFóF∆R“$6ˆ◊∆WFRñÁfóFFñˆ‚¬6∂ñ∆≈v&B#∞¢Fˆ7V÷VÁBÁVW'ï6V∆V7F˜$∆¬Ç"Á77v˜&B◊Fˆvv∆R"íÊf˜$V6ÇÜ'WGFˆ‚”‚'WGFˆ‚ÊFDWfVÁD∆ó7FVÊW"Ç&6∆ñ6≤"¬Çí”‚∞¢6ˆÁ7BñÁWB“Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÜ'WGFˆ‚ÊFF6WBÊf˜"í¬6Ü˜vñÊr“ñÁWBÁGóR””“'FWáB#∞¢ñÁWBÁGóR“6Ü˜vñÊrÚ'77v˜&B"¢'FWáB#≤'WGFˆ‚ÁFWáD6ˆÁFVÁB“6Ü˜vñÊrÚ%6Ü˜r"¢$ÜñFR#∞¢“íì∞¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&ñÁfóFFñˆÂ6WGWf˜&“"ìÚÊFDWfVÁD∆ó7FVÊW"Ç'7V&÷óB"¬7ñÊ2WfVÁB”‚∞¢WfVÁBÁ&WfVÁDFVfV«BÇì∞¢6ˆÁ7B'WGFˆ‚“WfVÁBÊ7W'&VÁEF&vWBÁVW'ï6V∆V7F˜"Ç&'WGFˆÂ∑GóS◊7V&÷óE“"í¬W'&˜"“Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&ñÁfóFFñˆ‰W'&˜""ì∞¢6ˆÁ7BgV∆ƒÊ÷R“Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&ñÁfóFFñˆ‰gV∆ƒÊ÷R"íÁf«VRÁG&ñ“Çì∞¢ñbÇñÁfóFFñˆ‚ÊWÜó7FñÊuˆ66˜VÁBí∞¢6ˆÁ7B77v˜&B“Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&ñÁfóFFñˆÂ77v˜&B"íÁf«VS∞¢6ˆÁ7B6ˆÊfó&÷Fñˆ‚“Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&ñÁfóFFñˆÂ77v˜&D6ˆÊfó&“"íÁf«VS∞¢ñbá77v˜&BÊ∆VÊwFÇ¬"«¬ı¥’•“ÚÁFW7Bá77v˜&Bí«¬ı∂◊•“ÚÁFW7Bá77v˜&Bí«¬ı≥”ï“ÚÁFW7Bá77v˜&Bí«¬77v˜&B”“6ˆÊfó&÷Fñˆ‚í∞¢W'&˜"ÁFWáD6ˆÁFVÁB“%W6RB∆V7B"6Ü&7FW'2vóFÇWW"÷66R¬∆˜vW"÷66RÊBÁV÷&W"¬ÊB÷∂R&˜FÇVÁG&ñW2÷F6Ç‚#≤&WGW&„∞¢–¢G'í≤vóBWFÖ6W'fñ6RÁWFFU77v˜&Bá77v˜&Bì≤“6F6Ç≤W'&˜"ÁFWáD6ˆÁFVÁB“%ñ˜W"77v˜&B6˜V∆BÊ˜B&R6fVB‚&WVW7BÊWrñÁfóFFñˆ‚ñbFÜó2∆ñÊ≤Ü2Wáó&VB‚#≤&WGW&„≤–¢–¢'WGFˆ‚ÊFó6&∆VB“G'VS≤W'&˜"ÁFWáD6ˆÁFVÁB“$6ˆÊfó&÷ñÊrñ˜W"WFÜ˜&ó6VBv˜&∑76^(
+b#∞¢G'í∞¢6ˆÁ7B˜&vÊó¶Fñˆ‰ñB“vóBWFÖ6W'fñ6RÊ6ˆ◊∆WFTñÁfóFFñˆ‚ÜñÁfóFFñˆ‚ÊñB¬gV∆ƒÊ÷Rì∞¢Üó7F˜'íÁ&W∆6U7FFRá∑“¬""¬"ˆÚ"ì∞¢vóB66WE&W6ˆ«fVDVÁG'íÜvóBWFÖ6W'fñ6RÁ&W7F˜&RÜ˜&vÊó¶Fñˆ‰ñBíì∞¢“6F6ÇÜ6VváBí∞¢W'&˜"ÁFWáD6ˆÁFVÁB“6VváBÊ÷W76vR””“$îÂdïDDîÙÂıU4TB"Ú%FÜó2ñÁfóFFñˆ‚Ü2«&VGí&VV‚W6VB‚"¢%FÜó2ñÁfóFFñˆ‚ó2ñÁf∆ñB¬Wáó&VB˜"Ü2&VV‚&Wfˆ∂VB‚#∞¢'WGFˆ‚ÊFó6&∆VB“f«6S∞¢–¢“ì∞ß–†¶gVÊ7Fñˆ‚&VÊFW$66W757FFRÜ6ˆFRí∞¢6ˆÁ7B7FFW2“∞¢44ıTÂEı5U5T‰DTC¢≤$66˜VÁB7W7VÊFVB"¬%ñ˜W"˜&vÊó6Fñˆ‚Ü2FV◊˜&&ñ«í7W7VÊFVBFÜó266˜VÁB‚%“¿¢44ıTÂEÙ$4ÑïdTC¢≤$66˜VÁB&6ÜófVB"¬%FÜó266˜VÁB˜"÷V÷&W'6Üóó2ÊÚ∆ˆÊvW"7FófR‚%“¿¢‘T‘$U%4ÑïÙUÖï$TC¢≤%v˜&∑76R66W72Wáó&VB"¬%ñ˜W"˜&vÊó6Fñˆ‚÷V÷&W'6ÜóÜ2&V6ÜVBóG26ˆÊfñwW&VBWáó'íFFR‚%“¿¢‘ï54î‰uÙ‘T‘$U%4Ñï¢≤$ÊÚ˜&vÊó6Fñˆ‚÷V÷&W'6Üó"¬%ñ˜W"66˜VÁBó2f∆ñB'WBÜ2ÊÚ7FófR6∂ñ∆≈v&Bv˜&∑76R‚%“¿¢‘ï54î‰uı$ÙdîƒS¢≤$66˜VÁBÊ˜BñÁfóFVB"¬%FÜó266˜VÁBÜ2Ê˜B&VV‚&˜fó6ñˆÊVBf˜"6∂ñ∆≈v&B‚%“¿¢îÂdïDDîÙÂÙUÖï$TC¢≤$ñÁfóFFñˆ‚Wáó&VB"¬%FÜRñÁfóFFñˆ‚ó2Wáó&VB¬&Wfˆ∂VB˜"ÊÚ∆ˆÊvW"fñ∆&∆R‚6≤FÜR˜&vÊó6Fñˆ‚F÷ñÊó7G&F˜"FÚ&W6VÊBóB‚%“¿¢44U55ÙDT‰îTC¢≤$66W72FVÊñVB"¬%FÜR&WVW7FVBv˜&∑76R˜"FW7FñÊFñˆ‚ó2˜WG6ñFRñ˜W"WFÜ˜&ó6VB÷V÷&W'6Üó‚%“¿¢4U54îÙÂÙUÖï$TC¢≤%6W76ñˆ‚Wáó&VB"¬%ñ˜W"6V7W&R6W76ñˆ‚Ü2VÊFVB‚6ñv‚ñ‚vñ‚FÚ6ˆÁFñÁVR‚%“¿¢5ï5DT’ıT‰dîƒ$ƒS¢≤%7ó7FV“FV◊˜&&ñ«íVÊfñ∆&∆R"¬%6∂ñ∆≈v&B6˜V∆BÊ˜B∆ˆBñ˜W"6V7W&Rv˜&∑76R‚G'ívñ‚6Ü˜'F«í‚%–¢”∞¢6ˆÁ7B∑FóF∆R¬FW67&óFñˆÂ““7FFW5∂6ˆFU“«¬7FFW2‰44U55ÙDT‰îTC∞¢&VÊFW%6ÜV∆¬Ü«6V7Fñˆ‚6∆73“&66W72◊7FFR÷6&B6&B#„«7‚6∆73“&WñV'&˜r#Â4T5U$R44U53¬˜7„„∆É#‚G∑FóF∆W”¬ˆÉ#„«‚G∂FW67&óFñˆÁ”¬˜„∆Fób6∆73“&'WGFˆ‚◊&˜r#„∆'WGFˆ‚6∆73“&'F‚"ñC“&66W757FFU6ñv‰ñ‚#Â&WGW&‚FÚ6ñv‚ñ„¬ˆ'WGFˆ„„∆6∆73“&'F‚'F‚◊6V6ˆÊF'í"á&Vc“"ˆ6ˆÁF7BÚ#‰6ˆÁF7B7W˜'C¬ˆ„¬ˆFóc„¬˜6V7Fñˆ„Êì∞¢Fˆ7V÷VÁBÁFóF∆R“G∑FóF∆W“¬6∂ñ∆≈v&F∞¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&66W757FFU6ñv‰ñ‚"ìÚÊFDWfVÁD∆ó7FVÊW"Ç&6∆ñ6≤"¬7ñÊ2Çí”‚≤vóBWFÖ6W'fñ6SÚÁ6ñv‰˜WBÇì≤&VÊFW$∆ˆvñ‚Çì≤“ì∞ß–†¶gVÊ7Fñˆ‚&VÊFW$∆Vv7îWFÜVÁFñ6FVEv˜&∑76RÇí∞¢6ˆÁ7B3÷WFÜVÁFñ6FVD6ˆÁFWáC≤ñbÇ2ó&WGW&‚&VÊFW$∆ˆvñ‚Çì∞¢6ˆÁ7BFW'F÷VÁG3÷2ÊFW'F÷VÁDFWFñ«2¬&ˆ∆S÷2Ê÷V÷&W'6ÜóÁ&ˆ∆S∞¢ñbá&ˆ∆R”“$Ü˜7óF¬F÷ñÊó7G&F˜""bbFW'F÷VÁG2Ê∆VÊwFÇí&WGW&‚&VÊFW%6ÜV∆¬Çs«6V7Fñˆ‚6∆73“&6&B66W72÷&∆ˆ6∂VB#„∆É#‰ÊÚ76ñvÊVBFW'F÷VÁC¬ˆÉ#„«‰6ˆÁF7B÷ÊvV÷VÁBFÚÜfRFW'F÷VÁB76ñvÊVB„¬˜„¬˜6V7Fñˆ„‚rì∞¢ñbÜFW'F÷VÁG2Ê∆VÊwFÇbbFW'F÷VÁG2Á6ˆ÷RÜóFV””ÊóFV“ÊñC””◊7FFRÁ6V∆V7FVDFW'F÷VÁBíí7FFRÁ6V∆V7FVDFW'F÷VÁC÷FW'F÷VÁG5≥“ÊñC∞¢6ˆÁ7B6Üˆ˜6S÷FW'F÷VÁG2Ê∆VÊwFÉ„∞¢6ˆÁ7BFóF∆S◊&ˆ∆S””“$Ü˜7óF¬F÷ñÊó7G&F˜"#Ú$÷ÊvV÷VÁBF6Ü&ˆ&B#ß&ˆ∆S””“$FW'F÷VÁB÷ÊvW"#Ú$FW'F÷VÁB÷ÊvV÷VÁBv˜&∑76R#¶G∑&ˆ∆W“G∑&ˆ∆RÊñÊ6«VFW2Ç%G&ñÊW""ìÚ%v˜&∑76R#¢%G&ñÊñÊrv˜&∑76R'÷∞¢6ˆÁ7B6V∆V7FVC÷FW'F÷VÁG2ÊfñÊBÜóFV””ÊóFV“ÊñC””◊7FFRÁ6V∆V7FVDFW'F÷VÁBó«∆FW'F÷VÁG5≥”∞¢6ˆÁ7B76ñvÊ÷VÁG3÷2ÁG&ñÊñÊt76ñvÊ÷VÁG2Êfñ«FW"ÜóFV””‚6V∆V7FVG«∆óFV“ÊFW'F÷VÁEˆñC””◊6V∆V7FVBÊñBì∞¢6ˆÁ7B&ˆw&W74f˜#÷76ñvÊ÷VÁC”Ê2Ê÷ˆGV∆U&ˆw&W72Êfñ«FW"ÜóFV””ÊóFV“ÁG&ñÊñÊuˆ76ñvÊ÷VÁEˆñC””÷76ñvÊ÷VÁBÊñBì∞¢6ˆÁ7B76ñvÊ÷VÁD6&G3÷76ñvÊ÷VÁG2Ê÷Ü76ñvÊ÷VÁC”Á∂6ˆÁ7BFávì÷76ñvÊ÷VÁBÁG&ñÊñÊu˜Fávó7««∑”∂6ˆÁ7B&ˆw&W73‘÷FÇÁ&˜VÊBÑÁV÷&W"Ü76ñvÊ÷VÁBÁ&ˆw&W75˜W&6VÁFvRó«√ì∂6ˆÁ7B÷ˆGV∆W3◊&ˆw&W74f˜"Ü76ñvÊ÷VÁBì∑&WGW&‚∆'Fñ6∆R6∆73“&6&BG&ñÊñÊr÷&V÷6&B#„∆Fób6∆73“'G&ñÊñÊr÷&V◊F˜#„«7‚6∆73“&&V÷6ˆFR#‚G∂W66TáF÷¬á&ˆ∆Ró”¬˜7„„«7‚6∆73“'7FGW2÷6Üó7FGW2“G∑7FGW5FˆÊRÜ76ñvÊ÷VÁBÁ7FGW2ó“#‚G∂W66TáF÷¬Ü76ñvÊ÷VÁBÁ7FGW2ó”¬˜7„„¬ˆFóc„∆Fóc„∆É3‚G∂W66TáF÷¬áFávíÁFóF∆W«¬$76ñvÊVBG&ñÊñÊrFáví"ó”¬ˆÉ3„«‚G∂W66TáF÷¬áFávíÊFW67&óFñˆÁ«¬$6ˆ◊∆WFRFÜRFáví76ñvÊVB'í÷ÊvV÷VÁB‚"ó”¬˜„¬ˆFóc„∆Fób6∆73“&&V◊&ˆw&W72#„«7‚7Gñ∆S“'vñGFÉ¢G∑&ˆw&W77“R#„¬˜7„„¬ˆFóc„∆Fób6∆73“&÷ˆGV∆R÷÷WF#„«7‚6∆73“'6÷∆¬#‚G∑&ˆw&W77“R6ˆ◊∆WFR+rG∂÷ˆGV∆W2Êfñ«FW"ÜóFV””ÊóFV“Á7FGW3””“$&˜fVB'«∆óFV“Á7FGW3””“%&VGíf˜"G&ñÊW"&WfñWr"íÊ∆VÊwFá“ÚG∂÷ˆGV∆W2Ê∆VÊwFá“G&6∂VB÷ˆGV∆W3¬˜7„‚G∂76ñvÊ÷VÁBÊGVUˆFFSˆ«7‚6∆73“'6÷∆¬#‰GVRG∂W66TáF÷¬Ü76ñvÊ÷VÁBÊGVUˆFFRó”¬˜7„Ê¢"'”¬ˆFóc„¬ˆ'Fñ6∆SÊ∑“íÊ¶ˆñ‚Ç""ì∞¢6ˆÁ7B∆V&ÊW#’≤%4"¬$6∆VÊW"%“ÊñÊ6«VFW2á&ˆ∆Rí¬G&ñÊW#◊&ˆ∆RÊñÊ6«VFW2Ç%G&ñÊW""ì∞¢6ˆÁ7BG&ñÊW%&V∆FñˆÁ6Üó3÷2ÁG&ñÊW$76ñvÊ÷VÁG2Êfñ«FW"ÜóFV””‚6V∆V7FVG«∆óFV“ÊFW'F÷VÁEˆñC””◊6V∆V7FVBÊñBì∞¢6ˆÁ7BG&ñÊVU&˜w3◊G&ñÊW%&V∆FñˆÁ6Üó2Ê÷á&V∆FñˆÁ6Üó”Á∂6ˆÁ7B&ˆfñ∆S÷2ÁG&ñÊVU&ˆfñ∆W2ÊfñÊBÜóFV””ÊóFV“ÁW6W%ˆñC””◊&V∆FñˆÁ6ÜóÁG&ñÊVU˜W6W%ˆñBì∂6ˆÁ7B76ñvÊ÷VÁC÷2ÁG&ñÊñÊt76ñvÊ÷VÁG2ÊfñÊBÜóFV””ÊóFV“ÁW6W%ˆñC””◊&V∆FñˆÁ6ÜóÁG&ñÊVU˜W6W%ˆñBbfóFV“ÊFW'F÷VÁEˆñC””◊&V∆FñˆÁ6ÜóÊFW'F÷VÁEˆñBì∂ñbÇ&ˆfñ∆Ró&WGW&‚"#∂6ˆÁ7B&ˆw&W73‘÷FÇÁ&˜VÊBÑÁV÷&W"Ü76ñvÊ÷VÁCÚÁ&ˆw&W75˜W&6VÁFvRó«√ì∂6ˆÁ7B&V6ˆ÷÷VÊFVC÷76ñvÊ÷VÁBbf2Á6ñvÊˆfe&V6ˆ÷÷VÊFFñˆÁ2Á6ˆ÷RÜóFV””ÊóFV“ÁG&ñÊñÊuˆ76ñvÊ÷VÁEˆñC””÷76ñvÊ÷VÁBÊñBì∑&WGW&‚∆'Fñ6∆R6∆73“&6&BG&ñÊVR◊&ˆfñ∆R#„∆Fób6∆73“'6V7Fñˆ‚÷ÜVFñÊr#„∆Fóc„«7‚6∆73“&WñV'&˜r#‚G∂W66TáF÷¬á&ˆfñ∆RÊV◊∆˜ñVUˆñG«¬$54ît‰TBE$î‰TR"ó”¬˜7„„∆É3‚G∂W66TáF÷¬á&ˆfñ∆RÊgV∆≈ˆÊ÷Ró”¬ˆÉ3„«‚G∂W66TáF÷¬Ü76ñvÊ÷VÁCÚÁG&ñÊñÊu˜Fávó3ÚÁFóF∆W«¬$ÊÚFáví76ñvÊVB"ó”¬˜„¬ˆFóc„«7‚6∆73“'7FGW2÷6Üó7FGW2“G∑7FGW5FˆÊRÜ76ñvÊ÷VÁCÚÁ7FGW7«¬$Ê˜B7F'FVB"ó“#‚G∂W66TáF÷¬Ü76ñvÊ÷VÁCÚÁ7FGW7«¬$Ê˜B7F'FVB"ó”¬˜7„„¬ˆFóc„∆Fób6∆73“&&V◊&ˆw&W72#„«7‚7Gñ∆S“'vñGFÉ¢G∑&ˆw&W77“R#„¬˜7„„¬ˆFóc„«6∆73“'6÷∆¬#‚G∑&ˆw&W77“R6ˆ◊∆WFRG∂76ñvÊ÷VÁCÚÊGVUˆFFSˆ+rGVRG∂W66TáF÷¬Ü76ñvÊ÷VÁBÊGVUˆFFRó÷¢"'”¬˜‚G∂76ñvÊ÷VÁCˆ∆∆&V√Â&7Fñ6¬ˆ'6W'fFñˆ„«FWáF&V6∆73“'G&ñÊW"÷ˆ'6W'fFñˆ‚"FF÷76ñvÊ÷VÁC“"G∂W66TáF÷¬Ü76ñvÊ÷VÁBÊñBó“"∆6VÜˆ∆FW#“%&V6˜&Bˆ'6W'f&∆R6ˆ◊WFVÊ7íWfñFVÊ6R#„¬˜FWáF&V„¬ˆ∆&V√„∆∆&V√‰˜WF6ˆ÷S«6V∆V7B6∆73“'G&ñÊW"÷˜WF6ˆ÷R"FF÷76ñvÊ÷VÁC“"G∂W66TáF÷¬Ü76ñvÊ÷VÁBÊñBó“#„∆˜Fñˆ„‰6ˆ◊WFVÁC¬ˆ˜Fñˆ„„∆˜Fñˆ„‰ÊVVG2FWfV∆˜÷VÁC¬ˆ˜Fñˆ„„∆˜Fñˆ„‰Ê˜Bˆ'6W'fVC¬ˆ˜Fñˆ„„¬˜6V∆V7C„¬ˆ∆&V√„∆Fób6∆73“'&ˆfñ∆R÷7FñˆÁ2#„∆'WGFˆ‚6∆73“&'F‚6fR◊&V¬÷ˆ'6W'fFñˆ‚"FF÷76ñvÊ÷VÁC“"G∂W66TáF÷¬Ü76ñvÊ÷VÁBÊñBó“"FF◊G&ñÊVS“"G∂W66TáF÷¬á&ˆfñ∆RÁW6W%ˆñBó“"FF÷FW'F÷VÁC“"G∂W66TáF÷¬á&V∆FñˆÁ6ÜóÊFW'F÷VÁEˆñBó“#Â&V6˜&Bˆ'6W'fFñˆ„¬ˆ'WGFˆ„„∆'WGFˆ‚6∆73“&'F‚6VÊB◊&V¬◊&V6ˆ÷÷VÊFFñˆ‚"FF÷76ñvÊ÷VÁC“"G∂W66TáF÷¬Ü76ñvÊ÷VÁBÊñBó“"G∑&V6ˆ÷÷VÊFVG«¬≤%&VGíf˜"G&ñÊW"&WfñWr"¬%&V76W76÷VÁB&WVó&VB%“ÊñÊ6«VFW2Ü76ñvÊ÷VÁBÁ7FGW2ìÚ&Fó6&∆VB#¢"'”‚G∑&V6ˆ÷÷VÊFVCÚ%&V6ˆ÷÷VÊFFñˆ‚6VÁB#¢%6VÊBFÚ÷ÊvV÷VÁB'”¬ˆ'WGFˆ„„¬ˆFóc„«6∆73“&WFÇ◊7FGW2"ñC“'G&ñÊW"◊7FGW2“G∂W66TáF÷¬Ü76ñvÊ÷VÁBÊñBó“"&ˆ∆S“'7FGW2#„¬˜Ê¢s«6∆73“&V◊Gí◊7FFR#‰÷ÊvV÷VÁBÜ2Ê˜B76ñvÊVBG&ñÊñÊrFávíñWB„¬˜‚w”¬ˆ'Fñ6∆SÊ∑“íÊ¶ˆñ‚Ç""ì∞¢6ˆÁ7B∆V&ÊW%7V÷÷'ì÷∆Fób6∆73“'7FG2÷w&ñB#„∆Fób6∆73“'7FB÷6&B#„«7„‰76ñvÊVBFávó3¬˜7„„«7G&ˆÊs‚G∂76ñvÊ÷VÁG2Ê∆VÊwFá”¬˜7G&ˆÊs„¬ˆFóc„∆Fób6∆73“'7FB÷6&B#„«7„ÂVÁ&VBÊ˜Fñfñ6FñˆÁ3¬˜7„„«7G&ˆÊs‚G∂2ÊÊ˜Fñfñ6FñˆÁ2Ê∆VÊwFá”¬˜7G&ˆÊs„¬ˆFóc„∆Fób6∆73“'7FB÷6&B#„«7„‰6ˆ◊WFVÊ7í&V6˜&G3¬˜7„„«7G&ˆÊs‚G∂2Ê6ˆ◊WFVÊ7ï&V6˜&G2Ê∆VÊwFá”¬˜7G&ˆÊs„¬ˆFóc„¬ˆFóc„∆Fób6∆73“'6V7Fñˆ‚÷ÜVFñÊr"ñC“'G&ñÊñÊr#„∆Fóc„«7‚6∆73“&WñV'&˜r#ÂîıU"E$î‰î‰s¬˜7„„∆É3‰76ñvÊVBFávó3¬ˆÉ3„¬ˆFóc„¬ˆFóc„∆Fób6∆73“&w&ñBw&ñB”2#‚G∂76ñvÊ÷VÁD6&G7«¬s«6∆73“&V◊Gí◊7FFR#‰ÊÚG&ñÊñÊrFávíÜ2&VV‚76ñvÊVBf˜"FÜó2FW'F÷VÁBñWB„¬˜‚w”¬ˆFócÊ∞¢6ˆÁ7BG&ñÊW%7V÷÷'ì÷∆Fób6∆73“'7FG2÷w&ñB#„∆Fób6∆73“'7FB÷6&B#„«7„‰76ñvÊVBG&ñÊVW3¬˜7„„«7G&ˆÊs‚G∑G&ñÊW%&V∆FñˆÁ6Üó2Ê∆VÊwFá”¬˜7G&ˆÊs„¬ˆFóc„∆Fób6∆73“'7FB÷6&B#„«7„ÂVÊFñÊr&WfñWw3¬˜7„„«7G&ˆÊs‚G∂2ÁG&ñÊñÊt76ñvÊ÷VÁG2Êfñ«FW"ÜóFV””ÊóFV“Á7FGW3””“%&VGíf˜"G&ñÊW"&WfñWr"íÊ∆VÊwFá”¬˜7G&ˆÊs„¬ˆFóc„∆Fób6∆73“'7FB÷6&B#„«7„ÂVÁ&VBÊ˜Fñfñ6FñˆÁ3¬˜7„„«7G&ˆÊs‚G∂2ÊÊ˜Fñfñ6FñˆÁ2Ê∆VÊwFá”¬˜7G&ˆÊs„¬ˆFóc„¬ˆFóc„∆Fób6∆73“'6V7Fñˆ‚÷ÜVFñÊr"ñC“'7Ffb#„∆Fóc„«7‚6∆73“&WñV'&˜r#‰54ît‰TBE$î‰TU3¬˜7„„∆É3ÂG&ñÊñÊrÊB6ˆ◊WFVÊ7ì¬ˆÉ3„¬ˆFóc„¬ˆFóc„∆Fób6∆73“&w&ñBw&ñB”"#‚G∑G&ñÊVU&˜w7«¬s«6∆73“&V◊Gí◊7FFR#‰ÊÚG&ñÊVW2&R76ñvÊVBñ‚FÜó2FW'F÷VÁB„¬˜‚w”¬ˆFócÊ∞¢6ˆÁ7B7V÷÷'ì÷∆V&ÊW#ˆ∆V&ÊW%7V÷÷'ìßG&ñÊW#˜G&ñÊW%7V÷÷'ì¶«6V7Fñˆ‚6∆73“&6&B#„∆É3‚G∑&ˆ∆S””“$Ü˜7óF¬F÷ñÊó7G&F˜"#Ú$Ü˜7óF¬◊vñFR÷ÊvV÷VÁB66W72#¶W66TáF÷¬á6V∆V7FVCÚÊÊ÷W«¬$76ñvÊVB66W72"ó”¬ˆÉ3„«6∆73“'6÷∆¬#Âñ˜W"W&÷óGFVBv˜&∑76Ró26ˆÊÊV7FVBFÚ6∂ñ∆≈v&Bw26V7W&VBFF&6R‚÷ÊvV÷VÁBw&óFR7FñˆÁ2vñ∆¬&RVÊ&∆VBñ‚∆FW"6ˆÁG&ˆ∆∆VBÜ6R„¬˜„¬˜6V7Fñˆ„Ê∞¢&VÊFW%6ÜV∆¬Ü«6V7Fñˆ‚6∆73“&F6Ü&ˆ&B÷ÜW&Ú"ñC“&Üˆ÷R#„∆Fób6∆73“&F6Ü&ˆ&B◊vV∆6ˆ÷R#„«7‚6∆73“&WñV'&˜r#‰UDÑTÂDî4DTBtı$µ54S¬˜7„„∆É#‚G∂W66TáF÷¬áFóF∆Ró”¬ˆÉ#„«ÂvV∆6ˆ÷R¬G∂W66TáF÷¬Ü2Á&ˆfñ∆RÊgV∆≈ˆÊ÷Ró“‚ñ˜W"&ˆ∆R¬66W72ÊBG&ñÊñÊr&V6˜&G2&R∆ˆFVB6V7W&V«íg&ˆ“6∂ñ∆≈v&Bw2FF&6R„¬˜„¬ˆFóc‚G∂∆V&ÊW#ˆ∆Fób6∆73“'&ˆw&W72◊&ñÊr"7Gñ∆S“"“◊&ˆw&W73¢G¥÷FÇÁ&˜VÊBÑÁV÷&W"Ü76ñvÊ÷VÁG5≥”ÚÁ&ˆw&W75˜W&6VÁFvRó«√í£2„g÷FVr#„∆Fóc„«7G&ˆÊs‚G¥÷FÇÁ&˜VÊBÑÁV÷&W"Ü76ñvÊ÷VÁG5≥”ÚÁ&ˆw&W75˜W&6VÁFvRó«√ó“S¬˜7G&ˆÊs„«7„Ê6ˆ◊∆WFS¬˜7„„¬ˆFóc„¬ˆFócÊ¢"'”¬˜6V7Fñˆ„‚G∂6Üˆ˜6Sˆ«6V7Fñˆ‚6∆73“&6&B#„∆∆&V√ÂW&÷óGFVBFW'F÷VÁC«6V∆V7BñC“&WFÜVÁFñ6FVDFW'F÷VÁB#‚G∂FW'F÷VÁG2Ê÷ÜC”Ê∆˜Fñˆ‚f«VS“"G∂W66TáF÷¬ÜBÊñBó“"G∂BÊñC””◊6V∆V7FVCÚÊñCÚ'6V∆V7FVB#¢"'”‚G∂W66TáF÷¬ÜBÊÊ÷Ró”¬ˆ˜Fñˆ„ÊíÊ¶ˆñ‚Ç""ó”¬˜6V∆V7C„¬ˆ∆&V√„¬˜6V7Fñˆ„Ê¢"'“G∑7V÷÷'ó÷ì∞¢Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÇ&WFÜVÁFñ6FVDFW'F÷VÁB"ìÚÊFDWfVÁD∆ó7FVÊW"Ç&6ÜÊvR"∆WfVÁC”Á∑7FFRÁ6V∆V7FVDFW'F÷VÁC÷WfVÁBÁF&vWBÁf«VS∑&VÊFW$WFÜVÁFñ6FVEv˜&∑76RÇì∑“ì∞¢Fˆ7V÷VÁBÁVW'ï6V∆V7F˜$∆¬Ç"Á6fR◊&V¬÷ˆ'6W'fFñˆ‚"íÊf˜$V6ÇÜ'WGFˆ„”Ê'WGFˆ‚ÊFDWfVÁD∆ó7FVÊW"Ç&6∆ñ6≤"∆7ñÊ2Çì”Á∂6ˆÁ7BñC÷'WGFˆ‚ÊFF6WBÊ76ñvÊ÷VÁB«7FGW3÷Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÜG&ñÊW"◊7FGW2“G∂ñG÷í∆Ê˜FS÷Fˆ7V÷VÁBÁVW'ï6V∆V7F˜"ÜÁG&ñÊW"÷ˆ'6W'fFñˆÂ∂FF÷76ñvÊ÷VÁC“"G∂ñG“%÷í∆˜WF6ˆ÷S÷Fˆ7V÷VÁBÁVW'ï6V∆V7F˜"ÜÁG&ñÊW"÷˜WF6ˆ÷U∂FF÷76ñvÊ÷VÁC“"G∂ñG“%÷ì∂'WGFˆ‚ÊFó6&∆VC◊G'VS∑7FGW2ÁFWáD6ˆÁFVÁC“%6fñÊrˆ'6W'fFñˆÓ(
+b#∑G'ó∂vóBWFÖ6W'fñ6RÊFF&6RÁ&V6˜&E&7Fñ6ƒˆ'6W'fFñˆ‚Ü2«∑G&ñÊñÊt76ñvÊ÷VÁDñC¶ñB«G&ñÊVUW6W$ñC¶'WGFˆ‚ÊFF6WBÁG&ñÊVR∆FW'F÷VÁDñC¶'WGFˆ‚ÊFF6WBÊFW'F÷VÁB∆ˆ'6W'fFñˆÂFWáC¶Ê˜FRÁf«VR∆˜WF6ˆ÷S¶˜WF6ˆ÷RÁf«VW“ì∂WFÜVÁFñ6FVD6ˆÁFWáC÷vóBWFÖ6W'fñ6RÁ&W7F˜&RÇì∑&VÊFW$WFÜVÁFñ6FVEv˜&∑76RÇì∑÷6F6á∑7FGW2ÁFWáD6ˆÁFVÁC“$ˆ'6W'fFñˆ‚6˜V∆BÊ˜B&R6fVB‚FBWfñFVÊ6RÊBG'ívñ‚‚#∂'WGFˆ‚ÊFó6&∆VC÷f«6S∑◊“íì∞¢Fˆ7V÷VÁBÁVW'ï6V∆V7F˜$∆¬Ç"Á6VÊB◊&V¬◊&V6ˆ÷÷VÊFFñˆ‚"íÊf˜$V6ÇÜ'WGFˆ„”Ê'WGFˆ‚ÊFDWfVÁD∆ó7FVÊW"Ç&6∆ñ6≤"∆7ñÊ2Çì”Á∂6ˆÁ7BñC÷'WGFˆ‚ÊFF6WBÊ76ñvÊ÷VÁB«7FGW3÷Fˆ7V÷VÁBÊvWDV∆V÷VÁD'îñBÜG&ñÊW"◊7FGW2“G∂ñG÷ì∂ñbÇ6ˆÊfó&“Ç%6VÊBFÜó26ˆ◊WFVÊ7í&V6ˆ÷÷VÊFFñˆ‚FÚ÷ÊvV÷VÁCÚ"íó&WGW&„∂'WGFˆ‚ÊFó6&∆VC◊G'VS∑7FGW2ÁFWáD6ˆÁFVÁC“%6VÊFñÊr&V6ˆ÷÷VÊFFñˆÓ(
+b#∑G'ó∂vóBWFÖ6W'fñ6RÊFF&6RÁ7V&÷óE6ñvÊˆfe&V6ˆ÷÷VÊFFñˆ‚Ü2«∑G&ñÊñÊt76ñvÊ÷VÁDñC¶ñB«&V6ˆ÷÷VÊFFñˆÂ7FGW3¢%6VÁBFÚ÷ÊvV÷VÁB"«&V6ˆ÷÷VÊFFñˆÂFWáC¢%G&ñÊW"&V6ˆ÷÷VÊG26ˆ◊WFVÊ7í&˜f¬&6VBˆ‚6ˆ◊∆WFVBG&ñÊñÊrÊB&7Fñ6¬ˆ'6W'fFñˆ‚‚'“ì∂WFÜVÁFñ6FVD6ˆÁFWáC÷vóBWFÖ6W'fñ6RÁ&W7F˜&RÇì∑&VÊFW$WFÜVÁFñ6FVEv˜&∑76RÇì∑÷6F6á∑7FGW2ÁFWáD6ˆÁFVÁC“%&V6ˆ÷÷VÊFFñˆ‚6˜V∆BÊ˜B&R6VÁB‚#∂'WGFˆ‚ÊFó6&∆VC÷f«6S∑◊“íì∞ß–†¢ÚÚÜ6RWFÜVÁFñ6FVBv˜&∑76R‚FÜó2FV6∆&Fñˆ‚ñÁFVÁFñˆÊ∆«í7WW'6VFW0¢ÚÚFÜR6ˆ◊Fñ&ñ∆óGí&VÊFW&W"&˜fRvÜñ∆RFV÷Ú÷ˆFR6ˆÁFñÁVW2FÚW6RóG0¢ÚÚW7F&∆ó6ÜVB&˜WFRÊB6◊∆R÷FFF6Ü&ˆ&G2‡¶gVÊ7Fñˆ‚&VÊFW$WFÜVÁFñ6FVEv˜&∑76RÇí∞¢6ˆÁ7B2“WFÜVÁFñ6FVD6ˆÁFWáC∞¢ñbÇ2í&WGW&‚&VÊFW$∆ˆvñ‚Çì∞¢ñbÜ2Ê÷V÷&W'6ÜóÁ&ˆ∆R””“%6∂ñ∆≈v&B7WW"F÷ñÊó7G&F˜""bb2Ê˜&vÊó¶Fñˆ‚í&WGW&‚&VÊFW%∆Ff˜&‘F÷ñÊó7G&Fñˆ‚Ü2ì∞†¢6ˆÁ7BFW'F÷VÁG2“2ÊFW'F÷VÁDFWFñ«3∞¢6ˆÁ7B&ˆ∆R“2Ê÷V÷&W'6ÜóÁ&ˆ∆S∞¢6ˆÁ7BVÁ&W7G&ñ7FVE&ˆ∆W2“ÊWr6WBÖ≤$˜&vÊó6Fñˆ‚F÷ñÊó7G&F˜""¬$6ˆÁFVÁBF÷ñÊó7G&F˜"ÙVGV6F˜"%“ì∞¢ñbÇVÁ&W7G&ñ7FVE&ˆ∆W2ÊÜ2á&ˆ∆RíbbFW'F÷VÁG2Ê∆VÊwFÇí∞¢&WGW&‚&VÊFW%6ÜV∆¬ÜG∂˜&vÊó¶FñˆÂ7vóF6ÜW"Ü2ó”«6V7Fñˆ‚6∆73“&6&B66W72÷&∆ˆ6∂VB#„∆É#‰ÊÚ76ñvÊVBFW'F÷VÁC¬ˆÉ#„«‰6ˆÁF7Bñ˜W"˜&vÊó6Fñˆ‚F÷ñÊó7G&F˜"FÚ&WVW7BWFÜ˜&ó6VBFW'F÷VÁB66W72„¬˜„¬˜6V7Fñˆ„Êì∞¢–¢ñbÜFW'F÷VÁG2Ê∆VÊwFÇbbFW'F÷VÁG2Á6ˆ÷RÜóFV“”‚óFV“ÊñB””“7FFRÁ6V∆V7FVDFW'F÷VÁBíí7FFRÁ6V∆V7FVDFW'F÷VÁB“FW'F÷VÁG5≥“ÊñC∞¢6ˆÁ7B6V∆V7FVB“FW'F÷VÁG2ÊfñÊBÜóFV“”‚óFV“ÊñB””“7FFRÁ6V∆V7FVDFW'F÷VÁBí«¬FW'F÷VÁG5≥”∞¢6ˆÁ7B76ñvÊ÷VÁG2“2ÁG&ñÊñÊt76ñvÊ÷VÁG2Êfñ«FW"ÜóFV“”‚6V∆V7FVB«¬óFV“ÊFW'F÷VÁEˆñB””“6V∆V7FVBÊñBì∞¢6ˆÁ7B∆V&ÊW"“≤%4"¬$6∆VÊW""¬%7W˜'Bv˜&∂W"%“ÊñÊ6«VFW2á&ˆ∆Rì∞¢6ˆÁ7BG&ñÊW"“&ˆ∆RÊñÊ6«VFW2Ç%G&ñÊW""ì∞¢6ˆÁ7BFóF∆R“&ˆ∆R””“$˜&vÊó6Fñˆ‚F÷ñÊó7G&F˜""Ú$˜&vÊó6Fñˆ‚F÷ñÊó7G&Fñˆ‚ ¢¢&ˆ∆R””“$f6ñ∆óGíF÷ñÊó7G&F˜""Ú$f6ñ∆óGíF÷ñÊó7G&Fñˆ‚ ¢¢&ˆ∆R””“$FW'F÷VÁB÷ÊvW""Ú$FW'F÷VÁB÷ÊvV÷VÁBv˜&∑76R ¢¢G∑&ˆ∆W“G∑G&ñÊW"Ú%v˜&∑76R"¢%G&ñÊñÊrv˜&∑76R'÷∞†¢ñbá&ˆ∆R””“$˜&vÊó6Fñˆ‚F÷ñÊó7G&F˜""í&WGW&‚&VÊFW$˜&vÊó¶Fñˆ‰F÷ñÊó7G&Fñˆ‚Ü2ì∞¢ñbá&ˆ∆R””“$6ˆÁFVÁBF÷ñÊó7G&F˜"ÙVGV6F˜""í&WGW&‚&VÊFW$VGV6F˜%v˜&∑76RÜ2ì∞†¢6ˆÁ7B76ñvÊ÷VÁD6&G2“76ñvÊ÷VÁG2Ê÷Ü76ñvÊ÷VÁB”‚∞¢6ˆÁ7BFáví“76ñvÊ÷VÁBÁG&ñÊñÊu˜Fávó2«¬∑”∞¢6ˆÁ7B&ˆw&W72“÷FÇÁ&˜VÊBÑÁV÷&W"Ü76ñvÊ÷VÁBÁ&ˆw&W75˜W&6VÁFvRí«¬ì∞¢6ˆÁ7B÷ˆGV∆W2“2Ê÷ˆGV∆U&ˆw&W72Êfñ«FW"ÜóFV“”‚óFV“ÁG&ñÊñÊuˆ76ñvÊ÷VÁEˆñB””“76ñvÊ÷VÁBÊñBì∞¢&WGW&‚∆'Fñ6∆R6∆73“&6&BG&ñÊñÊr÷&V÷6&B#„∆Fób6∆73“'G&ñÊñÊr÷&V◊F˜#„«7‚6∆73“&&V÷6ˆFR#‚G∂W66TáF÷¬á&ˆ∆Ró”¬˜7„„«7‚6∆73“'7FGW2÷6Üó7FGW2“G∑7FGW5FˆÊRÜ76ñvÊ÷VÁBÁ7FGW2ó“#‚G∂W66TáF÷¬Ü76ñvÊ÷VÁBÁ7FGW2ó”¬˜7„„¬ˆFóc„∆Fóc„∆É3‚G∂W66TáF÷¬áFávíÁFóF∆R«¬$76ñvÊVBG&ñÊñÊrFáví"ó”¬ˆÉ3„«‚G∂W66TáF÷¬áFávíÊFW67&óFñˆ‚«¬$6ˆ◊∆WFRFÜRFáví76ñvÊVB'í÷ÊvV÷VÁB‚"ó”¬˜„¬ˆFóc„∆Fób6∆73“&&V◊&ˆw&W72#„«7‚7Gñ∆S“'vñGFÉ¢G∑&ˆw&W77“R#„¬˜7„„¬ˆFóc„∆Fób6∆73“&÷ˆGV∆R÷÷WF#„«7‚6∆73“'6÷∆¬#‚G∑&ˆw&W77“R6ˆ◊∆WFR+rG∂÷ˆGV∆W2Ê∆VÊwFá“G&6∂VB÷ˆGV∆W3¬˜7„‚G∂76ñvÊ÷VÁBÊGVUˆFFRÚ«7‚6∆73“'6÷∆¬#‰GVRG∂W66TáF÷¬Ü76ñvÊ÷VÁBÊGVUˆFFRó”¬˜7„Ê¢"'”¬ˆFóc„¬ˆ'Fñ6∆SÊ∞¢“íÊ¶ˆñ‚Ç""ì∞¢6ˆÁ7BG&ñÊW%&V∆FñˆÁ6Üó2“2ÁG&ñÊW$76ñvÊ÷VÁG2Êfñ«FW"ÜóFV“”‚6V∆V7FVB«¬óFV“ÊFW'F÷VÁEˆñB””“6V∆V7FVBÊñBì∞¢6ˆÁ7BG&ñÊVU&˜w2“G&ñÊW%&V∆FñˆÁ6Üó2Ê÷á&V∆FñˆÁ6Üó”‚∞¢6ˆÁ7B&ˆfñ∆R“2ÁG&ñÊVU&ˆfñ∆W2ÊfñÊBÜóFV“”‚óFV“ÁW6W%ˆñB””“&V∆FñˆÁ6ÜóÁG&ñÊVU˜W6W%ˆñBì∞¢6ˆÁ7B76ñvÊ÷VÁB“2ÁG&ñÊñÊt76ñvÊ÷VÁG2ÊfñÊBÜóFV“”‚óFV“ÁW6W%ˆñB””“&V∆FñˆÁ6ÜóÁG&ñÊVU˜W6W%ˆñBbbóFV“ÊFW'F÷VÁEˆñB””“&V∆FñˆÁ6ÜóÊFW'F÷VÁEˆñBì∞¢ñbÇ&ˆfñ∆Rí&WGW&‚"#∞¢6ˆÁ7B&ˆw&W72“÷FÇÁ&˜VÊBÑÁV÷&W"Ü76ñvÊ÷VÁCÚÁ&ˆw&W75˜W&6VÁFvRí«¬ì∞¢&WGW&‚∆'Fñ6∆R6∆73“&6&BG&ñÊVR◊&ˆfñ∆R#„∆Fób6∆73“'6V7Fñˆ‚÷ÜVFñÊr#„∆Fóc„«7‚6∆73“&WñV'&˜r#‰54ît‰TBE$î‰TS¬˜7„„∆É3‚G∂W66TáF÷¬á&ˆfñ∆RÊgV∆≈ˆÊ÷Ró”¬ˆÉ3„«‚G∂W66TáF÷¬Ü76ñvÊ÷VÁCÚÁG&ñÊñÊu˜Fávó3ÚÁFóF∆R«¬$ÊÚFáví76ñvÊVB"ó”¬˜„¬ˆFóc„«7‚6∆73“'7FGW2÷6Üó7FGW2“G∑7FGW5FˆÊRÜ76ñvÊ÷VÁCÚÁ7FGW2«¬$Ê˜B7F'FVB"ó“#‚G∂W66TáF÷¬Ü76ñvÊ÷VÁCÚÁ7FGW2«¬$Ê˜B7F'FVB"ó”¬˜7„„¬ˆFóc„∆Fób6∆73“&&V◊&ˆw&W72#„«7‚7Gñ∆S“'vñGFÉ¢G∑&ˆw&W77“R#„¬˜7„„¬ˆFóc‚G∂76ñvÊ÷VÁBÚ∆∆&V√Â&7Fñ6¬ˆ'6W'fFñˆ„«FWáF&V6∆73“'G&ñÊW"÷ˆ'6W'fFñˆ‚"FF÷76ñvÊ÷VÁC“"G∂W66TáF÷¬Ü76ñvÊ÷VÁBÊñBó“"∆6VÜˆ∆FW#“%&V6˜&Bˆ'6W'f&∆R6ˆ◊WFVÊ7íWfñFVÊ6R#„¬˜FWáF&V„¬ˆ∆&V√„∆∆&V√‰˜WF6ˆ÷S«6V∆V7B6∆73“'G&ñÊW"÷˜WF6ˆ÷R"FF÷76ñvÊ÷VÁC“"G∂W66TáF÷¬Ü76ñvÊ÷VÁBÊñBó“#„∆˜Fñˆ„‰6ˆ◊WFVÁC¬ˆ˜Fñˆ„„∆˜Fñˆ„‰ÊVVG2FWfV∆˜÷VÁC¬ˆ˜Fñˆ„„∆˜Fñˆ„‰Ê˜Bˆ'6W'fVC¬ˆ˜Fñˆ„„¬˜6V∆V7C„¬ˆ∆&V√„∆Fób6∆73“'&ˆfñ∆R÷7FñˆÁ2#„∆'WGFˆ‚6∆73“&'F‚6fR◊&V¬÷ˆ'6W'fFñˆ‚"FF÷76ñvÊ÷VÁC“"G∂W66TáF÷¬Ü76ñvÊ÷VÁBÊñBó“"FF◊G&ñÊVS“"G∂W66TáF÷¬á&ˆfñ∆RÁW6W%ˆñBó“"FF÷FW'F÷VÁC“"G∂W66TáF÷¬á&V∆FñˆÁ6ÜóÊFW'F÷VÁEˆñBó“#Â&V6˜&Bˆ'6W'fFñˆ„¬ˆ'WGFˆ„„∆'WGFˆ‚6∆73“&'F‚6VÊB◊&V¬◊&V6ˆ÷÷VÊFFñˆ‚"FF÷76ñvÊ÷VÁC“"G∂W66TáF÷¬Ü76ñvÊ÷VÁBÊñBó“#Â6VÊBFÚ÷ÊvV÷VÁC¬ˆ'WGFˆ„„¬ˆFóc„«6∆73“&WFÇ◊7FGW2"ñC“'G&ñÊW"◊7FGW2“G∂W66TáF÷¬Ü76ñvÊ÷VÁBÊñBó“"&ˆ∆S“'7FGW2#„¬˜Ê¢s«6∆73“&V◊Gí◊7FFR#‰÷ÊvV÷VÁBÜ2Ê˜B76ñvÊVBFáví„¬˜‚w”¬ˆ'Fñ6∆SÊ∞¢“íÊ¶ˆñ‚Ç""ì∞¢6ˆÁ7B7V÷÷'í“∆V&ÊW ¢Ú∆Fób6∆73“'7FG2÷w&ñB#„∆Fób6∆73“'7FB÷6&B#„«7„‰76ñvÊVBFávó3¬˜7„„«7G&ˆÊs‚G∂76ñvÊ÷VÁG2Ê∆VÊwFá”¬˜7G&ˆÊs„¬ˆFóc„∆Fób6∆73“'7FB÷6&B#„«7„ÂVÁ&VBÊ˜Fñfñ6FñˆÁ3¬˜7„„«7G&ˆÊs‚G∂2ÊÊ˜Fñfñ6FñˆÁ2Ê∆VÊwFá”¬˜7G&ˆÊs„¬ˆFóc„∆Fób6∆73“'7FB÷6&B#„«7„‰6ˆ◊WFVÊ7í&V6˜&G3¬˜7„„«7G&ˆÊs‚G∂2Ê6ˆ◊WFVÊ7ï&V6˜&G2Ê∆VÊwFá”¬˜7G&ˆÊs„¬ˆFóc„¬ˆFóc„∆Fób6∆73“'6V7Fñˆ‚÷ÜVFñÊr"ñC“'G&ñÊñÊr#„∆Fóc„«7‚6∆73“&WñV'&˜r#ÂîıU"E$î‰î‰s¬˜7„„∆É3‰76ñvÊVBFávó3¬ˆÉ3„¬ˆFóc„¬ˆFóc„∆Fób6∆73“&w&ñBw&ñB”2#‚G∂76ñvÊ÷VÁD6&G2«¬s«6∆73“&V◊Gí◊7FFR#‰ÊÚFávíÜ2&VV‚76ñvÊVBñ‚FÜó2v˜&∑76R„¬˜‚w”¬ˆFócÊ ¢¢G&ñÊW ¢Ú∆Fób6∆73“'7FG2÷w&ñB#„∆Fób6∆tÔªhëÈÏ∂ªßq´^uÖ—ÑµÕï—’¿µÕ—ï¿ÙàëÌ•ëÙà¯ÒÕ¡Ö∏¯ëÌ•πëï‡Ä¨Ä≈ÙΩÕ¡Ö∏¯ëÌ±Öâï±ÙΩâ’——Ω∏˘Ä§π©Ω•∏†àà•ÙΩπÖÿ˘ÄÏ(ÄÄÄÅ±ï–Å¡Öπï∞ÄÙÄààÏ(ÄÄÄÅ•òÄ°Õ—ï¿ÄÙÙÙÄâ•ëïπ—•—‰à§Å¡Öπï∞ÄÙÅÄÒôΩ…¥Åç±ÖÕÃÙâçÖ…êÅÕï—’¿µôΩ…¥ÅôΩç’ÕïêµôΩ…¥àÅ•êÙââ…Öπë•πùΩ…¥à¯ÒÕ¡Ö∏Åç±ÖÕÃÙâïÂïâ…Ω‹à¯ƒÉ
+‹Å=I9%MQ%=8Å%9Q%QdΩÕ¡Ö∏¯Ò†Ã˘	…ÖπêÅ—°•ÃÅ›Ω…≠Õ¡ÖçîΩ†Ã¯Ò¿Åç±ÖÕÃÙâÕµÖ±∞à˘UÕîÅÖ∏ÅÖ¡¡…ΩŸïêÅ±ΩùºÅUI0ÅÖπêÅçΩ±Ω’…ÃÅ—°Ö–ÅÕ—ÖôòÅ›•±∞Å…ïçΩùπ•ÕîÅ›°ï∏Å—°ï‰ÅÕ•ù∏Å•∏∏Ω¿¯Ò±Öâï∞˘=…ùÖπ•ÕÖ—•Ω∏Å±ΩùºÅUI0Ò•π¡’–ÅπÖµîÙâ±ΩùΩAÖ—†àÅ—Â¡îÙâ’…∞àÅŸÖ±’îÙàëÌïÕçÖ¡ï!—µ∞°çΩπ—ï·–πΩ…ùÖπ•ÈÖ—•Ω∏π±ΩùΩ}¡Ö—†ÅÒÄàà•ÙàÅ¡±Öçï°Ω±ëï»Ùâ°——¡ÃËºΩï·Öµ¡±îπΩ…úΩΩ…ùÖπ•ÕÖ—•Ω∏µ±ΩùºπÕŸúà¯Ω±Öâï∞¯Òë•ÿÅç±ÖÕÃÙâçΩ±Ω’»µô•ï±ëÃà¯Ò±Öâï∞¯ÒÕ¡Ö∏˘A…•µÖ…‰ÅçΩ±Ω’»ΩÕ¡Ö∏¯Ò•π¡’–ÅπÖµîÙâ¡…•µÖ…ÂΩ±Ω»àÅ—Â¡îÙâçΩ±Ω»àÅŸÖ±’îÙàëÌïÕçÖ¡ï!—µ∞°Õï——•πùÃπ¡…•µÖ…ÂΩ±Ω»ÅÒÄàå¡à–¿‘ƒà•Ùà¯ÒÕµÖ±∞¯ëÌïÕçÖ¡ï!—µ∞°Õï——•πùÃπ¡…•µÖ…ÂΩ±Ω»ÅÒÄàå¡à–¿‘ƒà•ÙΩÕµÖ±∞¯Ω±Öâï∞¯Ò±Öâï∞¯ÒÕ¡Ö∏˘ççïπ–ÅçΩ±Ω’»ΩÕ¡Ö∏¯Ò•π¡’–ÅπÖµîÙâÖççïπ—Ω±Ω»àÅ—Â¡îÙâçΩ±Ω»àÅŸÖ±’îÙàëÌïÕçÖ¡ï!—µ∞°Õï——•πùÃπÖççïπ—Ω±Ω»ÅÒÄàå»¡à·Öêà•Ùà¯ÒÕµÖ±∞¯ëÌïÕçÖ¡ï!—µ∞°Õï——•πùÃπÖççïπ—Ω±Ω»ÅÒÄàå»¡à·Öêà•ÙΩÕµÖ±∞¯Ω±Öâï∞¯Ωë•ÿ¯Òâ’——Ω∏Åç±ÖÕÃÙââ—∏àÅ—Â¡îÙâÕ’âµ•–à˘MÖŸîÅÖπêÅçΩπ—•π’îΩâ’——Ω∏¯Ò¿Åç±ÖÕÃÙâÖ’—†µÕ—Ö—’ÃàÅ…Ω±îÙâÕ—Ö—’Ãà¯Ω¿¯ΩôΩ…¥˘ÄÏ(ÄÄÄÅ•òÄ°Õ—ï¿ÄÙÙÙÄâôÖç•±•—‰à§Å¡Öπï∞ÄÙÅÄÒÕïç—•Ω∏Åç±ÖÕÃÙâÖëµ•∏µôΩç’Ãµù…•êà¯ÒôΩ…¥Åç±ÖÕÃÙâçÖ…êÅÕï—’¿µôΩ…¥ÅôΩç’ÕïêµôΩ…¥àÅ•êÙâôÖç•±•—ÂΩ…¥à¯ÒÕ¡Ö∏Åç±ÖÕÃÙâïÂïâ…Ω‹à¯»É
+‹Å%1%Q%LΩÕ¡Ö∏¯Ò†Ã˘ëêÅÑÅçÖ…îÅ±ΩçÖ—•Ω∏Ω†Ã¯Ò¿Åç±ÖÕÃÙâÕµÖ±∞à˘ÅôÖç•±•—‰Å•ÃÅÑÅ¡°ÂÕ•çÖ∞Å°ΩÕ¡•—Ö∞ÅΩ»ÅçÖ…îÅÕ•—î∏Åï¡Ö…—µïπ—ÃÅÖ…îÅç…ïÖ—ïêÅ•πÕ•ëîÅ•–∏Ω¿¯Ò±Öâï∞˘Öç•±•—‰ÅπÖµîÒ•π¡’–ÅπÖµîÙâπÖµîàÅ¡±Öçï°Ω±ëï»ÙâIΩÂÖ∞ÅAï…—†Å!ΩÕ¡•—Ö∞àÅ…ï≈’•…ïê¯Ω±Öâï∞¯Ò±Öâï∞˘1ΩçÖ—•Ω∏Ò•π¡’–ÅπÖµîÙâ±ΩçÖ—•Ω∏àÅ¡±Öçï°Ω±ëï»ÙâAï…—†∞Å]ïÕ—ï…∏Å’Õ—…Ö±•Ñà¯Ω±Öâï∞¯Òâ’——Ω∏Åç±ÖÕÃÙââ—∏àÅ—Â¡îÙâÕ’âµ•–à˘ëêÅôÖç•±•—‰ÅÖπêÅçΩπ—•π’îΩâ’——Ω∏¯Ò¿Åç±ÖÕÃÙâÖ’—†µÕ—Ö—’ÃàÅ…Ω±îÙâÕ—Ö—’Ãà¯Ω¿¯ΩôΩ…¥¯ÒÕïç—•Ω∏Åç±ÖÕÃÙâçÖ…êÅÕï—’¿µ…ïù•Õ—ï»à¯ÒÕ¡Ö∏Åç±ÖÕÃÙâïÂïâ…Ω‹à˘UII9PÅ%1%Q%LΩÕ¡Ö∏¯Ò†Ã¯ëÌôÖç•±•—•ïÃπ±ïπù—°ÙÅçΩπô•ù’…ïêΩ†Ã¯ëÌôÖç•±•—•ïÃπµÖ¿°•—ï¥ÄÙ¯ÅÄÒÖ…—•ç±î¯Òë•ÿ¯ÒÕ—…Ωπú¯ëÌïÕçÖ¡ï!—µ∞°•—ï¥ππÖµî•ÙΩÕ—…Ωπú¯ÒÕµÖ±∞¯ëÌïÕçÖ¡ï!—µ∞°•—ï¥π±ΩçÖ—•Ω∏ÅÒÄâ1ΩçÖ—•Ω∏ÅπΩ–Å¡…ΩŸ•ëïêà•ÙΩÕµÖ±∞¯Ωë•ÿ¯ÒÕ¡Ö∏Åç±ÖÕÃÙâÕ—Ö—’Ãµç°•¿ÅÕ—Ö—’ÃµÕ’ççïÕÃà˘ç—•ŸîΩÕ¡Ö∏¯ΩÖ…—•ç±î˘Ä§π©Ω•∏†àà§ÅÒÄúÒ¿Åç±ÖÕÃÙâïµ¡—‰µÕ—Ö—îà˘9ºÅôÖç•±•—•ïÃÅ°ÖŸîÅâïï∏ÅÖëëïê∏Ω¿¯ùÙΩÕïç—•Ω∏¯ΩÕïç—•Ω∏˘ÄÏ(ÄÄÄÅ•òÄ°Õ—ï¿ÄÙÙÙÄâëï¡Ö…—µïπ–à§Å¡Öπï∞ÄÙÅÄÒÕïç—•Ω∏Åç±ÖÕÃÙâÖëµ•∏µôΩç’Ãµù…•êà¯ÒôΩ…¥Åç±ÖÕÃÙâçÖ…êÅÕï—’¿µôΩ…¥ÅôΩç’ÕïêµôΩ…¥àÅ•êÙâëï¡Ö…—µïπ—Ω…¥à¯ÒÕ¡Ö∏Åç±ÖÕÃÙâïÂïâ…Ω‹à¯ÃÉ
+‹ÅAIQ59QLΩÕ¡Ö∏¯Ò†Ã˘ëêÅÑÅëï¡Ö…—µïπ–Ω†Ã¯Ò¿Åç±ÖÕÃÙâÕµÖ±∞à˘ï¡Ö…—µïπ—ÃÅçΩπ—…Ω∞ÅçΩπ—ïπ–∞ÅÕ—ÖôòÅÖççïÕÃ∞Å—…Ö•πï…Ã∞Å…ï¡Ω…—•πúÅÖπêÅçΩµ¡ï—ïπç‰Å›Ω…≠ô±Ω›Ã∏Ω¿¯Ò±Öâï∞˘Öç•±•—‰ÒÕï±ïç–ÅπÖµîÙâôÖç•±•—Â%êàÅ…ï≈’•…ïê¯ÒΩ¡—•Ω∏ÅŸÖ±’îÙàà˘°ΩΩÕîÅôÖç•±•—‰ΩΩ¡—•Ω∏¯ëÌôÖç•±•—•ïÃπµÖ¿°•—ï¥ÄÙ¯ÅÄÒΩ¡—•Ω∏ÅŸÖ±’îÙàëÌïÕçÖ¡ï!—µ∞°•—ï¥π•ê•Ùà¯ëÌïÕçÖ¡ï!—µ∞°•—ï¥ππÖµî•ÙΩΩ¡—•Ω∏˘Ä§π©Ω•∏†àà•ÙΩÕï±ïç–¯Ω±Öâï∞¯Òë•ÿÅç±ÖÕÃÙâôΩ…¥µù…•êà¯Ò±Öâï∞˘ï¡Ö…—µïπ–ÅçΩëîÒ•π¡’–ÅπÖµîÙâçΩëîàÅµÖ·±ïπù—†ÙàÃ¿àÅ¡±Öçï°Ω±ëï»Ùâ=PàÅ…ï≈’•…ïê¯Ω±Öâï∞¯Ò±Öâï∞˘ï¡Ö…—µïπ–ÅπÖµîÒ•π¡’–ÅπÖµîÙâπÖµîàÅ¡±Öçï°Ω±ëï»Ùâ=¡ï…Ö—•πúÅQ°ïÖ—…îÄòÅIïçΩŸï…‰àÅ…ï≈’•…ïê¯Ω±Öâï∞¯Ωë•ÿ¯Ò±Öâï∞˘ïÕç…•¡—•Ω∏Ò—ï·—Ö…ïÑÅπÖµîÙâëïÕç…•¡—•Ω∏àÅ¡±Öçï°Ω±ëï»ÙâïÕç…•âîÅ—°îÅ—ïÖ¥ÅÖπêÅ•—ÃÅ—…Ö•π•πúÅ…ïÕ¡ΩπÕ•â•±•—•ïÃà¯Ω—ï·—Ö…ïÑ¯Ω±Öâï∞¯Òâ’——Ω∏Åç±ÖÕÃÙââ—∏àÅ—Â¡îÙâÕ’âµ•–àÄëÌôÖç•±•—•ïÃπ±ïπù—†Ä¸ÄààÄËÄâë•ÕÖâ±ïêâÙ˘ëêÅëï¡Ö…—µïπ–ÅÖπêÅçΩπ—•π’îΩâ’——Ω∏¯ëÌôÖç•±•—•ïÃπ±ïπù—†Ä¸ÄààÄËÄúÒ¿Åç±ÖÕÃÙâôΩ…¥µù’•ëÖπçîà˘ëêÅÑÅôÖç•±•—‰ÅâïôΩ…îÅç…ïÖ—•πúÅÑÅëï¡Ö…—µïπ–∏Ω¿¯ùÙÒ¿Åç±ÖÕÃÙâÖ’—†µÕ—Ö—’ÃàÅ…Ω±îÙâÕ—Ö—’Ãà¯Ω¿¯ΩôΩ…¥¯ÒÕïç—•Ω∏Åç±ÖÕÃÙâçÖ…êÅÕï—’¿µ…ïù•Õ—ï»à¯ÒÕ¡Ö∏Åç±ÖÕÃÙâïÂïâ…Ω‹à˘UII9PÅAIQ59QLΩÕ¡Ö∏¯Ò†Ã¯ëÌëï¡Ö…—µïπ—Ãπ±ïπù—°ÙÅçΩπô•ù’…ïêΩ†Ã¯ëÌëï¡Ö…—µïπ—ÃπµÖ¿°•—ï¥ÄÙ¯ÅÄÒÖ…—•ç±î¯Òë•ÿ¯ÒÕ—…Ωπú¯ëÌïÕçÖ¡ï!—µ∞°•—ï¥ππÖµî•ÙΩÕ—…Ωπú¯ÒÕµÖ±∞¯ëÌïÕçÖ¡ï!—µ∞°•—ï¥πçΩëîÅÒÄâï¡Ö…—µïπ–à•ÙΩÕµÖ±∞¯Ωë•ÿ¯ÒÕ¡Ö∏Åç±ÖÕÃÙâÕ—Ö—’Ãµç°•¿ÅÕ—Ö—’ÃµÕ’ççïÕÃà˘ç—•ŸîΩÕ¡Ö∏¯ΩÖ…—•ç±î˘Ä§π©Ω•∏†àà§ÅÒÄúÒ¿Åç±ÖÕÃÙâïµ¡—‰µÕ—Ö—îà˘9ºÅëï¡Ö…—µïπ—ÃÅ°ÖŸîÅâïï∏ÅÖëëïê∏Ω¿¯ùÙΩÕïç—•Ω∏¯ΩÕïç—•Ω∏˘ÄÏ(ÄÄÄÅ•òÄ°Õ—ï¿ÄÙÙÙÄâ¡ïΩ¡±îà§Å¡Öπï∞ÄÙÅ•πŸ•—ïΩ…¥Ï(ÄÄÄÅ•òÄ°Õ—ï¿ÄÙÙÙÄâÕ’¡¡Ω…–à§Å¡Öπï∞ÄÙÅÄÒôΩ…¥Åç±ÖÕÃÙâçÖ…êÅÕï—’¿µôΩ…¥ÅôΩç’ÕïêµôΩ…¥ÅÕ’¡¡Ω…–µôΩ…¥àÅ•êÙâÕ’¡¡Ω…—’—°Ω…•ÈÖ—•ΩπΩ…¥à¯ÒÕ¡Ö∏Åç±ÖÕÃÙâïÂïâ…Ω‹à¯‘É
+‹ÅMUAA=IPÅMLΩÕ¡Ö∏¯Ò†Ã˘’—°Ω…•ÕîÅÑÅŸï…•ô•ïêÅÕ’¡¡Ω…–Å…ï≈’ïÕ–Ω†Ã¯Ò¿Åç±ÖÕÃÙâÕµÖ±∞à˘UÕîÅ—°•ÃÅΩπ±‰Å›°ï∏ÅM≠•±±]Ö…êÅÕ’¡¡Ω…–Å°ÖÃÅÕ’¡¡±•ïêÅÑÅŸï…•ô•ïêÅÕ’¡¡Ω…–Å’Õï»Å%∏ÅççïÕÃÅ•ÃÅ—•µîµ±•µ•—ïêÅÖπêÅô’±±‰ÅÖ’ë•—ïê∏Ω¿¯Ò±Öâï∞˘Yï…•ô•ïêÅÕ’¡¡Ω…–Å’Õï»Å%Ò•π¡’–ÅπÖµîÙâÕ’¡¡Ω…—UÕï…%êàÅ—Â¡îÙâ—ï·–àÅÖ’—ΩçΩµ¡±ï—îÙâΩôòàÅ…ï≈’•…ïê¯Ω±Öâï∞¯Ò±Öâï∞˘IïÖÕΩ∏ÅôΩ»ÅÖççïÕÃÒ—ï·—Ö…ïÑÅπÖµîÙâ…ïÖÕΩ∏àÅµ•π±ïπù—†Ùàƒ¿àÅ¡±Öçï°Ω±ëï»ÙâïÕç…•âîÅ—°îÅÕ’¡¡Ω…–Å…ï≈’ïÕ–ÅÖπêÅÖ¡¡…ΩŸïêÅÕçΩ¡îàÅ…ï≈’•…ïê¯Ω—ï·—Ö…ïÑ¯Ω±Öâï∞¯Ò±Öâï∞Åç±ÖÕÃÙâ°Ω’…Ãµô•ï±êà˘ççïÕÃÅë’…Ö—•Ω∏Å•∏Å°Ω’…ÃÄÒ•π¡’–ÅπÖµîÙâ°Ω’…ÃàÅ—Â¡îÙâπ’µâï»àÅµ•∏ÙàƒàÅµÖ‡Ùà»–àÅŸÖ±’îÙàƒàÅ…ï≈’•…ïê¯Ω±Öâï∞¯Òâ’——Ω∏Åç±ÖÕÃÙââ—∏àÅ—Â¡îÙâÕ’âµ•–à˘’—°Ω…•ÕîÅ—•µîµ±•µ•—ïêÅÖççïÕÃΩâ’——Ω∏¯Ò¿Åç±ÖÕÃÙâ—…’Õ–µπΩ—îà˘Q°îÅÕ’¡¡Ω…–Å’Õï»Åµ’Õ–ÅÕï¡Ö…Ö—ï±‰ÅÖç—•ŸÖ—îÅ—°îÅÕïÕÕ•Ω∏∏ÅŸï…‰ÅÖççïÕÃÅïŸïπ–Å•ÃÅ›…•——ï∏Å—ºÅ•µµ’—Öâ±îÅÖ’ë•–Å°•Õ—Ω…‰∏Ω¿¯Ò¿Åç±ÖÕÃÙâÖ’—†µÕ—Ö—’ÃàÅ…Ω±îÙâÕ—Ö—’Ãà¯Ω¿¯ΩôΩ…¥˘ÄÏ(ÄÄÄÅçΩπ—ïπ–ÄÙÅÄëÌ›Ω…≠Õ¡Öçï!ï…º†â5%8à∞Äâ=…ùÖπ•ÕÖ—•Ω∏ÅÕï——•πùÃà∞ÄâΩµ¡±ï—îÅ—°îÅù’•ëïêÅÕï—’¿ÅΩπçî∞Å—°ï∏Å…ï—’…∏Å°ï…îÅΩπ±‰Å›°ï∏ÅÂΩ’»ÅΩ…ùÖπ•ÕÖ—•Ω∏ÅÕ—…’ç—’…îÅΩ»ÅÖççïÕÃÅç°ÖπùïÃ∏à•ÙëÌÕ—ï¡¡ï…ÙÒë•ÿÅç±ÖÕÃÙâÖëµ•∏µôΩç’Ãà¯ëÌ¡Öπï±ÙΩë•ÿ˘ÄÏ(ÄÅÙ((ÄÅ…ïπëï…M°ï±∞°çΩπ—ïπ–§Ï(ÄÅâ•πë’—°ïπ—•çÖ—ïë]Ω…≠Õ¡Öçî°çΩπ—ï·–§Ï(ÄÅëΩç’µïπ–π≈’ï…ÂMï±ïç—Ω…±∞†àπ›Ω…≠Õ¡Öçîµ…Ω’—îà§πôΩ…Öç†°â’——Ω∏ÄÙ¯Åâ’——Ω∏πÖëëŸïπ—1•Õ—ïπï»†âç±•ç¨à∞Ä†§ÄÙ¯ÅÏÅÕ—Ö—îπÖç—•Ÿï]Ω…≠Õ¡ÖçïY•ï‹ÄÙÅâ’——Ω∏πëÖ—ÖÕï–πŸ•ï‹ÏÅ•òÄ°â’——Ω∏πëÖ—ÖÕï–πÕï—’¡M—ï¿§ÅÕ—Ö—îπΩ…ùÖπ•ÈÖ—•ΩπMï—’¡M—ï¿ÄÙÅâ’——Ω∏πëÖ—ÖÕï–πÕï—’¡M—ï¿ÏÅÕÖŸïM—Ö—î†§ÏÅ…ïπëï…’—°ïπ—•çÖ—ïë]Ω…≠Õ¡Öçî†§ÏÅÙ§§Ï(ÄÅëΩç’µïπ–π≈’ï…ÂMï±ïç—Ω…±∞†âmëÖ—ÑµÕï—’¿µÕ—ï¡tà§πôΩ…Öç†°â’——Ω∏ÄÙ¯Åâ’——Ω∏πÖëëŸïπ—1•Õ—ïπï»†âç±•ç¨à∞Ä†§ÄÙ¯ÅÏÅÕ—Ö—îπÖç—•Ÿï]Ω…≠Õ¡ÖçïY•ï‹ÄÙÄâÖëµ•∏àÏÅÕ—Ö—îπΩ…ùÖπ•ÈÖ—•ΩπMï—’¡M—ï¿ÄÙÅâ’——Ω∏πëÖ—ÖÕï–πÕï—’¡M—ï¿ÏÅÕÖŸïM—Ö—î†§ÏÅ…ïπëï…’—°ïπ—•çÖ—ïë]Ω…≠Õ¡Öçî†§ÏÅÙ§§Ï(ÄÅâ•πëMï—’¡Ω…¥†ââ…Öπë•πùΩ…¥à∞ÅÖÕÂπåÅŸÖ±’ïÃÄÙ¯ÅÏÅÖ›Ö•–ÅÖ’—°Mï…Ÿ•çîπëÖ—ÖâÖÕîπ’¡ëÖ—ï=…ùÖπ•ÈÖ—•Ωπ	…Öπë•πú°çΩπ—ï·–∞ÅÏÅ±ΩùΩAÖ—†ÈŸÖ±’ïÃπùï–†â±ΩùΩAÖ—†à§∞Å¡…•µÖ…ÂΩ±Ω»ÈŸÖ±’ïÃπùï–†â¡…•µÖ…ÂΩ±Ω»à§∞ÅÖççïπ—Ω±Ω»ÈŸÖ±’ïÃπùï–†âÖççïπ—Ω±Ω»à§ÅÙ§ÏÅÕ—Ö—îπΩ…ùÖπ•ÈÖ—•ΩπMï—’¡M—ï¿ÄÙÄâôÖç•±•—‰àÏÅÕÖŸïM—Ö—î†§ÏÅÙ§Ï(ÄÅâ•πëMï—’¡Ω…¥†âôÖç•±•—ÂΩ…¥à∞ÅÖÕÂπåÅŸÖ±’ïÃÄÙ¯ÅÏÅÖ›Ö•–ÅÖ’—°Mï…Ÿ•çîπëÖ—ÖâÖÕîπç…ïÖ—ïÖç•±•—‰°çΩπ—ï·–∞ÅÏÅπÖµîÈŸÖ±’ïÃπùï–†âπÖµîà§∞Å±ΩçÖ—•Ω∏ÈŸÖ±’ïÃπùï–†â±ΩçÖ—•Ω∏à§ÅÙ§ÏÅÕ—Ö—îπΩ…ùÖπ•ÈÖ—•ΩπMï—’¡M—ï¿ÄÙÄâëï¡Ö…—µïπ–àÏÅÕÖŸïM—Ö—î†§ÏÅÙ§Ï(ÄÅâ•πëMï—’¡Ω…¥†âëï¡Ö…—µïπ—Ω…¥à∞ÅÖÕÂπåÅŸÖ±’ïÃÄÙ¯ÅÏÅÖ›Ö•–ÅÖ’—°Mï…Ÿ•çîπëÖ—ÖâÖÕîπç…ïÖ—ïï¡Ö…—µïπ–°çΩπ—ï·–∞ÅÏÅôÖç•±•—Â%êÈŸÖ±’ïÃπùï–†âôÖç•±•—Â%êà§∞ÅçΩëîÈŸÖ±’ïÃπùï–†âçΩëîà§∞ÅπÖµîÈŸÖ±’ïÃπùï–†âπÖµîà§∞ÅëïÕç…•¡—•Ω∏ÈŸÖ±’ïÃπùï–†âëïÕç…•¡—•Ω∏à§ÅÙ§ÏÅÕ—Ö—îπΩ…ùÖπ•ÈÖ—•ΩπMï—’¡M—ï¿ÄÙÄâ¡ïΩ¡±îàÏÅÕÖŸïM—Ö—î†§ÏÅÙ§Ï(ÄÅâ•πëMï—’¡Ω…¥†âΩ…ùÖπ•ÈÖ—•Ωπ%πŸ•—ïΩ…¥à∞ÅÖÕÂπåÅŸÖ±’ïÃÄÙ¯ÅÏÅÖ›Ö•–ÅÖ’—°Mï…Ÿ•çîπëÖ—ÖâÖÕîπ•πŸ•—ï=…ùÖπ•ÈÖ—•Ωπ5ïµâï»°çΩπ—ï·–∞ÅÏÅô’±±9ÖµîÈŸÖ±’ïÃπùï–†âô’±±9Öµîà§∞Åïµ¡±ΩÂïï%êÈŸÖ±’ïÃπùï–†âïµ¡±ΩÂïï%êà§∞ÅïµÖ•∞ÈŸÖ±’ïÃπùï–†âïµÖ•∞à§∞Å…Ω±îÈŸÖ±’ïÃπùï–†â…Ω±îà§∞ÅôÖç•±•—Â%êÈŸÖ±’ïÃπùï–†âôÖç•±•—Â%êà§∞Åëï¡Ö…—µïπ—%êÈŸÖ±’ïÃπùï–†âëï¡Ö…—µïπ—%êà§ÅÙ§ÏÅÕ—Ö—îπÖç—•Ÿï]Ω…≠Õ¡ÖçïY•ï‹ÄÙÄâ¡ïΩ¡±îàÏÅÕÖŸïM—Ö—î†§ÏÅÙ§Ï(ÄÅëΩç’µïπ–π≈’ï…ÂMï±ïç—Ω…±∞†àπµÖπÖùîµ•πŸ•—Ö—•Ω∏à§πôΩ…Öç†°â’——Ω∏ÄÙ¯Åâ’——Ω∏πÖëëŸïπ—1•Õ—ïπï»†âç±•ç¨à∞ÅÖÕÂπåÄ†§ÄÙ¯ÅÏ(ÄÄÄÅçΩπÕ–ÅÕ—Ö—’ÃÄÙÅëΩç’µïπ–πùï—±ïµïπ—	Â%ê†â•πŸ•—Ö—•Ωπç—•ΩπM—Ö—’Ãà§Ï(ÄÄÄÅ•òÄ°â’——Ω∏πëÖ—ÖÕï–π•πŸ•—Ö—•Ωπç—•Ω∏ÄÙÙÙÄâ…ïŸΩ≠îàÄòòÄÖçΩπô•…¥†âIïŸΩ≠îÅ—°•ÃÅ•πŸ•—Ö—•Ω∏¸ÅQ°îÅ’Õï»Å›•±∞ÅπΩ–ÅâîÅÖâ±îÅ—ºÅïπ—ï»Å—°•ÃÅΩ…ùÖπ•ÕÖ—•Ω∏∏à§§Å…ï—’…∏Ï(ÄÄÄÅâ’——Ω∏πë•ÕÖâ±ïêÄÙÅ—…’îÏÅÕ—Ö—’Ãπ—ï·—Ωπ—ïπ–ÄÙÅÄëÌâ’——Ω∏πëÖ—ÖÕï–π•πŸ•—Ö—•Ωπç—•Ω∏ÄÙÙÙÄâ…ïÕïπêàÄ¸ÄâIïÕïπë•πúàÄËÄâIïŸΩ≠•πúâÙÅ•πŸ•—Ö—•ΩªäôÄÏ(ÄÄÄÅ—…‰ÅÏ(ÄÄÄÄÄÅÖ›Ö•–ÅÖ’—°Mï…Ÿ•çîπëÖ—ÖâÖÕîπµÖπÖùï=…ùÖπ•ÈÖ—•Ωπ%πŸ•—Ö—•Ω∏°â’——Ω∏πëÖ—ÖÕï–π•πŸ•—Ö—•Ωπ%ê∞Åâ’——Ω∏πëÖ—ÖÕï–π•πŸ•—Ö—•Ωπç—•Ω∏§Ï(ÄÄÄÄÄÅÖ’—°ïπ—•çÖ—ïëΩπ—ï·–ÄÙÅÖ›Ö•–ÅÖ’—°Mï…Ÿ•çîπ…ïÕ—Ω…î°Õ—Ö—îπÖç—•Ÿï=…ùÖπ•ÈÖ—•Ωπ%ê§ÏÅ…ïπëï…’—°ïπ—•çÖ—ïë]Ω…≠Õ¡Öçî†§Ï(ÄÄÄÅÙÅçÖ—ç†ÅÏÅÕ—Ö—’Ãπ—ï·—Ωπ—ïπ–ÄÙÄâQ°îÅ•πŸ•—Ö—•Ω∏ÅÖç—•Ω∏ÅçΩ’±êÅπΩ–ÅâîÅçΩµ¡±ï—ïê∏àÏÅâ’——Ω∏πë•ÕÖâ±ïêÄÙÅôÖ±ÕîÏÅÙ(ÄÅÙ§§Ï(ÄÅâ•πëMï—’¡Ω…¥†âÕ’¡¡Ω…—’—°Ω…•ÈÖ—•ΩπΩ…¥à∞ÅŸÖ±’ïÃÄÙ¯ÅÖ’—°Mï…Ÿ•çîπëÖ—ÖâÖÕîπÖ’—°Ω…•ÈïM’¡¡Ω…—ççïÕÃ°çΩπ—ï·–∞ÅÏÅÕ’¡¡Ω…—UÕï…%êÈŸÖ±’ïÃπùï–†âÕ’¡¡Ω…—UÕï…%êà§∞Å…ïÖÕΩ∏ÈŸÖ±’ïÃπùï–†â…ïÖÕΩ∏à§∞Å°Ω’…ÃÈŸÖ±’ïÃπùï–†â°Ω’…Ãà§ÅÙ§§Ï)Ù()ô’πç—•Ω∏Åâ•πëMï—’¡Ω…¥°•ê∞ÅÕ’âµ•–§ÅÏ(ÄÅëΩç’µïπ–πùï—±ïµïπ—	Â%ê°•ê§¸πÖëëŸïπ—1•Õ—ïπï»†âÕ’âµ•–à∞ÅÖÕÂπåÅïŸïπ–ÄÙ¯ÅÏÅïŸïπ–π¡…ïŸïπ—ïôÖ’±–†§ÏÅçΩπÕ–ÅôΩ…¥ÄÙÅïŸïπ–πç’……ïπ—QÖ…ùï–∞ÅÕ—Ö—’ÃÄÙÅôΩ…¥π≈’ï…ÂMï±ïç—Ω»†àπÖ’—†µÕ—Ö—’Ãà§ÏÅÕ—Ö—’Ãπ—ï·—Ωπ—ïπ–ÄÙÄâMÖŸ•πüäòàÏÅ—…‰ÅÏÅÖ›Ö•–ÅÕ’âµ•–°πï‹ÅΩ…µÖ—Ñ°ôΩ…¥§§ÏÅÖ’—°ïπ—•çÖ—ïëΩπ—ï·–ÄÙÅÖ›Ö•–ÅÖ’—°Mï…Ÿ•çîπ…ïÕ—Ω…î°Õ—Ö—îπÖç—•Ÿï=…ùÖπ•ÈÖ—•Ωπ%ê§ÏÅ…ïπëï…’—°ïπ—•çÖ—ïë]Ω…≠Õ¡Öçî†§ÏÅÙÅçÖ—ç†ÅÏÅÕ—Ö—’Ãπ—ï·—Ωπ—ïπ–ÄÙÄâQ°•ÃÅç°ÖπùîÅçΩ’±êÅπΩ–ÅâîÅÕÖŸïê∏Å°ïç¨ÅÂΩ’»ÅÖ’—°Ω…•ÕïêÅÕçΩ¡îÅÖπêÅ—°îÅïπ—ï…ïêÅëï—Ö•±Ã∏àÏÅÙÅÙ§Ï)Ù()ô’πç—•Ω∏ÅëïµΩ]Ω…≠ô±Ω›!—µ∞°Õïç—Ω»ÄÙÅëïµΩMïç—Ω»†§∞Å©Ω’…πï‰ÄÙÅëïµΩ)Ω’…πï‰†§§ÅÏ(ÄÅ…ï—’…∏ÅÄÒÕïç—•Ω∏Åç±ÖÕÃÙâçÖ…êÅëïµºµ›Ω…≠ô±Ω‹µçÖ…êà¯Òë•ÿÅç±ÖÕÃÙâÕïç—•Ω∏µ°ïÖë•πúà¯Òë•ÿ¯ÒÕ¡Ö∏Åç±ÖÕÃÙâïÂïâ…Ω‹à˘=5AQ9dÅ)=UI9dΩÕ¡Ö∏¯Ò†Ã˘1ïÖ…∏ÉäHÅYÖ±•ëÖ—îÉäHÅ=âÕï…ŸîÉäHÅ¡¡…ΩŸîÉäHÅIïπï‹Ω†Ã¯Ωë•ÿ¯ÒÕ¡Ö∏Åç±ÖÕÃÙâÕ—Ö—’Ãµç°•¿ÄëÌ©Ω’…πï‰π…ïπï›Ö±Mç°ïë’±ïêÄ¸ÄâÕ—Ö—’ÃµÕ’ççïÕÃàÄËÄâÕ—Ö—’Ãµ›Ö…π•πúâÙà¯ëÌ©Ω’…πï‰π…ïπï›Ö±Mç°ïë’±ïêÄ¸ÄâÂç±îÅçΩµ¡±ï—îàÄËÄâ%∏Å¡…Ωù…ïÕÃâÙΩÕ¡Ö∏¯Ωë•ÿ¯ÒΩ∞Åç±ÖÕÃÙâëïµºµ›Ω…≠ô±Ω‹µÕ—ï¡Ãà¯ëÌëïµΩM—ÖùïM—Ö—’Ã°©Ω’…πï‰∞ÅÕïç—Ω»§πµÖ¿†°m±Öâï∞∞ÅëΩπî∞Åëï—Ö•±t∞Å•πëï‡§ÄÙ¯ÅÄÒ±§Åç±ÖÕÃÙàëÌëΩπîÄ¸Äâ•ÃµçΩµ¡±ï—îàÄËÄàâÙà¯ÒÕ¡Ö∏¯ëÌëΩπîÄ¸ÄãärLàÄËÅ•πëï‡Ä¨Ä≈ÙΩÕ¡Ö∏¯Òë•ÿ¯ÒÕ—…Ωπú¯ëÌ±Öâï±ÙΩÕ—…Ωπú¯ÒÕµÖ±∞¯ëÌïÕçÖ¡ï!—µ∞°ëï—Ö•∞•ÙΩÕµÖ±∞¯Ωë•ÿ¯Ω±§˘Ä§π©Ω•∏†àà•ÙΩΩ∞¯ΩÕïç—•Ω∏˘ÄÏ)Ù()ô’πç—•Ω∏ÅëïµΩ]Ω…≠Õ¡Öçï!ï…º°ïÂïâ…Ω‹∞Å—•—±î∞ÅëïÕç…•¡—•Ω∏∞ÅÕïç—Ω»ÄÙÅëïµΩMïç—Ω»†§§ÅÏ(ÄÅ…ï—’…∏ÅÄÒÕïç—•Ω∏Åç±ÖÕÃÙâëÖÕ°âΩÖ…êµ°ï…ºÅëïµºµ›Ω…≠Õ¡Öçîµ°ï…ºà¯Òë•ÿÅç±ÖÕÃÙâëÖÕ°âΩÖ…êµ›ï±çΩµîà¯ÒÕ¡Ö∏Åç±ÖÕÃÙâïÂïâ…Ω‹à¯ëÌïÕçÖ¡ï!—µ∞°ïÂïâ…Ω‹•ÙΩÕ¡Ö∏¯Ò†»¯ëÌïÕçÖ¡ï!—µ∞°—•—±î•ÙΩ†»¯Ò¿¯ëÌïÕçÖ¡ï!—µ∞°ëïÕç…•¡—•Ω∏•ÙΩ¿¯Òë•ÿÅç±ÖÕÃÙâëïµºµçΩπ—ï·–à¯ÒÕ¡Ö∏¯ëÌïÕçÖ¡ï!—µ∞°Õïç—Ω»πΩ…ùÖπ•ÈÖ—•Ω∏•ÙΩÕ¡Ö∏¯ÒÕ¡Ö∏¯ëÌïÕçÖ¡ï!—µ∞°Õïç—Ω»πôÖç•±•—‰•ÙΩÕ¡Ö∏¯ÒÕ¡Ö∏¯ëÌïÕçÖ¡ï!—µ∞°ëï¡Ö…—µïπ—9Öµî°Õ—Ö—îπÕï±ïç—ïëï¡Ö…—µïπ–§•ÙΩÕ¡Ö∏¯Ωë•ÿ¯Ωë•ÿ¯Òë•ÿÅç±ÖÕÃÙâëïµºµÕïÕÕ•Ω∏µçΩπ—…Ω±Ãà¯ÒÕ¡Ö∏Åç±ÖÕÃÙâëïµºµµΩëîµâÖëùîà˘U%Å5<É
+‹ÅM5A1ÅQΩÕ¡Ö∏¯Òâ’——Ω∏Åç±ÖÕÃÙâ±•π¨µâ’——Ω∏àÅëÖ—ÑµëïµºµÖç—•Ω∏Ùâ…ïÕï–à˘IïÕï–ÅïµºΩâ’——Ω∏¯Òâ’——Ω∏Åç±ÖÕÃÙâ±•π¨µâ’——Ω∏àÅëÖ—ÑµëïµºµÖç—•Ω∏Ùâç°Öπùîà˘°ÖπùîÅïµºÅ]Ω…≠Õ¡ÖçîΩâ’——Ω∏¯Òâ’——Ω∏Åç±ÖÕÃÙâ±•π¨µâ’——Ω∏àÅëÖ—ÑµëïµºµÖç—•Ω∏Ùâï·•–à˘·•–ÅïµºΩâ’——Ω∏¯Ωë•ÿ¯ΩÕïç—•Ω∏˘ÄÏ)Ù()ô’πç—•Ω∏Å…ïπëï…ïµΩ]Ω…≠Õ¡Öçî†§ÅÏ(ÄÅ•òÄ°Õ—Ö—îπç’……ïπ—UÕï»¸πµΩëîÄÑÙÙÄâëïµºà§Å…ï—’…∏Å…Ω’—ïM•ùπïë%πUÕï»†§Ï(ÄÅçΩπÕ–ÅÕïç—Ω»ÄÙÅëïµΩMïç—Ω»°Õ—Ö—îπç’……ïπ—UÕï»πÕïç—Ω»§Ï(ÄÅ•òÄ†ÖÕïç—Ω»§Å…ï—’…∏Å…ïπëï…1Ωù•∏†§Ï(ÄÅÕ—Ö—îπëïµΩMïç—Ω»ÄÙÅÕïç—Ω»π•êÏ(ÄÅÕ—Ö—îπç’……ïπ—UÕï»πÕïç—Ω»ÄÙÅÕïç—Ω»π•êÏ(ÄÅ•òÄ†ÖÕïç—Ω»πëï¡Ö…—µïπ—ÃπÕΩµî°•—ï¥ÄÙ¯Å•—ï¥π•êÄÙÙÙÅÕ—Ö—îπÕï±ïç—ïëï¡Ö…—µïπ–§§ÅÕ—Ö—îπÕï±ïç—ïëï¡Ö…—µïπ–ÄÙÅÕïç—Ω»πëï¡Ö…—µïπ—Õl¡tπ•êÏ(ÄÅçΩπÕ–ÅÖ±±Ω›ïëY•ï›ÃÄÙÅëïµΩ9ÖŸ•ùÖ—•Ω∏°Õ—Ö—îπç’……ïπ—UÕï»π…Ω±î§πµÖ¿†°m•ët§ÄÙ¯Å•ê§Ï(ÄÅ•òÄ†ÖÖ±±Ω›ïëY•ï›Ãπ•πç±’ëïÃ°Õ—Ö—îπÖç—•Ÿï]Ω…≠Õ¡ÖçïY•ï‹§§ÅÕ—Ö—îπÖç—•Ÿï]Ω…≠Õ¡ÖçïY•ï‹ÄÙÄâ°ΩµîàÏ(ÄÅÕÖŸïM—Ö—î†§Ï(ÄÅçΩπÕ–Å≠•πêÄÙÅëïµΩIΩ±ï-•πê°Õ—Ö—îπç’……ïπ—UÕï»π…Ω±î∞ÅÕïç—Ω»§Ï(ÄÅ•òÄ°≠•πêÄÙÙÙÄâµÖπÖùïµïπ–à§Å…ï—’…∏Å…ïπëï…ïµΩ5ÖπÖùïµïπ—]Ω…≠Õ¡Öçî°Õïç—Ω»§Ï(ÄÅ•òÄ°≠•πêÄÙÙÙÄâ—…Ö•πï»à§Å…ï—’…∏Å…ïπëï…ïµΩQ…Ö•πï…]Ω…≠Õ¡Öçî°Õïç—Ω»§Ï(ÄÅ…ïπëï…ïµΩ]Ω…≠ï…]Ω…≠Õ¡Öçî°Õïç—Ω»§Ï)Ù()ô’πç—•Ω∏Å…ïπëï…ïµΩ]Ω…≠ï…]Ω…≠Õ¡Öçî°Õïç—Ω»§ÅÏ(ÄÅçΩπÕ–Å©Ω’…πï‰ÄÙÅëïµΩ)Ω’…πï‰°Õïç—Ω»π•ê§∞ÅŸ•ï‹ÄÙÅÕ—Ö—îπÖç—•Ÿï]Ω…≠Õ¡ÖçïY•ï‹ÅÒÄâ°ΩµîàÏ(ÄÅçΩπÕ–Å…Ω±îÄÙÅÕïç—Ω»π…Ω±ïÃπô•πê°•—ï¥ÄÙ¯Å•—ï¥πŸÖ±’îÄÙÙÙÅÕ—Ö—îπç’……ïπ—UÕï»π…Ω±î§¸π±Öâï∞ÅÒÅ›Ω…≠¡±ÖçïIΩ±ï1Öâï∞°Õ—Ö—îπç’……ïπ—UÕï»π…Ω±î§Ï(ÄÅçΩπÕ–Å±ïÖ…πïêÄÙÅ©Ω’…πï‰π±ïÖ…πïë5Ωë’±ïÃπ±ïπù—†Ä¯ÙÅÕïç—Ω»π¡Ö—°›Ö‰πµΩë’±ïÃπ±ïπù—†Ï(ÄÅ±ï–ÅçΩπ—ïπ–Ï(ÄÅ•òÄ°Ÿ•ï‹ÄÙÙÙÄâ—…Ö•π•πúà§ÅÏ(ÄÄÄÅçΩπÕ–ÅµΩë’±ïÃÄÙÅÕïç—Ω»π¡Ö—°›Ö‰πµΩë’±ïÃπµÖ¿†°µΩë’±î∞Å•πëï‡§ÄÙ¯ÅÏÅçΩπÕ–ÅçΩµ¡±ï—îÄÙÅ©Ω’…πï‰π±ïÖ…πïë5Ωë’±ïÃπ•πç±’ëïÃ°µΩë’±îπ•ê§ÏÅ…ï—’…∏ÅÄÒÖ…—•ç±îÅç±ÖÕÃÙâçÖ…êÅëïµºµµΩë’±îµçÖ…êà¯Òë•ÿÅç±ÖÕÃÙâµΩë’±îµçÖ…êµ°ïÖêà¯ÒÕ¡Ö∏Åç±ÖÕÃÙâµΩë’±îµπ’µâï»à¯ëÌM—…•πú°•πëï‡Ä¨Äƒ§π¡ÖëM—Ö…–†»∞Äà¿à•ÙΩÕ¡Ö∏¯ÒÕ¡Ö∏Åç±ÖÕÃÙâµΩë’±îµë’…Ö—•Ω∏à¯ëÌïÕçÖ¡ï!—µ∞°µΩë’±îπë’…Ö—•Ω∏•ÙΩÕ¡Ö∏¯Ωë•ÿ¯ÒÕ¡Ö∏Åç±ÖÕÃÙâïÂïâ…Ω‹à¯ëÌïÕçÖ¡ï!—µ∞°µΩë’±îπ—Â¡î•ÙΩÕ¡Ö∏¯Ò†Ã¯ëÌïÕçÖ¡ï!—µ∞°µΩë’±îπ—•—±î•ÙΩ†Ã¯Ò¿˘Q°•ÃÅÕÖµ¡±îÅµΩë’±îÅëïµΩπÕ—…Ö—ïÃÅ—°îÅÖπŸÖÃµÕ—Â±îÅÕï≈’ïπçî∏Å1ΩçÖ∞ÅÖ¡¡…ΩŸïêÅçΩπ—ïπ–ÅÖ±›ÖÂÃÅ…ï¡±ÖçïÃÅëïµΩπÕ—…Ö—•Ω∏Å—ï·–∏Ω¿¯Òë•ÿÅç±ÖÕÃÙâµΩë’±îµµï—Ñà¯ÒÕ¡Ö∏Åç±ÖÕÃÙââÖëùîÄëÌçΩµ¡±ï—îÄ¸ÄââÖëùîµçΩµ¡±ï—îàÄËÄââÖëùîµπΩ–µÕ—Ö…—ïêâÙà¯ëÌçΩµ¡±ï—îÄ¸Äâ1ïÖ…πïêàÄËÄâ9Ω–ÅÕ—Ö…—ïêâÙΩÕ¡Ö∏¯Òâ’——Ω∏Åç±ÖÕÃÙââ—∏ÄëÌçΩµ¡±ï—îÄ¸Äââ—∏µÕïçΩπëÖ…‰àÄËÄàâÙÅçΩµ¡±ï—îµëïµºµµΩë’±îàÅëÖ—ÑµµΩë’±îÙàëÌïÕçÖ¡ï!—µ∞°µΩë’±îπ•ê•ÙàÄëÌçΩµ¡±ï—îÄ¸Äâë•ÕÖâ±ïêàÄËÄàâÙ¯ëÌçΩµ¡±ï—îÄ¸ÄâΩµ¡±ï—îàÄËÄâ5Ö…¨Å±ïÖ…π•πúÅçΩµ¡±ï—îâÙΩâ’——Ω∏¯Ωë•ÿ¯ΩÖ…—•ç±î˘ÄÏÅÙ§π©Ω•∏†àà§Ï(ÄÄÄÅçΩπ—ïπ–ÄÙÅÄëÌëïµΩ]Ω…≠Õ¡Öçï!ï…º†âe=UHÅ1I9%9à∞ÅÕïç—Ω»π¡Ö—°›Ö‰π—•—±î∞ÅÄëÌ…Ω±ïÙÅ¡Ö—°›Ö‰É
+‹ÄëÌÕïç—Ω»π¡Ö—°›Ö‰πëïÕç…•¡—•ΩπıÄ∞ÅÕïç—Ω»•ÙÒÕïç—•Ω∏Åç±ÖÕÃÙâëïµºµÖç—•Ω∏µâÖ»à¯Òë•ÿ¯ÒÕ—…Ωπú¯ëÌ©Ω’…πï‰π±ïÖ…πïë5Ωë’±ïÃπ±ïπù—°ÙºëÌÕïç—Ω»π¡Ö—°›Ö‰πµΩë’±ïÃπ±ïπù—°ÙÅµΩë’±ïÃÅ±ïÖ…πïêΩÕ—…Ωπú¯ÒÕµÖ±∞˘Ωµ¡±ï—îÅ±ïÖ…π•πúÅâïôΩ…îÅ≠πΩ›±ïëùîÅŸÖ±•ëÖ—•Ω∏∏ΩÕµÖ±∞¯Ωë•ÿ¯Òâ’——Ω∏Åç±ÖÕÃÙââ—∏àÅ•êÙâçΩµ¡±ï—ï±±1ïÖ…π•πúàÄëÌ±ïÖ…πïêÄ¸Äâë•ÕÖâ±ïêàÄËÄàâÙ˘Ωµ¡±ï—îÅ…ï≈’•…ïêÅ±ïÖ…π•πúΩâ’——Ω∏¯ΩÕïç—•Ω∏¯Òë•ÿÅç±ÖÕÃÙâù…•êÅù…•ê¥»ÅëïµºµµΩë’±îµù…•êà¯ëÌµΩë’±ïÕÙΩë•ÿ¯ÒÕïç—•Ω∏Åç±ÖÕÃÙâçÖ…êÅëïµºµŸÖ±•ëÖ—•Ω∏µçÖ…êà¯ÒÕ¡Ö∏Åç±ÖÕÃÙâïÂïâ…Ω‹à˘Y1%QΩÕ¡Ö∏¯Ò†Ã˘-πΩ›±ïëùîÅç°ïç¨Ω†Ã¯Ò¿˘Ωπô•…¥Å’πëï…Õ—Öπë•πúÅâïôΩ…îÅ—°îÅ¡Ö—°›Ö‰ÅçÖ∏ÅµΩŸîÅ—ºÅ¡…Öç—•çÖ∞ÅΩâÕï…ŸÖ—•Ω∏∏Ω¿¯Òâ’——Ω∏Åç±ÖÕÃÙââ—∏àÅ•êÙâŸÖ±•ëÖ—ïïµΩ-πΩ›±ïëùîàÄëÏÖ±ïÖ…πïêÅÒÅ©Ω’…πï‰πŸÖ±•ëÖ—ïêÄ¸Äâë•ÕÖâ±ïêàÄËÄàâÙ¯ëÌ©Ω’…πï‰πŸÖ±•ëÖ—ïêÄ¸ÅÅAÖÕÕïêÉ
+‹ÄëÌ©Ω’…πï‰πÕçΩ…ïÙïÄÄËÄâΩµ¡±ï—îÅ≠πΩ›±ïëùîÅç°ïç¨âÙΩâ’——Ω∏¯ëÏÖ±ïÖ…πïêÄ¸ÄúÒ¿Åç±ÖÕÃÙâôΩ…¥µù’•ëÖπçîà˘•π•Õ†ÅïŸï…‰Å…ï≈’•…ïêÅµΩë’±îÅô•…Õ–∏Ω¿¯úÄËÄàâÙΩÕïç—•Ω∏¯ëÌÕïç—Ω»π•êÄÙÙÙÄâ°ΩÕ¡•—Ö∞àÄòòÅÕ—Ö—îπç’……ïπ—UÕï»π…Ω±îÄÙÙÙÄâ¡çÑàÄ¸ÄúÒÕïç—•Ω∏Åç±ÖÕÃÙâçÖ…êÅ°ΩÕ¡•—Ö∞µëï—Ö•∞µ±•π¨à¯ÒÕ¡Ö∏Åç±ÖÕÃÙâïÂïâ…Ω‹à˘!=MA%Q0ÅQ%0ΩÕ¡Ö∏¯Ò†Ã˘·•Õ—•πúÅ=¡ï…Ö—•πúÅQ°ïÖ—…îÅ¡Ö—°›Ö‰Ω†Ã¯Ò¿˘Q°îÅΩ…•ù•πÖ∞ÅÕ•‡Å!ΩÕ¡•—Ö∞ÅµΩë’±ïÃ∞Å±ïÕÕΩπÃÅÖπêÅ≈’•ÈÈïÃÅ…ïµÖ•∏ÅÖŸÖ•±Öâ±î∏Ω¿¯Òâ’——Ω∏Åç±ÖÕÃÙââ—∏Åâ—∏µÕïçΩπëÖ…‰àÅ•êÙâΩ¡ïπï—Ö•±ïë!ΩÕ¡•—Ö±AÖ—°›Ö‰à˘=¡ï∏Åëï—Ö•±ïêÅ¡Ö—°›Ö‰Ωâ’——Ω∏¯ΩÕïç—•Ω∏¯úÄËÄàâÙëÌëïµΩ]Ω…≠ô±Ω›!—µ∞°Õïç—Ω»∞Å©Ω’…πï‰•ıÄÏ(ÄÅÙÅï±ÕîÅÏ(ÄÄÄÅçΩπ—ïπ–ÄÙÅÄëÌëïµΩ]Ω…≠Õ¡Öçï!ï…º†â]=I-HÅ!=5à∞ÅÅ]ï±çΩµî∞ÄëÌÕ—Ö—îπç’……ïπ—UÕï»ππÖµïıÄ∞ÅÄëÌ…Ω±ïÙÉ
+‹ÅeΩ’»ÅÖÕÕ•ùπïêÅ±ïÖ…π•πú∞Åë’îÅ›Ω…¨ÅÖπêÅçΩµ¡ï—ïπç‰ÅÕ—Ö—’ÃÅ•∏ÅΩπîÅ¡±ÖçîπÄ∞ÅÕïç—Ω»•ÙÒë•ÿÅç±ÖÕÃÙâÕ—Ö—Ãµù…•êÅëïµºµÕ—Ö—Ãà¯Òë•ÿÅç±ÖÕÃÙâÕ—Ö–µçÖ…êà¯ÒÕ¡Ö∏˘ÕÕ•ùπïêÅ¡Ö—°›ÖÂÃΩÕ¡Ö∏¯ÒÕ—…Ωπú¯ƒΩÕ—…Ωπú¯Ωë•ÿ¯Òë•ÿÅç±ÖÕÃÙâÕ—Ö–µçÖ…êà¯ÒÕ¡Ö∏˘1ïÖ…π•πúÅ¡…Ωù…ïÕÃΩÕ¡Ö∏¯ÒÕ—…Ωπú¯ëÌ5Ö—†π…Ω’πê°©Ω’…πï‰π±ïÖ…πïë5Ωë’±ïÃπ±ïπù—†ÄºÅÕïç—Ω»π¡Ö—°›Ö‰πµΩë’±ïÃπ±ïπù—†Ä®Äƒ¿¿•ÙîΩÕ—…Ωπú¯Ωë•ÿ¯Òë•ÿÅç±ÖÕÃÙâÕ—Ö–µçÖ…êà¯ÒÕ¡Ö∏˘-πΩ›±ïëùîÅ…ïÕ’±–ΩÕ¡Ö∏¯ÒÕ—…Ωπú¯ëÌ©Ω’…πï‰πŸÖ±•ëÖ—ïêÄ¸ÅÄëÌ©Ω’…πï‰πÕçΩ…ïÙïÄÄËÄãäPâÙΩÕ—…Ωπú¯Ωë•ÿ¯Òë•ÿÅç±ÖÕÃÙâÕ—Ö–µçÖ…êà¯ÒÕ¡Ö∏˘Ωµ¡ï—ïπç‰ΩÕ¡Ö∏¯ÒÕ—…Ωπú¯ëÌ©Ω’…πï‰πÖ¡¡…ΩŸïêÄ¸Äâ’……ïπ–àÄËÄâAïπë•πúâÙΩÕ—…Ωπú¯Ωë•ÿ¯Ωë•ÿ¯ÒÕïç—•Ω∏Åç±ÖÕÃÙâçÖ…êÅÖÕÕ•ùπïêµ¡Ö—°›Ö‰µçÖ…êà¯Òë•ÿ¯ÒÕ¡Ö∏Åç±ÖÕÃÙâïÂïâ…Ω‹à˘MM%9ÅAQ!]dΩÕ¡Ö∏¯Ò†Ã¯ëÌïÕçÖ¡ï!—µ∞°Õïç—Ω»π¡Ö—°›Ö‰π—•—±î•ÙΩ†Ã¯Ò¿¯ëÌïÕçÖ¡ï!—µ∞°Õïç—Ω»π¡Ö—°›Ö‰πëïÕç…•¡—•Ω∏•ÙΩ¿¯Òë•ÿÅç±ÖÕÃÙâÖ…ïÑµ¡…Ωù…ïÕÃà¯ÒÕ¡Ö∏ÅÕ—Â±îÙâ›•ë—†ËëÌ5Ö—†π…Ω’πê°©Ω’…πï‰π±ïÖ…πïë5Ωë’±ïÃπ±ïπù—†ÄºÅÕïç—Ω»π¡Ö—°›Ö‰πµΩë’±ïÃπ±ïπù—†Ä®Äƒ¿¿•Ùîà¯ΩÕ¡Ö∏¯Ωë•ÿ¯ÒÕµÖ±∞˘’îÄÃ¿ÅMï¡—ïµâï»Ä»¿»ÿÉ
+‹ÅA’â±•Õ°ïêÅÕÖµ¡±îÅŸï…Õ•Ω∏Äƒ∏¿ΩÕµÖ±∞¯Ωë•ÿ¯Òâ’——Ω∏Åç±ÖÕÃÙââ—∏Åëïµºµ…Ω’—îàÅëÖ—ÑµëïµºµŸ•ï‹Ùâ—…Ö•π•πúà˘=¡ï∏Å¡Ö—°›Ö‰Ωâ’——Ω∏¯ΩÕïç—•Ω∏¯ëÌëïµΩ]Ω…≠ô±Ω›!—µ∞°Õïç—Ω»∞Å©Ω’…πï‰•ıÄÏ(ÄÅÙ(ÄÅ…ïπëï…M°ï±∞°çΩπ—ïπ–§Ï(ÄÅâ•πëïµΩΩµµΩπç—•ΩπÃ†§Ï(ÄÅëΩç’µïπ–π≈’ï…ÂMï±ïç—Ω…±∞†àπçΩµ¡±ï—îµëïµºµµΩë’±îà§πôΩ…Öç†°â’——Ω∏ÄÙ¯Åâ’——Ω∏πÖëëŸïπ—1•Õ—ïπï»†âç±•ç¨à∞Ä†§ÄÙ¯ÅÏÅçΩπÕ–ÅµΩë’±ïÃÄÙÅπï‹ÅMï–°©Ω’…πï‰π±ïÖ…πïë5Ωë’±ïÃ§ÏÅµΩë’±ïÃπÖëê°â’——Ω∏πëÖ—ÖÕï–πµΩë’±î§ÏÅ…ïçΩ…ëïµΩ)Ω’…πï‰†â1ïÖ…π•πúÅçΩµ¡±ï—ïêà∞ÅÄëÌÕïç—Ω»π¡Ö—°›Ö‰πµΩë’±ïÃπô•πê°•—ï¥ÄÙ¯Å•—ï¥π•êÄÙÙÙÅâ’——Ω∏πëÖ—ÖÕï–πµΩë’±î§¸π—•—±ïÙÅçΩµ¡±ï—ïêÅâ‰ÄëÌÕ—Ö—îπç’……ïπ—UÕï»ππÖµïÙπÄ∞ÅÏÅ±ïÖ…πïë5Ωë’±ïÃÈl∏∏πµΩë’±ïÕtÅÙ§ÏÅ…ïπëï…ïµΩ]Ω…≠ï…]Ω…≠Õ¡Öçî°Õïç—Ω»§ÏÅÙ§§Ï(ÄÅëΩç’µïπ–πùï—±ïµïπ—	Â%ê†âçΩµ¡±ï—ï±±1ïÖ…π•πúà§¸πÖëëŸïπ—1•Õ—ïπï»†âç±•ç¨à∞Ä†§ÄÙ¯ÅÏÅ…ïçΩ…ëïµΩ)Ω’…πï‰†â1ïÖ…π•πúÅçΩµ¡±ï—ïêà∞ÅÅ±∞Å…ï≈’•…ïêÄëÌÕïç—Ω»π¡Ö—°›Ö‰π—•—±ïÙÅµΩë’±ïÃÅçΩµ¡±ï—ïêπÄ∞ÅÏÅ±ïÖ…πïë5Ωë’±ïÃÈÕïç—Ω»π¡Ö—°›Ö‰πµΩë’±ïÃπµÖ¿°•—ï¥ÄÙ¯Å•—ï¥π•ê§ÅÙ§ÏÅ…ïπëï…ïµΩ]Ω…≠ï…]Ω…≠Õ¡Öçî°Õïç—Ω»§ÏÅÙ§Ï(ÄÅëΩç’µïπ–πùï—±ïµïπ—	Â%ê†âŸÖ±•ëÖ—ïïµΩ-πΩ›±ïëùîà§¸πÖëëŸïπ—1•Õ—ïπï»†âç±•ç¨à∞Ä†§ÄÙ¯ÅÏÅ…ïçΩ…ëïµΩ)Ω’…πï‰†â-πΩ›±ïëùîÅŸÖ±•ëÖ—ïêà∞Äâ-πΩ›±ïëùîÅç°ïç¨Å¡ÖÕÕïêÅÖ–Ä‰¿îÅÖπêÅ¡Ö—°›Ö‰Å…ï±ïÖÕïêÅôΩ»ÅΩâÕï…ŸÖ—•Ω∏∏à∞ÅÏÅŸÖ±•ëÖ—ïêÈ—…’î∞ÅÕçΩ…îË‰¿ÅÙ§ÏÅ…ïπëï…ïµΩ]Ω…≠ï…]Ω…≠Õ¡Öçî°Õïç—Ω»§ÏÅÙ§Ï(ÄÅëΩç’µïπ–πùï—±ïµïπ—	Â%ê†âΩ¡ïπï—Ö•±ïë!ΩÕ¡•—Ö±AÖ—°›Ö‰à§¸πÖëëŸïπ—1•Õ—ïπï»†âç±•ç¨à∞Ä†§ÄÙ¯ÅÏÅÕ—Ö—îπÕï±ïç—ïëï¡Ö…—µïπ–ÄÙÄâΩ¡ï…Ö—•πúµ—°ïÖ—…îàÏÅÕÖŸïM—Ö—î†§ÏÅ…ïπëï…1ïÖ…πï…ÖÕ°âΩÖ…ê†§ÏÅÙ§Ï)Ù()ô’πç—•Ω∏Å…ïπëï…ïµΩQ…Ö•πï…]Ω…≠Õ¡Öçî°Õïç—Ω»§ÅÏ(ÄÅçΩπÕ–Å©Ω’…πï‰ÄÙÅëïµΩ)Ω’…πï‰°Õïç—Ω»π•ê§∞ÅŸ•ï‹ÄÙÅÕ—Ö—îπÖç—•Ÿï]Ω…≠Õ¡ÖçïY•ï‹ÅÒÄâ°ΩµîàÏ(ÄÅçΩπÕ–Å…Ω±îÄÙÅÕïç—Ω»π…Ω±ïÃπô•πê°•—ï¥ÄÙ¯Å•—ï¥πŸÖ±’îÄÙÙÙÅÕ—Ö—îπç’……ïπ—UÕï»π…Ω±î§¸π±Öâï∞ÅÒÄâQ…Ö•πï»àÏ(ÄÅçΩπÕ–Å›Ω…≠ï»ÄÙÅÕïç—Ω»π¡ïΩ¡±îπô•πê°•—ï¥ÄÙ¯ÄÑΩQ…Ö•πï…Òë’çÖ—Ω…ÒΩÖç°Ò5ÖπÖùï»ºπ—ïÕ–°•—ï¥π…Ω±î§§ÅÒÅÕïç—Ω»π¡ïΩ¡±ïl¡tÏ(ÄÅ±ï–ÅçΩπ—ïπ–Ï(ÄÅ•òÄ°Ÿ•ï‹ÄÙÙÙÄâÕ—Öôòà§ÅÏ(ÄÄÄÅçΩπ—ïπ–ÄÙÅÄëÌëïµΩ]Ω…≠Õ¡Öçï!ï…º†âQI%9Là∞ÄâÕÕ•ùπïêÅ›Ω…≠ï…Ãà∞ÅÄëÌ…Ω±ïÙÅÖççïÕÃÅ•ÃÅ±•µ•—ïêÅ—ºÅÖÕÕ•ùπïêÅ¡ïΩ¡±îÅÖπêÅëï¡Ö…—µïπ—ÃπÄ∞ÅÕïç—Ω»•ÙÒÕïç—•Ω∏Åç±ÖÕÃÙâçÖ…êÅ—…Ö•πïîµ¡…Ωô•±îÅëïµºµ—…Ö•πïîµçÖ…êà¯Òë•ÿÅç±ÖÕÃÙâÕïç—•Ω∏µ°ïÖë•πúà¯Òë•ÿ¯ÒÕ¡Ö∏Åç±ÖÕÃÙâïÂïâ…Ω‹à¯ëÌïÕçÖ¡ï!—µ∞°›Ω…≠ï»π•ê•ÙΩÕ¡Ö∏¯Ò†Ã¯ëÌïÕçÖ¡ï!—µ∞°›Ω…≠ï»ππÖµî•ÙΩ†Ã¯Ò¿¯ëÌïÕçÖ¡ï!—µ∞°›Ω…≠ï»π…Ω±î•ÙÉ
+‹ÄëÌïÕçÖ¡ï!—µ∞°›Ω…≠ï»πëï¡Ö…—µïπ–•ÙΩ¿¯Ωë•ÿ¯ÒÕ¡Ö∏Åç±ÖÕÃÙâÕ—Ö—’Ãµç°•¿ÄëÌ©Ω’…πï‰πŸÖ±•ëÖ—ïêÄ¸ÄâÕ—Ö—’Ãµ›Ö…π•πúàÄËÄâÕ—Ö—’Ãµπï’—…Ö∞âÙà¯ëÌ©Ω’…πï‰πΩâÕï…ŸïêÄ¸Äâ=âÕï…ŸïêàÄËÅ©Ω’…πï‰πŸÖ±•ëÖ—ïêÄ¸ÄâIïÖë‰ÅôΩ»ÅΩâÕï…ŸÖ—•Ω∏àÄËÄâ1ïÖ…π•πúÅ•∏Å¡…Ωù…ïÕÃâÙΩÕ¡Ö∏¯Ωë•ÿ¯ëÌëïµΩ]Ω…≠ô±Ω›!—µ∞°Õïç—Ω»∞Å©Ω’…πï‰•ÙÒë•ÿÅç±ÖÕÃÙâ¡…Ωô•±îµÖç—•ΩπÃà¯Òâ’——Ω∏Åç±ÖÕÃÙââ—∏Åëïµºµ…Ω’—îàÅëÖ—ÑµëïµºµŸ•ï‹Ùâ—…Ö•π•πúà˘=¡ï∏ÅÖÕÕïÕÕµïπ–Åù’•ëÖπçîΩâ’——Ω∏¯Ωë•ÿ¯ΩÕïç—•Ω∏˘ÄÏ(ÄÅÙÅï±ÕîÅ•òÄ°Ÿ•ï‹ÄÙÙÙÄâ—…Ö•π•πúà§ÅÏ(ÄÄÄÅçΩπ—ïπ–ÄÙÅÄëÌëïµΩ]Ω…≠Õ¡Öçï!ï…º†âAIQ%0ÅMMMM59Pà∞Äâ=âÕï…ŸÖ—•Ω∏ÅÖπêÅ…ïçΩµµïπëÖ—•Ω∏à∞ÅÅIïçΩ…êÅΩâÕï…ŸÖâ±îÅïŸ•ëïπçîÅôΩ»ÄëÌ›Ω…≠ï»ππÖµïÙ∞Å—°ï∏ÅÕïπêÅ—°îÅ…ïçΩµµïπëÖ—•Ω∏Å—ºÅ5ÖπÖùïµïπ–πÄ∞ÅÕïç—Ω»•ÙÒÕïç—•Ω∏Åç±ÖÕÃÙâçÖ…êÅëïµºµΩâÕï…ŸÖ—•Ω∏µçÖ…êà¯ÒÕ¡Ö∏Åç±ÖÕÃÙâïÂïâ…Ω‹à˘=	MIYΩÕ¡Ö∏¯Ò†Ã¯ëÌïÕçÖ¡ï!—µ∞°Õïç—Ω»π¡Ö—°›Ö‰π—•—±î•ÙΩ†Ã¯Ò¿˘-πΩ›±ïëùîÅŸÖ±•ëÖ—•Ω∏ËÄÒÕ—…Ωπú¯ëÌ©Ω’…πï‰πŸÖ±•ëÖ—ïêÄ¸ÅÅAÖÕÕïêÉ
+‹ÄëÌ©Ω’…πï‰πÕçΩ…ïÙïÄÄËÄâ9Ω–Å…ïÖë‰âÙΩÕ—…Ωπú¯Ω¿¯ëÏÖ©Ω’…πï‰πŸÖ±•ëÖ—ïêÄ¸ÄúÒâ’——Ω∏Åç±ÖÕÃÙââ—∏Åâ—∏µÕïçΩπëÖ…‰àÅ•êÙâ¡…ï¡Ö…ï=âÕï…ŸÖ—•Ωπïµºà˘Ωµ¡±ï—îÅÕÖµ¡±îÅ±ïÖ…π•πúÅÖπêÅŸÖ±•ëÖ—•Ω∏Ωâ’——Ω∏¯úÄËÄàâÙÒ±Öâï∞˘A…Öç—•çÖ∞ÅΩâÕï…ŸÖ—•Ω∏Ò—ï·—Ö…ïÑÅ•êÙâëïµΩ=âÕï…ŸÖ—•Ωπ9Ω—îàÅ¡±Öçï°Ω±ëï»ÙâIïçΩ…êÅÕ¡ïç•ô•å∞ÅΩâÕï…ŸÖâ±îÅ›Ω…≠¡±ÖçîÅïŸ•ëïπçîà¯ëÌïÕçÖ¡ï!—µ∞°©Ω’…πï‰πΩâÕï…ŸÖ—•Ω∏ÅÒÄàà•ÙΩ—ï·—Ö…ïÑ¯Ω±Öâï∞¯Ò±Öâï∞˘=’—çΩµîÒÕï±ïç–Å•êÙâëïµΩ=âÕï…ŸÖ—•Ωπ=’—çΩµîà¯ÒΩ¡—•Ω∏˘Ωµ¡ï—ïπ–ΩΩ¡—•Ω∏¯ÒΩ¡—•Ω∏˘9ïïëÃÅïŸï±Ω¡µïπ–ΩΩ¡—•Ω∏¯ÒΩ¡—•Ω∏˘9Ω–Å=âÕï…ŸïêΩΩ¡—•Ω∏¯ΩÕï±ïç–¯Ω±Öâï∞¯Òâ’——Ω∏Åç±ÖÕÃÙââ—∏àÅ•êÙâ…ïçΩ…ëïµΩ=âÕï…ŸÖ—•Ω∏àÄëÏÖ©Ω’…πï‰πŸÖ±•ëÖ—ïêÅÒÅ©Ω’…πï‰πΩâÕï…ŸïêÄ¸Äâë•ÕÖâ±ïêàÄËÄàâÙ¯ëÌ©Ω’…πï‰πΩâÕï…ŸïêÄ¸ÄâIïçΩµµïπëÖ—•Ω∏ÅÕïπ–Å—ºÅ5ÖπÖùïµïπ–àÄËÄâIïçΩ…êÅΩâÕï…ŸÖ—•Ω∏ÅÖπêÅ…ïçΩµµïπêâÙΩâ’——Ω∏¯Ò¿Åç±ÖÕÃÙâ—…’Õ–µπΩ—îà˘Q…Ö•πï…ÃÅçÖ∏Å…ïçΩµµïπêÏÅ5ÖπÖùïµïπ–Å…ï—Ö•πÃÅô•πÖ∞ÅÖ¡¡…ΩŸÖ∞∏Ω¿¯ΩÕïç—•Ω∏¯ëÌëïµΩ]Ω…≠ô±Ω›!—µ∞°Õïç—Ω»∞Å©Ω’…πï‰•ıÄÏ(ÄÅÙÅï±ÕîÅÏ(ÄÄÄÅçΩπ—ïπ–ÄÙÅÄëÌëïµΩ]Ω…≠Õ¡Öçï!ï…º†âQI%9HÅ!=5à∞ÅÅ]ï±çΩµî∞ÄëÌÕ—Ö—îπç’……ïπ—UÕï»ππÖµïıÄ∞ÅÄëÌ…Ω±ïÙÉ
+‹Å5Ωπ•—Ω»ÅÖÕÕ•ùπïêÅ±ïÖ…πï…ÃÅÖπêÅçΩµ¡±ï—îÅ¡…Öç—•çÖ∞ÅÖÕÕïÕÕµïπ–πÄ∞ÅÕïç—Ω»•ÙÒë•ÿÅç±ÖÕÃÙâÕ—Ö—Ãµù…•êÅëïµºµÕ—Ö—Ãà¯Òë•ÿÅç±ÖÕÃÙâÕ—Ö–µçÖ…êà¯ÒÕ¡Ö∏˘ÕÕ•ùπïêÅ›Ω…≠ï…ÃΩÕ¡Ö∏¯ÒÕ—…Ωπú¯»ΩÕ—…Ωπú¯Ωë•ÿ¯Òë•ÿÅç±ÖÕÃÙâÕ—Ö–µçÖ…êà¯ÒÕ¡Ö∏˘IïÖë‰Å—ºÅΩâÕï…ŸîΩÕ¡Ö∏¯ÒÕ—…Ωπú¯ëÌ©Ω’…πï‰πŸÖ±•ëÖ—ïêÄòòÄÖ©Ω’…πï‰πΩâÕï…ŸïêÄ¸ÄƒÄËÄ¡ÙΩÕ—…Ωπú¯Ωë•ÿ¯Òë•ÿÅç±ÖÕÃÙâÕ—Ö–µçÖ…êà¯ÒÕ¡Ö∏˘Mïπ–Å—ºÅ5ÖπÖùïµïπ–ΩÕ¡Ö∏¯ÒÕ—…Ωπú¯ëÌ©Ω’…πï‰πΩâÕï…ŸïêÄòòÄÖ©Ω’…πï‰πÖ¡¡…ΩŸïêÄ¸ÄƒÄËÄ¡ÙΩÕ—…Ωπú¯Ωë•ÿ¯Òë•ÿÅç±ÖÕÃÙâÕ—Ö–µçÖ…êà¯ÒÕ¡Ö∏˘’……ïπ–ÅçΩµ¡ï—ïπç‰ΩÕ¡Ö∏¯ÒÕ—…Ωπú¯ëÌ©Ω’…πï‰πÖ¡¡…ΩŸïêÄ¸ÄƒÄËÄ¡ÙΩÕ—…Ωπú¯Ωë•ÿ¯Ωë•ÿ¯ÒÕïç—•Ω∏Åç±ÖÕÃÙâçÖ…êÅÖÕÕ•ùπïêµ¡Ö—°›Ö‰µçÖ…êà¯Òë•ÿ¯ÒÕ¡Ö∏Åç±ÖÕÃÙâïÂïâ…Ω‹à˘9aPÅMMMM59PΩÕ¡Ö∏¯Ò†Ã¯ëÌïÕçÖ¡ï!—µ∞°›Ω…≠ï»ππÖµî•ÙΩ†Ã¯Ò¿¯ëÌïÕçÖ¡ï!—µ∞°Õïç—Ω»π¡Ö—°›Ö‰π—•—±î•ÙÉ
+‹ÄëÌ©Ω’…πï‰πŸÖ±•ëÖ—ïêÄ¸Äâ-πΩ›±ïëùîÅŸÖ±•ëÖ—ïêàÄËÄâ]Ö•—•πúÅôΩ»Å±ïÖ…π•πúâÙΩ¿¯Ωë•ÿ¯Òâ’——Ω∏Åç±ÖÕÃÙââ—∏Åëïµºµ…Ω’—îàÅëÖ—ÑµëïµºµŸ•ï‹ÙâÕ—Öôòà˘Y•ï‹Å—…Ö•πïîΩâ’——Ω∏¯ΩÕïç—•Ω∏¯ëÌëïµΩ]Ω…≠ô±Ω›!—µ∞°Õïç—Ω»∞Å©Ω’…πï‰•ıÄÏ(ÄÅÙ(ÄÅ…ïπëï…M°ï±∞°çΩπ—ïπ–§Ï(ÄÅâ•πëïµΩΩµµΩπç—•ΩπÃ†§Ï(ÄÅëΩç’µïπ–πùï—±ïµïπ—	Â%ê†â¡…ï¡Ö…ï=âÕï…ŸÖ—•Ωπïµºà§¸πÖëëŸïπ—1•Õ—ïπï»†âç±•ç¨à∞Ä†§ÄÙ¯ÅÏÅ…ïçΩ…ëïµΩ)Ω’…πï‰†â1ïÖ…π•πúÅÖπêÅŸÖ±•ëÖ—•Ω∏Å¡…ï¡Ö…ïêà∞ÄâMÖµ¡±îÅ±ïÖ…πï»ÅçΩµ¡±ï—ïêÅïŸï…‰ÅµΩë’±îÅÖπêÅ¡ÖÕÕïêÅ—°îÅ≠πΩ›±ïëùîÅç°ïç¨ÅÖ–Ä‰¿î∏à∞ÅÏÅ±ïÖ…πïë5Ωë’±ïÃÈÕïç—Ω»π¡Ö—°›Ö‰πµΩë’±ïÃπµÖ¿°•—ï¥ÄÙ¯Å•—ï¥π•ê§∞ÅŸÖ±•ëÖ—ïêÈ—…’î∞ÅÕçΩ…îË‰¿ÅÙ§ÏÅ…ïπëï…ïµΩQ…Ö•πï…]Ω…≠Õ¡Öçî°Õïç—Ω»§ÏÅÙ§Ï(ÄÅëΩç’µïπ–πùï—±ïµïπ—	Â%ê†â…ïçΩ…ëïµΩ=âÕï…ŸÖ—•Ω∏à§¸πÖëëŸïπ—1•Õ—ïπï»†âç±•ç¨à∞Ä†§ÄÙ¯ÅÏÅçΩπÕ–ÅπΩ—îÄÙÅëΩç’µïπ–πùï—±ïµïπ—	Â%ê†âëïµΩ=âÕï…ŸÖ—•Ωπ9Ω—îà§πŸÖ±’îπ—…•¥†§ÏÅ•òÄ†ÖπΩ—î§Å…ï—’…∏ÅÖ±ï…–†âIïçΩ…êÅΩâÕï…ŸÖâ±îÅïŸ•ëïπçîÅâïôΩ…îÅÕ’âµ•——•πúÅ—°îÅ…ïçΩµµïπëÖ—•Ω∏∏à§ÏÅ…ïçΩ…ëïµΩ)Ω’…πï‰†âA…Öç—•çÖ∞ÅΩâÕï…ŸÖ—•Ω∏Å…ïçΩ…ëïêà∞ÅÄëÌëΩç’µïπ–πùï—±ïµïπ—	Â%ê†âëïµΩ=âÕï…ŸÖ—•Ωπ=’—çΩµîà§πŸÖ±’ïÙËÄëÌπΩ—ïıÄ∞ÅÏÅΩâÕï…ŸïêÈ—…’î∞ÅΩâÕï…ŸÖ—•Ω∏ÈπΩ—îÅÙ§ÏÅ…ïπëï…ïµΩQ…Ö•πï…]Ω…≠Õ¡Öçî°Õïç—Ω»§ÏÅÙ§Ï)Ù()ô’πç—•Ω∏Å…ïπëï…ïµΩ5ÖπÖùïµïπ—]Ω…≠Õ¡Öçî°Õïç—Ω»§ÅÏ(ÄÅçΩπÕ–Å©Ω’…πï‰ÄÙÅëïµΩ)Ω’…πï‰°Õïç—Ω»π•ê§∞ÅŸ•ï‹ÄÙÅÕ—Ö—îπÖç—•Ÿï]Ω…≠Õ¡ÖçïY•ï‹ÅÒÄâ°ΩµîàÏ(ÄÅçΩπÕ–Å›Ω…≠ï»ÄÙÅÕïç—Ω»π¡ïΩ¡±îπô•πê°•—ï¥ÄÙ¯ÄÑΩQ…Ö•πï…Òë’çÖ—Ω…ÒΩÖç°Ò5ÖπÖùï»ºπ—ïÕ–°•—ï¥π…Ω±î§§ÅÒÅÕïç—Ω»π¡ïΩ¡±ïl¡tÏ(ÄÅçΩπÕ–Å¡ïπë•πúÄÙÅ©Ω’…πï‰πΩâÕï…ŸïêÄòòÄÖ©Ω’…πï‰πÖ¡¡…ΩŸïêÄ¸ÄƒÄËÄ¿Ï(ÄÅ±ï–ÅçΩπ—ïπ–Ï(ÄÅ•òÄ°Ÿ•ï‹ÄÙÙÙÄâ—…Ö•π•πúà§ÅÏ(ÄÄÄÅçΩπ—ïπ–ÄÙÅÄëÌëïµΩ]Ω…≠Õ¡Öçï!ï…º†âQI%9%9à∞ÄâAÖ—°›ÖÂÃÅÖπêÅçΩµ¡ï—ïπç‰Åëïç•Õ•ΩπÃà∞ÄâÕÕ•ù∏Å¡’â±•Õ°ïêÅ¡Ö—°›ÖÂÃ∞Å…ïŸ•ï‹Å—…Ö•πï»ÅïŸ•ëïπçî∞ÅÖ¡¡…ΩŸîÅçΩµ¡ï—ïπç‰ÅÖπêÅÕç°ïë’±îÅ…ïπï›Ö∞∏à∞ÅÕïç—Ω»•ÙÒÕïç—•Ω∏Åç±ÖÕÃÙâ›Ω…≠Õ¡Öçîµ°Ωµîµù…•êà¯ÒÖ…—•ç±îÅç±ÖÕÃÙâçÖ…êà¯ÒÕ¡Ö∏Åç±ÖÕÃÙâïÂïâ…Ω‹à˘AU	1%M!ÅAQ!]dΩÕ¡Ö∏¯Ò†Ã¯ëÌïÕçÖ¡ï!—µ∞°Õïç—Ω»π¡Ö—°›Ö‰π—•—±î•ÙΩ†Ã¯Ò¿¯ëÌïÕçÖ¡ï!—µ∞°Õïç—Ω»π¡Ö—°›Ö‰πëïÕç…•¡—•Ω∏•ÙΩ¿¯Òë∞Åç±ÖÕÃÙâëïµºµ¡Ö—°›Ö‰µµï—Ñà¯Òë•ÿ¯Òë–˘5Ωë’±ïÃΩë–¯Òëê¯ëÌÕïç—Ω»π¡Ö—°›Ö‰πµΩë’±ïÃπ±ïπù—°ÙΩëê¯Ωë•ÿ¯Òë•ÿ¯Òë–˘ÕÕ•ùπïêÅ›Ω…≠ï…ÃΩë–¯Òëê¯»Ωëê¯Ωë•ÿ¯Òë•ÿ¯Òë–˘Yï…Õ•Ω∏Ωë–¯Òëê¯ƒ∏¿Ωëê¯Ωë•ÿ¯Ωë∞¯Òâ’——Ω∏Åç±ÖÕÃÙââ—∏Åâ—∏µÕïçΩπëÖ…‰àÅ•êÙâÖÕÕ•ùπïµΩAÖ—°›Ö‰à˘ÕÕ•ù∏Å—ºÅÕÖµ¡±îÅ›Ω…≠ï»Ωâ’——Ω∏¯ΩÖ…—•ç±î¯ÒÖ…—•ç±îÅç±ÖÕÃÙâçÖ…êÅÖ¡¡…ΩŸÖ∞µçÖ…êà¯ÒÕ¡Ö∏Åç±ÖÕÃÙâïÂïâ…Ω‹à˘5959PÅAAI=Y0ΩÕ¡Ö∏¯Ò†Ã¯ëÌïÕçÖ¡ï!—µ∞°›Ω…≠ï»ππÖµî•ÙΩ†Ã¯Ò¿¯ëÌ©Ω’…πï‰πΩâÕï…ŸïêÄ¸ÅïÕçÖ¡ï!—µ∞°©Ω’…πï‰πΩâÕï…ŸÖ—•Ω∏§ÄËÄâ]Ö•—•πúÅôΩ»Å—°îÅ—…Ö•πï»ùÃÅ¡…Öç—•çÖ∞ÅΩâÕï…ŸÖ—•Ω∏ÅÖπêÅ…ïçΩµµïπëÖ—•Ω∏∏âÙΩ¿¯Òâ’——Ω∏Åç±ÖÕÃÙââ—∏àÅ•êÙâÖ¡¡…ΩŸïïµΩΩµ¡ï—ïπç‰àÄëÏÖ©Ω’…πï‰πΩâÕï…ŸïêÅÒÅ©Ω’…πï‰πÖ¡¡…ΩŸïêÄ¸Äâë•ÕÖâ±ïêàÄËÄàâÙ¯ëÌ©Ω’…πï‰πÖ¡¡…ΩŸïêÄ¸ÄâΩµ¡ï—ïπç‰ÅÖ¡¡…ΩŸïêàÄËÄâ¡¡…ΩŸîÅçΩµ¡ï—ïπç‰âÙΩâ’——Ω∏¯Òâ’——Ω∏Åç±ÖÕÃÙââ—∏Åâ—∏µÕïçΩπëÖ…‰àÅ•êÙâÕç°ïë’±ïïµΩIïπï›Ö∞àÄëÏÖ©Ω’…πï‰πÖ¡¡…ΩŸïêÅÒÅ©Ω’…πï‰π…ïπï›Ö±Mç°ïë’±ïêÄ¸Äâë•ÕÖâ±ïêàÄËÄàâÙ¯ëÌ©Ω’…πï‰π…ïπï›Ö±Mç°ïë’±ïêÄ¸ÅÅIïπï›Ö∞ÄëÌ©Ω’…πï‰π…ïπï›Ö±Ö—ïıÄÄËÄâMç°ïë’±îÄƒ»µµΩπ—†Å…ïπï›Ö∞âÙΩâ’——Ω∏¯ΩÖ…—•ç±î¯ΩÕïç—•Ω∏¯ëÌëïµΩ]Ω…≠ô±Ω›!—µ∞°Õïç—Ω»∞Å©Ω’…πï‰•ıÄÏ(ÄÅÙÅï±ÕîÅ•òÄ°Ÿ•ï‹ÄÙÙÙÄâÕ—Öôòà§ÅÏ(ÄÄÄÅçΩπÕ–Å…Ω›ÃÄÙÅÕïç—Ω»π¡ïΩ¡±îπµÖ¿°¡ï…ÕΩ∏ÄÙ¯ÅÄÒ—»Åç±ÖÕÃÙâëïµºµÕ—Öôòµ…Ω‹àÅëÖ—ÑµÕïÖ…ç†ÙàëÌïÕçÖ¡ï!—µ∞°ÄëÌ¡ï…ÕΩ∏ππÖµïÙÄëÌ¡ï…ÕΩ∏π•ëÙÄëÌ¡ï…ÕΩ∏π…Ω±ïÙÄëÌ¡ï…ÕΩ∏πëï¡Ö…—µïπ—ıÄπ—Ω1Ω›ï…ÖÕî†§•Ùà¯Ò—ê¯ÒÕ¡Ö∏Åç±ÖÕÃÙâÕ—Öôòµ•ëïπ—•—‰à¯ÒÕ—…Ωπú¯ëÌïÕçÖ¡ï!—µ∞°¡ï…ÕΩ∏ππÖµî•ÙΩÕ—…Ωπú¯ÒÕµÖ±∞¯ëÌïÕçÖ¡ï!—µ∞°¡ï…ÕΩ∏π•ê•ÙΩÕµÖ±∞¯ΩÕ¡Ö∏¯Ω—ê¯Ò—ê¯ëÌïÕçÖ¡ï!—µ∞°¡ï…ÕΩ∏π…Ω±î•ÙΩ—ê¯Ò—ê¯ëÌïÕçÖ¡ï!—µ∞°¡ï…ÕΩ∏πëï¡Ö…—µïπ–•ÙΩ—ê¯Ò—ê¯ëÌ¡ï…ÕΩ∏π¡…Ωù…ïÕÕÙîΩ—ê¯Ò—ê¯ÒÕ¡Ö∏Åç±ÖÕÃÙâÕ—Ö—’Ãµç°•¿ÄëÌ¡ï…ÕΩ∏πÕ—Ö—’ÃÄÙÙÙÄâç—•ŸîàÄ¸ÄâÕ—Ö—’ÃµÕ’ççïÕÃàÄËÄâÕ—Ö—’Ãµ›Ö…π•πúâÙà¯ëÌïÕçÖ¡ï!—µ∞°¡ï…ÕΩ∏πÕ—Ö—’Ã•ÙΩÕ¡Ö∏¯Ω—ê¯Ω—»˘Ä§π©Ω•∏†àà§Ï(ÄÄÄÅçΩπ—ïπ–ÄÙÅÄëÌëïµΩ]Ω…≠Õ¡Öçï!ï…º†âMQà∞ÄâAïΩ¡±îÅÖπêÅ¡ï…µ•ÕÕ•ΩπÃà∞ÄâMïÖ…ç†Å—°îÅÕÖµ¡±îÅë•…ïç—Ω…‰ÅÖπêÅ…ïŸ•ï‹Å…Ω±î∞Åëï¡Ö…—µïπ–∞Å—…Ö•π•πúÅÖπêÅÖççΩ’π–ÅÕ—Ö—’Ã∏à∞ÅÕïç—Ω»•ÙÒÕïç—•Ω∏Åç±ÖÕÃÙâçÖ…êà¯Òë•ÿÅç±ÖÕÃÙâÕïç—•Ω∏µ°ïÖë•πúà¯Òë•ÿ¯ÒÕ¡Ö∏Åç±ÖÕÃÙâïÂïâ…Ω‹à˘=I9%MQ%=8Å%IQ=IdΩÕ¡Ö∏¯Ò†Ã¯ëÌÕïç—Ω»π¡ïΩ¡±îπ±ïπù—°ÙÅÕÖµ¡±îÅ¡ïΩ¡±îΩ†Ã¯Ωë•ÿ¯Òâ’——Ω∏Åç±ÖÕÃÙââ—∏àÅ•êÙâëïµΩ%πŸ•—ïM—Öôòà˘%πŸ•—îÅÕ—ÖôòΩâ’——Ω∏¯Ωë•ÿ¯Ò±Öâï∞Åç±ÖÕÃÙâÕïÖ…ç†µô•±—ï»à˘MïÖ…ç†Å¡ïΩ¡±îÒ•π¡’–Å•êÙâëïµΩM—ÖôôMïÖ…ç†àÅ—Â¡îÙâÕïÖ…ç†àÅ¡±Öçï°Ω±ëï»Ùâ9Öµî∞Åïµ¡±ΩÂïîÅ%∞Å…Ω±îÅΩ»Åëï¡Ö…—µïπ–à¯Ω±Öâï∞¯Òë•ÿÅç±ÖÕÃÙâ—Öâ±îµ›…Ö¿à¯Ò—Öâ±îÅç±ÖÕÃÙâÕ—Öôòµ—Öâ±îà¯Ò—°ïÖê¯Ò—»¯Ò—†˘M—ÖôòÅµïµâï»Ω—†¯Ò—†˘IΩ±îΩ—†¯Ò—†˘ï¡Ö…—µïπ–Ω—†¯Ò—†˘A…Ωù…ïÕÃΩ—†¯Ò—†˘M—Ö—’ÃΩ—†¯Ω—»¯Ω—°ïÖê¯Ò—âΩë‰¯ëÌ…Ω›ÕÙΩ—âΩë‰¯Ω—Öâ±î¯Ωë•ÿ¯Ò¿Å•êÙâëïµΩM—Öôôµ¡—‰àÅç±ÖÕÃÙâïµ¡—‰µÕ—Ö—îàÅ°•ëëï∏˘9ºÅ¡ïΩ¡±îÅµÖ—ç†Å—°•ÃÅÕïÖ…ç†∏Ω¿¯ΩÕïç—•Ω∏˘ÄÏ(ÄÅÙÅï±ÕîÅ•òÄ°Ÿ•ï‹ÄÙÙÙÄâ…ï¡Ω…—Ãà§ÅÏ(ÄÄÄÅçΩπ—ïπ–ÄÙÅÄëÌëïµΩ]Ω…≠Õ¡Öçï!ï…º†âIA=IQLà∞ÄâIïÖë•πïÕÃÅÖπêÅçΩµ¡±•Öπçîà∞Äâ5Ωπ•—Ω»Å¡Ö—°›Ö‰ÅçΩµ¡±ï—•Ω∏∞Å¡ïπë•πúÅëïç•Õ•ΩπÃ∞Åç’……ïπ–ÅçΩµ¡ï—ïπç‰ÅÖπêÅ…ïπï›Ö∞ÅÕ—Ö—’Ã∏à∞ÅÕïç—Ω»•ÙÒë•ÿÅç±ÖÕÃÙâÕ—Ö—Ãµù…•êÅëïµºµÕ—Ö—Ãà¯Òë•ÿÅç±ÖÕÃÙâÕ—Ö–µçÖ…êà¯ÒÕ¡Ö∏˘ÕÕ•ùπïêÅÕ—ÖôòΩÕ¡Ö∏¯ÒÕ—…Ωπú¯ëÌÕïç—Ω»π¡ïΩ¡±îπ±ïπù—°ÙΩÕ—…Ωπú¯Ωë•ÿ¯Òë•ÿÅç±ÖÕÃÙâÕ—Ö–µçÖ…êà¯ÒÕ¡Ö∏˘1ïÖ…π•πúÅçΩµ¡±ï—îΩÕ¡Ö∏¯ÒÕ—…Ωπú¯ëÌ©Ω’…πï‰π±ïÖ…πïë5Ωë’±ïÃπ±ïπù—†Ä¯ÙÅÕïç—Ω»π¡Ö—°›Ö‰πµΩë’±ïÃπ±ïπù—†Ä¸ÄƒÄËÄ¡ÙΩÕ—…Ωπú¯Ωë•ÿ¯Òë•ÿÅç±ÖÕÃÙâÕ—Ö–µçÖ…êà¯ÒÕ¡Ö∏˘Aïπë•πúÅÖ¡¡…ΩŸÖ∞ΩÕ¡Ö∏¯ÒÕ—…Ωπú¯ëÌ¡ïπë•πùÙΩÕ—…Ωπú¯Ωë•ÿ¯Òë•ÿÅç±ÖÕÃÙâÕ—Ö–µçÖ…êà¯ÒÕ¡Ö∏˘Iïπï›Ö±ÃÅÕç°ïë’±ïêΩÕ¡Ö∏¯ÒÕ—…Ωπú¯ëÌ©Ω’…πï‰π…ïπï›Ö±Mç°ïë’±ïêÄ¸ÄƒÄËÄ¡ÙΩÕ—…Ωπú¯Ωë•ÿ¯Ωë•ÿ¯ÒÕïç—•Ω∏Åç±ÖÕÃÙâ…ï¡Ω…—Ãµù…•êà¯ÒÖ…—•ç±îÅç±ÖÕÃÙâçÖ…êÅ…ï¡Ω…–µ¡Öπï∞à¯ÒÕ¡Ö∏Åç±ÖÕÃÙâïÂïâ…Ω‹à˘AQ!]dÅI%9MLΩÕ¡Ö∏¯Ò†Ã¯ëÌïÕçÖ¡ï!—µ∞°Õïç—Ω»π¡Ö—°›Ö‰π—•—±î•ÙΩ†Ã¯Ò’∞¯ëÌëïµΩM—ÖùïM—Ö—’Ã°©Ω’…πï‰∞ÅÕïç—Ω»§πµÖ¿†°m±Öâï∞∞ÅëΩπî∞Åëï—Ö•±t§ÄÙ¯ÅÄÒ±§¯ÒÕ¡Ö∏¯ëÌëΩπîÄ¸ÄãärLàÄËÄãä^,âÙΩÕ¡Ö∏¯ëÌ±Öâï±ÙÒÕ—…Ωπú¯ëÌïÕçÖ¡ï!—µ∞°ëï—Ö•∞•ÙΩÕ—…Ωπú¯Ω±§˘Ä§π©Ω•∏†àà•ÙΩ’∞¯ΩÖ…—•ç±î¯ÒÖ…—•ç±îÅç±ÖÕÃÙâçÖ…êÅ…ï¡Ω…–µ¡Öπï∞à¯ÒÕ¡Ö∏Åç±ÖÕÃÙâïÂïâ…Ω‹à˘U%PÅ!%MQ=IdΩÕ¡Ö∏¯Ò†Ã˘1•ôïçÂç±îÅÖç—•Ÿ•—‰Ω†Ã¯Òë•ÿÅç±ÖÕÃÙâÖ’ë•–µôïïêà¯ëÌ©Ω’…πï‰π°•Õ—Ω…‰πµÖ¿°•—ï¥ÄÙ¯ÅÄÒÖ…—•ç±î¯ÒÕ—…Ωπú¯ëÌïÕçÖ¡ï!—µ∞°•—ï¥πÖç—•Ω∏•ÙΩÕ—…Ωπú¯ÒÕ¡Ö∏¯ëÌïÕçÖ¡ï!—µ∞°•—ï¥πëï—Ö•∞•ÙΩÕ¡Ö∏¯ÒÕµÖ±∞¯ëÌïÕçÖ¡ï!—µ∞°•—ï¥πÖ–•ÙΩÕµÖ±∞¯ΩÖ…—•ç±î˘Ä§π©Ω•∏†àà§ÅÒÄúÒ¿Åç±ÖÕÃÙâïµ¡—‰µÕ—Ö—îà˘Ωµ¡±ï—îÅÑÅ›Ω…≠ô±Ω‹ÅÖç—•Ω∏Å—ºÅç…ïÖ—îÅÖ∏ÅÖ’ë•–Åïπ—…‰∏Ω¿¯ùÙΩë•ÿ¯ΩÖ…—•ç±î¯ΩÕïç—•Ω∏¯ëÌëïµΩ]Ω…≠ô±Ω›!—µ∞°Õïç—Ω»∞Å©Ω’…πï‰•ıÄÏ(ÄÅÙÅï±ÕîÅÏ(ÄÄÄÅçΩπ—ïπ–ÄÙÅÄëÌëïµΩ]Ω…≠Õ¡Öçï!ï…º†â5959PÅ!=5à∞ÅÄëÌÕïç—Ω»πΩ…ùÖπ•ÈÖ—•ΩπÙÅ›Ω…≠Õ¡ÖçïÄ∞ÄâIïŸ•ï‹Å¡…•Ω…•—•ïÃ∞Å›Ω…≠ôΩ…çîÅ…ïÖë•πïÕÃÅÖπêÅ—°îÅÖç—•ΩπÃÅ—°Ö–ÅπïïêÅÑÅ5ÖπÖùïµïπ–Åëïç•Õ•Ω∏∏à∞ÅÕïç—Ω»•ÙÒë•ÿÅç±ÖÕÃÙâÕ—Ö—Ãµù…•êÅëïµºµÕ—Ö—Ãà¯Òë•ÿÅç±ÖÕÃÙâÕ—Ö–µçÖ…êà¯ÒÕ¡Ö∏˘ç—•ŸîÅÕ—ÖôòΩÕ¡Ö∏¯ÒÕ—…Ωπú¯ëÌÕïç—Ω»π¡ïΩ¡±îπ±ïπù—°ÙΩÕ—…Ωπú¯Ωë•ÿ¯Òë•ÿÅç±ÖÕÃÙâÕ—Ö–µçÖ…êà¯ÒÕ¡Ö∏˘A’â±•Õ°ïêÅ¡Ö—°›ÖÂÃΩÕ¡Ö∏¯ÒÕ—…Ωπú¯ƒΩÕ—…Ωπú¯Ωë•ÿ¯Òë•ÿÅç±ÖÕÃÙâÕ—Ö–µçÖ…êà¯ÒÕ¡Ö∏˘›Ö•—•πúÅÖ¡¡…ΩŸÖ∞ΩÕ¡Ö∏¯ÒÕ—…Ωπú¯ëÌ¡ïπë•πùÙΩÕ—…Ωπú¯Ωë•ÿ¯Òë•ÿÅç±ÖÕÃÙâÕ—Ö–µçÖ…êà¯ÒÕ¡Ö∏˘Ωµ¡±•ÖπçîÅÖ±ï…—ÃΩÕ¡Ö∏¯ÒÕ—…Ωπú¯ëÌ©Ω’…πï‰π…ïπï›Ö±Mç°ïë’±ïêÄ¸Ä¿ÄËÄ≈ÙΩÕ—…Ωπú¯Ωë•ÿ¯Ωë•ÿ¯ÒÕïç—•Ω∏Åç±ÖÕÃÙâ›Ω…≠Õ¡Öçîµ°Ωµîµù…•êà¯ÒÕïç—•Ω∏Åç±ÖÕÃÙâçÖ…êà¯ÒÕ¡Ö∏Åç±ÖÕÃÙâïÂïâ…Ω‹à˘AI%=I%QdÅQ%=9LΩÕ¡Ö∏¯Ò†Ã˘]°Ö–ÅπïïëÃÅÖ——ïπ—•Ω∏Ω†Ã¯Òâ’——Ω∏Åç±ÖÕÃÙâ›Ω…≠Õ¡Öçîµ…Ω’—îÅëïµºµ…Ω’—îàÅëÖ—ÑµëïµºµŸ•ï‹Ùâ—…Ö•π•πúà¯ÒÕ¡Ö∏˚ärLΩÕ¡Ö∏¯Òë•ÿ¯ÒÕ—…Ωπú¯ëÌ¡ïπë•πúÄ¸ÄâΩµ¡ï—ïπç‰Å…ïÖë‰ÅôΩ»ÅÖ¡¡…ΩŸÖ∞àÄËÄâQ…Ö•π•πúÅÖπêÅçΩµ¡ï—ïπç‰âÙΩÕ—…Ωπú¯ÒÕµÖ±∞¯ëÌ¡ïπë•πúÄ¸ÅÄëÌ›Ω…≠ï»ππÖµïÙÅ°ÖÃÅ—…Ö•πï»ÅïŸ•ëïπçîÅ…ïÖëÂÄÄËÄâIïŸ•ï‹Å¡Ö—°›Ö‰ÅÖπêÅ›Ω…≠ô±Ω‹ÅÕ—Ö—’ÃâÙΩÕµÖ±∞¯Ωë•ÿ¯Òà˚äHΩà¯Ωâ’——Ω∏¯Òâ’——Ω∏Åç±ÖÕÃÙâ›Ω…≠Õ¡Öçîµ…Ω’—îÅëïµºµ…Ω’—îàÅëÖ—ÑµëïµºµŸ•ï‹ÙâÕ—Öôòà¯ÒÕ¡Ö∏˚äfdΩÕ¡Ö∏¯Òë•ÿ¯ÒÕ—…Ωπú˘AïΩ¡±îÅÖπêÅ¡ï…µ•ÕÕ•ΩπÃΩÕ—…Ωπú¯ÒÕµÖ±∞¯ëÌÕïç—Ω»π¡ïΩ¡±îπ±ïπù—°ÙÅÕÖµ¡±îÅÕ—ÖôòÅ¡…Ωô•±ïÃΩÕµÖ±∞¯Ωë•ÿ¯Òà˚äHΩà¯Ωâ’——Ω∏¯Òâ’——Ω∏Åç±ÖÕÃÙâ›Ω…≠Õ¡Öçîµ…Ω’—îÅëïµºµ…Ω’—îàÅëÖ—ÑµëïµºµŸ•ï‹Ùâ…ï¡Ω…—Ãà¯ÒÕ¡Ö∏˚äZîΩÕ¡Ö∏¯Òë•ÿ¯ÒÕ—…Ωπú˘Ωµ¡±•ÖπçîÅ…ï¡Ω…–ΩÕ—…Ωπú¯ÒÕµÖ±∞˘1ïÖ…π•πú∞ÅÖ¡¡…ΩŸÖ∞ÅÖπêÅ…ïπï›Ö∞ÅïŸ•ëïπçîΩÕµÖ±∞¯Ωë•ÿ¯Òà˚äHΩà¯Ωâ’——Ω∏¯ΩÕïç—•Ω∏¯ÒÕïç—•Ω∏Åç±ÖÕÃÙâçÖ…êà¯ÒÕ¡Ö∏Åç±ÖÕÃÙâïÂïâ…Ω‹à˘M5A1Å=I9%MQ%=8ΩÕ¡Ö∏¯Ò†Ã¯ëÌïÕçÖ¡ï!—µ∞°Õïç—Ω»πôÖç•±•—‰•ÙΩ†Ã¯Ò¿¯ëÌïÕçÖ¡ï!—µ∞°Õïç—Ω»πëïÕç…•¡—•Ω∏•ÙΩ¿¯Òë∞Åç±ÖÕÃÙâëïµºµ¡Ö—°›Ö‰µµï—Ñà¯Òë•ÿ¯Òë–˘Mïç—Ω»Ωë–¯Òëê¯ëÌïÕçÖ¡ï!—µ∞°Õïç—Ω»ππÖµî•ÙΩëê¯Ωë•ÿ¯Òë•ÿ¯Òë–˘ï¡Ö…—µïπ—ÃΩë–¯Òëê¯ëÌÕïç—Ω»πëï¡Ö…—µïπ—Ãπ±ïπù—°ÙΩëê¯Ωë•ÿ¯Òë•ÿ¯Òë–˘IΩ±ïÃΩë–¯Òëê¯ëÌÕïç—Ω»π…Ω±ïÃπ±ïπù—°ÙΩëê¯Ωë•ÿ¯Ωë∞¯ΩÕïç—•Ω∏¯ΩÕïç—•Ω∏¯ëÌëïµΩ]Ω…≠ô±Ω›!—µ∞°Õïç—Ω»∞Å©Ω’…πï‰•ıÄÏ(ÄÅÙ(ÄÅ…ïπëï…M°ï±∞°çΩπ—ïπ–§Ï(ÄÅâ•πëïµΩΩµµΩπç—•ΩπÃ†§Ï(ÄÅëΩç’µïπ–πùï—±ïµïπ—	Â%ê†âÖÕÕ•ùπïµΩAÖ—°›Ö‰à§¸πÖëëŸïπ—1•Õ—ïπï»†âç±•ç¨à∞Ä†§ÄÙ¯ÅÖ±ï…–°ÄëÌÕïç—Ω»π¡Ö—°›Ö‰π—•—±ïÙÅ•ÃÅÖÕÕ•ùπïêÅ—ºÄëÌ›Ω…≠ï»ππÖµïÙÅ•∏Å—°•ÃÅÕÖµ¡±îÅ›Ω…≠Õ¡ÖçîπÄ§§Ï(ÄÅëΩç’µïπ–πùï—±ïµïπ—	Â%ê†âÖ¡¡…ΩŸïïµΩΩµ¡ï—ïπç‰à§¸πÖëëŸïπ—1•Õ—ïπï»†âç±•ç¨à∞Ä†§ÄÙ¯ÅÏÅ…ïçΩ…ëïµΩ)Ω’…πï‰†âΩµ¡ï—ïπç‰ÅÖ¡¡…ΩŸïêà∞ÅÅ5ÖπÖùïµïπ–ÅÖ¡¡…ΩŸïêÄëÌ›Ω…≠ï»ππÖµïÙÅÖô—ï»Å…ïŸ•ï›•πúÅ±ïÖ…π•πú∞ÅŸÖ±•ëÖ—•Ω∏ÅÖπêÅΩâÕï…ŸÖ—•Ω∏ÅïŸ•ëïπçîπÄ∞ÅÏÅÖ¡¡…ΩŸïêÈ—…’îÅÙ§ÏÅ…ïπëï…ïµΩ5ÖπÖùïµïπ—]Ω…≠Õ¡Öçî°Õïç—Ω»§ÏÅÙ§Ï(ÄÅëΩç’µïπ–πùï—±ïµïπ—	Â%ê†âÕç°ïë’±ïïµΩIïπï›Ö∞à§¸πÖëëŸïπ—1•Õ—ïπï»†âç±•ç¨à∞Ä†§ÄÙ¯ÅÏÅçΩπÕ–Å…ïπï›Ö∞ÄÙÅπï‹ÅÖ—î†§ÏÅ…ïπï›Ö∞πÕï—’±±eïÖ»°…ïπï›Ö∞πùï—’±±eïÖ»†§Ä¨Äƒ§ÏÅçΩπÕ–ÅëÖ—îÄÙÅ…ïπï›Ö∞π—Ω1ΩçÖ±ïÖ—ïM—…•πú†âï∏µTà∞ÅÏÅëÖ‰Ëâπ’µï…•åà∞ÅµΩπ—†ËâÕ°Ω…–à∞ÅÂïÖ»Ëâπ’µï…•åàÅÙ§ÏÅ…ïçΩ…ëïµΩ)Ω’…πï‰†âIïπï›Ö∞ÅÕç°ïë’±ïêà∞ÅÅΩµ¡ï—ïπç‰Å…ïπï›Ö∞ÅÕç°ïë’±ïêÅôΩ»ÄëÌëÖ—ïÙπÄ∞ÅÏÅ…ïπï›Ö±Mç°ïë’±ïêÈ—…’î∞Å…ïπï›Ö±Ö—îÈëÖ—îÅÙ§ÏÅ…ïπëï…ïµΩ5ÖπÖùïµïπ—]Ω…≠Õ¡Öçî°Õïç—Ω»§ÏÅÙ§Ï(ÄÅëΩç’µïπ–πùï—±ïµïπ—	Â%ê†âëïµΩM—ÖôôMïÖ…ç†à§¸πÖëëŸïπ—1•Õ—ïπï»†â•π¡’–à∞ÅïŸïπ–ÄÙ¯ÅÏÅ±ï–ÅŸ•Õ•â±îÄÙÄ¿ÏÅëΩç’µïπ–π≈’ï…ÂMï±ïç—Ω…±∞†àπëïµºµÕ—Öôòµ…Ω‹à§πôΩ…Öç†°…Ω‹ÄÙ¯ÅÏÅ…Ω‹π°•ëëï∏ÄÙÄÖ…Ω‹πëÖ—ÖÕï–πÕïÖ…ç†π•πç±’ëïÃ°ïŸïπ–π—Ö…ùï–πŸÖ±’îπ—Ω1Ω›ï…ÖÕî†§§ÏÅ•òÄ†Ö…Ω‹π°•ëëï∏§ÅŸ•Õ•â±î¨¨ÏÅÙ§ÏÅëΩç’µïπ–πùï—±ïµïπ—	Â%ê†âëïµΩM—Öôôµ¡—‰à§π°•ëëï∏ÄÙÅŸ•Õ•â±îÄ¯Ä¿ÏÅÙ§Ï(ÄÅëΩç’µïπ–πùï—±ïµïπ—	Â%ê†âëïµΩ%πŸ•—ïM—Öôòà§¸πÖëëŸïπ—1•Õ—ïπï»†âç±•ç¨à∞Ä†§ÄÙ¯ÅÖ±ï…–†â’•ëïêÅïµºÅ≠ïï¡ÃÅ•πŸ•—Ö—•ΩπÃÅ±ΩçÖ∞∏Å’—°ïπ—•çÖ—ïêÅΩ…ùÖπ•ÕÖ—•Ω∏Å•πŸ•—Ö—•ΩπÃÅ’ÕîÅ—°îÅ¡…Ω—ïç—ïêÅM’¡ÖâÖÕîÅÕï…Ÿ•çîÅÖπêÅI1LÅ¡Ω±•ç•ïÃ∏à§§Ï)Ù()ô’πç—•Ω∏Åâ•πëïµΩΩµµΩπç—•ΩπÃ†§ÅÏ(ÄÅëΩç’µïπ–π≈’ï…ÂMï±ïç—Ω…±∞†àπëïµºµ…Ω’—îà§πôΩ…Öç†°â’——Ω∏ÄÙ¯Åâ’——Ω∏πÖëëŸïπ—1•Õ—ïπï»†âç±•ç¨à∞Ä†§ÄÙ¯ÅÏÅÕ—Ö—îπÖç—•Ÿï]Ω…≠Õ¡ÖçïY•ï‹ÄÙÅâ’——Ω∏πëÖ—ÖÕï–πëïµΩY•ï‹ÏÅÕÖŸïM—Ö—î†§ÏÅ…ïπëï…ïµΩ]Ω…≠Õ¡Öçî†§ÏÅÙ§§Ï)Ù()ô’πç—•Ω∏Å…Ω’—ï’……ïπ—UÕï»†§ÅÏ(ÄÅπΩ…µÖ±•Èï’……ïπ—UÕï…IΩ±î†§Ï(ÄÅçΩπÕ–Å…Ω±îÄÙÅÕ—Ö—îπç’……ïπ—UÕï»¸π…Ω±îÏ((ÄÅ•òÄ°Õ—Ö—îπç’……ïπ—UÕï»¸πµΩëîÄÙÙÙÄâëïµºà§Å…ï—’…∏Å…ïπëï…ïµΩ]Ω…≠Õ¡Öçî†§Ï((ÄÅ•òÄ°…Ω±îÄÙÙÙÄâ¡çÑà§ÅÏ(ÄÄÄÅ…ïπëï…1ïÖ…πï…ÖÕ°âΩÖ…ê†§Ï(ÄÅÙÅï±ÕîÅ•òÄ°…Ω±îÄÙÙÙÄâ¡çÑµ—…Ö•πï»àÅÒÅ…Ω±îÄÙÙÙÄâç±ïÖπï»µ—…Ö•πï»à§ÅÏ(ÄÄÄÅ…ïπëï…Q…Ö•πï…ÖÕ°âΩÖ…ê†§Ï(ÄÅÙÅï±ÕîÅÏ(ÄÄÄÅ…ïπëï…IΩ±ï]Ω…≠Õ¡Öçî°…Ω±î§Ï(ÄÅÙ)Ù()ô’πç—•Ω∏Å…ïπëï…IΩ±ï]Ω…≠Õ¡Öçî°…Ω±î§ÅÏ(ÄÅçΩπÕ–Å•Õ5ÖπÖùïµïπ–ÄÙÅ…Ω±îÄÙÙÙÄâµÖπÖùïµïπ–àÏ(ÄÅçΩπÕ–Å•ÕQ…Ö•πï»ÄÙÅ…Ω±îÄÙÙÙÄâç±ïÖπï»µ—…Ö•πï»àÏ(ÄÅçΩπÕ–Å—•—±îÄÙÅ•Õ5ÖπÖùïµïπ–(ÄÄÄÄ¸Äâ5ÖπÖùïµïπ–Å]Ω…≠Õ¡Öçîà(ÄÄÄÄËÅ•ÕQ…Ö•πï»(ÄÄÄÄÄÄ¸Äâ±ïÖπï»ÅQ…Ö•πï»Å]Ω…≠Õ¡Öçîà(ÄÄÄÄÄÄËÄâ±ïÖπï»ÅQ…Ö•π•πúàÏ(ÄÅçΩπÕ–ÅëïÕç…•¡—•Ω∏ÄÙÅ•Õ5ÖπÖùïµïπ–(ÄÄÄÄ¸ÄâIïŸ•ï‹Å›Ω…≠ôΩ…çîÅ—…Ö•π•πúÅ¡Ö—°›ÖÂÃ∞Å±ïÖ…πï»Å¡…Ωù…ïÕÃÅÖπêÅçΩµ¡ï—ïπç‰ÅÕ—Ö—’ÃÅô…Ω¥ÅΩπîÅ¡±Öçî∏à(ÄÄÄÄËÅ•ÕQ…Ö•πï»(ÄÄÄÄÄÄ¸Äâ±ïÖπï»Å±ïÖ…πï»Å¡…Ωù…ïÕÃ∞ÅÖÕÕïÕÕµïπ—ÃÅÖπêÅ¡…Öç—•çÖ∞ÅçΩµ¡ï—ïπç‰ÅÕ•ù∏µΩôôÃÅ›•±∞ÅâîÅµÖπÖùïêÅ°ï…î∏à(ÄÄÄÄÄÄËÄâeΩ’»Å…Ω±îµÕ¡ïç•ô•åÅ°ïÖ±—°çÖ…îÅç±ïÖπ•πúÅµΩë’±ïÃÅ›•±∞ÅÖ¡¡ïÖ»Å°ï…îÅ›•—°Ω’–Åµ•·•πúÅ—°ï¥Å›•—†ÅAÅ—…Ö•π•πú∏àÏ((ÄÅ•òÄ°•Õ5ÖπÖùïµïπ–§ÅÏ(ÄÄÄÅ…ïπëï…5ÖπÖùïµïπ—ÖÕ°âΩÖ…ê†§Ï(ÄÄÄÅ…ï—’…∏Ï(ÄÅÙ((ÄÅ…ïπëï…M°ï±∞°Ä(ÄÄÄÄÒÕïç—•Ω∏Åç±ÖÕÃÙâëï¡Ö…—µïπ–µ°ïÖë•πúàÅ•êÙâ°Ωµîà¯(ÄÄÄÄÄÄÒÕ¡Ö∏Åç±ÖÕÃÙâïÂïâ…Ω‹à¯ëÌïÕçÖ¡ï!—µ∞°ëï¡Ö…—µïπ—9Öµî°Õ—Ö—îπÕï±ïç—ïëï¡Ö…—µïπ–§•ÙΩÕ¡Ö∏¯(ÄÄÄÄÄÄÒ†»¯ëÌ…Ω±îÄÙÙÙÄâç±ïÖπï»àÄ¸Äâ±ïÖπï»ÅQ…Ö•π•πúÅ!’ààÄËÅ—•—±ïÙΩ†»¯(ÄÄÄÄÄÄÒ¿¯ëÌëïÕç…•¡—•ΩπÙΩ¿¯(ÄÄÄÄΩÕïç—•Ω∏¯(ÄÄÄÄÒÕïç—•Ω∏Åç±ÖÕÃÙâçÖ…êÅ¡Ö—°›Ö‰µ…ïÖë‰µçÖ…êàÅ•êÙâ—…Ö•π•πúà¯(ÄÄÄÄÄÄÒÕ¡Ö∏Åç±ÖÕÃÙââÖëùîÅâÖëùîµ•∏µ¡…Ωù…ïÕÃà˘AÖ—°›Ö‰Å…ïÖë‰ΩÕ¡Ö∏¯(ÄÄÄÄÄÄÒ†Ã¯ëÌ›Ω…≠¡±ÖçïIΩ±ï1Öâï∞°…Ω±î•ÙÅÖççïÕÃÅ•ÃÅπΩ‹ÅÕï¡Ö…Ö—ïêΩ†Ã¯(ÄÄÄÄÄÄÒ¿Åç±ÖÕÃÙâÕµÖ±∞à˘¡¡…ΩŸïêÅ…Ω±îµÕ¡ïç•ô•åÅµΩë’±ïÃÅçÖ∏ÅâîÅÖëëïêÅ°ï…îÅπï·–∏ÅeΩ’»Åï·•Õ—•πúÅAÅ—…Ö•π•πúÅ…ïµÖ•πÃÅ’πç°Öπùïê∏Ω¿¯(ÄÄÄÄΩÕïç—•Ω∏¯(ÄÅÄ§Ï)Ù()ô’πç—•Ω∏Å…ïπëï…5ÖπÖùïµïπ—ÖÕ°âΩÖ…ê†§ÅÏ(ÄÅ•òÄ°Õ—Ö—îπç’……ïπ—UÕï»¸π…Ω±îÄÑÙÙÄâµÖπÖùïµïπ–à§Å…ï—’…∏Å…Ω’—ïM•ùπïë%πUÕï»†§Ï(ÄÅçΩπÕ–ÅÕ—Ω…îÄÙÅµÖπÖùïµïπ—M—Ω…î†§∞ÅÖç—Ω»ÄÙÅç’……ïπ—5ÖπÖùï»°Õ—Ω…î§Ï(ÄÅçΩπÕ–Åëï¡Ö…—µïπ–ÄÙÅAIQ59QLπô•πê°•—ï¥ÄÙ¯Å•—ï¥π•êÄÙÙÙÅÕ—Ö—îπÕï±ïç—ïëï¡Ö…—µïπ–§Ï(ÄÅ•òÄ†Öëï¡Ö…—µïπ–§Å…ï—’…∏Å…ïπëï…ï¡Ö…—µïπ—Mï±ïç—•Ω∏†§Ï(ÄÅ•òÄ†ÖÕ—Ω…îπÖç—Ω…ÖπççïÕÃ°Öç—Ω»∞Åëï¡Ö…—µïπ–π•ê§§ÅÏÅÕ—Ö—îπÕï±ïç—ïëï¡Ö…—µïπ–ÄÙÅÖç—Ω»πëï¡Ö…—µïπ—Õl¡tÅÒÅπ’±∞ÏÅÕÖŸïM—Ö—î†§ÏÅ…ï—’…∏ÅÕ—Ö—îπÕï±ïç—ïëï¡Ö…—µïπ–Ä¸Å…ïπëï…5ÖπÖùïµïπ—ÖÕ°âΩÖ…ê†§ÄËÅ…ïπëï…M°ï±∞†úÒÕïç—•Ω∏Åç±ÖÕÃÙâçÖ…êÅÖççïÕÃµâ±Ωç≠ïêà¯Ò†»˘9ºÅëï¡Ö…—µïπ–ÅÖççïÕÃΩ†»¯Ò¿˘Õ¨Å5ÖπÖùïµïπ–Å—ºÅÖÕÕ•ù∏ÅÑÅëï¡Ö…—µïπ–∏Ω¿¯ΩÕïç—•Ω∏¯ú§ÏÅÙ(ÄÅçΩπÕ–Å°ΩÕ¡•—Ö±]•ëîÄÙÅÖç—Ω»π±ïŸï∞ÄÙÙÙÄâ!ΩÕ¡•—Ö∞Åëµ•π•Õ—…Ö—Ω»àÏ(ÄÅçΩπÕ–Å…ï¡Ω…–ÄÙÅ5959Q}IA=IQMmÕ—Ö—îπÕï±ïç—ïëï¡Ö…—µïπ—tÏ(ÄÅçΩπÕ–Å…ïçΩ…ëÃÄÙÅ›Ω…≠ô±Ω›IïçΩ…ëÃ†§πô•±—ï»°•—ï¥ÄÙ¯Å•—ï¥πëï¡Ö…—µïπ–ÄÙÙÙÅÕ—Ö—îπÕï±ïç—ïëï¡Ö…—µïπ–§Ï(ÄÅçΩπÕ–ÅŸ•Õ•â±ïM—ÖôòÄÙÅÕ—Ω…îπëÖ—ÑπÕ—Öôòπô•±—ï»°¡ï…ÕΩ∏ÄÙ¯Å°ΩÕ¡•—Ö±]•ëîÅÒÅ¡ï…ÕΩ∏πëï¡Ö…—µïπ—ÃπÕΩµî°•êÄÙ¯ÅÖç—Ω»πëï¡Ö…—µïπ—Ãπ•πç±’ëïÃ°•ê§§§Ï(ÄÅçΩπÕ–Åëï¡Ö…—µïπ—=¡—•ΩπÃÄÙÅAIQ59QLπô•±—ï»°êÄÙ¯ÅÖç—Ω»πëï¡Ö…—µïπ—Ãπ•πç±’ëïÃ°êπ•ê§§πµÖ¿°êÄÙ¯ÅÄÒΩ¡—•Ω∏ÅŸÖ±’îÙàëÌêπ•ëÙà¯ëÌïÕçÖ¡ï!—µ∞°êππÖµî•ÙΩΩ¡—•Ω∏˘Ä§π©Ω•∏†àà§Ï(ÄÅçΩπÕ–Å•ëïπ—•—‰ÄÙÅ¡ï…ÕΩ∏ÄÙ¯ÅÄÒÕ¡Ö∏Åç±ÖÕÃÙâÕ—Öôòµ•ëïπ—•—‰à¯ÒÕ—…Ωπú¯ëÌïÕçÖ¡ï!—µ∞°¡ï…ÕΩ∏ππÖµî•ÙΩÕ—…Ωπú¯ÒÕµÖ±∞¯ëÌïÕçÖ¡ï!—µ∞°¡ï…ÕΩ∏π•ê•ÙΩÕµÖ±∞¯ΩÕ¡Ö∏˘ÄÏ(ÄÅçΩπÕ–ÅÕ—Öôôï¡Ö…—µïπ—IΩ›ÃÄÙÅŸ•Õ•â±ïM—Öôòπô•±—ï»°¿ÄÙ¯ÅlâAà∞Äâ±ïÖπï»âtπ•πç±’ëïÃ°¿π…Ω±î§§πµÖ¿°¿ÄÙ¯ÅÄÒë•ÿÅç±ÖÕÃÙâÖÕÕ•ùπµïπ–µçΩπ—…Ω∞àÅëÖ—Ñµ•êÙàëÌ¿π•ëÙà¯ëÌ•ëïπ—•—‰°¿•ÙÒÕ¡Ö∏¯ëÌ¿π…Ω±ïÙΩÕ¡Ö∏¯Ò±Öâï∞¯ÒÕ¡Ö∏˘ï¡Ö…—µïπ–ΩÕ¡Ö∏¯ÒÕï±ïç–Åç±ÖÕÃÙâÕ—Öôòµëï¡Ö…—µïπ–à¯ÒΩ¡—•Ω∏ÅŸÖ±’îÙàà˘°ΩΩÕîÅëï¡Ö…—µïπ–ΩΩ¡—•Ω∏¯ëÌAIQ59QLπô•±—ï»°êÄÙ¯ÅÖç—Ω»πëï¡Ö…—µïπ—Ãπ•πç±’ëïÃ°êπ•ê§§πµÖ¿°êÄÙ¯ÅÄÒΩ¡—•Ω∏ÅŸÖ±’îÙàëÌêπ•ëÙàÄëÌ¿πëï¡Ö…—µïπ—Ãπ•πç±’ëïÃ°êπ•ê§Ä¸ÄâÕï±ïç—ïêàÄËÄàâÙ¯ëÌïÕçÖ¡ï!—µ∞°êππÖµî•ÙΩΩ¡—•Ω∏˘Ä§π©Ω•∏†àà•ÙΩÕï±ïç–¯Ω±Öâï∞¯Òâ’——Ω∏Åç±ÖÕÃÙââ—∏Åâ—∏µÕïçΩπëÖ…‰ÅÕÖŸîµÕ—Öôòµëï¡Ö…—µïπ–à˘Ωπô•…¥Ωâ’——Ω∏¯Ωë•ÿ˘Ä§π©Ω•∏†àà§Ï(ÄÅçΩπÕ–Å—…Ö•πï…ï¡Ö…—µïπ—IΩ›ÃÄÙÅŸ•Õ•â±ïM—Öôòπô•±—ï»°¿ÄÙ¯Å¿π…Ω±îπ•πç±’ëïÃ†âQ…Ö•πï»à§§πµÖ¿°¿ÄÙ¯ÅÄÒë•ÿÅç±ÖÕÃÙâÖÕÕ•ùπµïπ–µçΩπ—…Ω∞àÅëÖ—Ñµ•êÙàëÌ¿π•ëÙà¯ëÌ•ëïπ—•—‰°¿•ÙÒÕ¡Ö∏¯ëÌ¿π…Ω±ïÙΩÕ¡Ö∏¯Òô•ï±ëÕï–Åç±ÖÕÃÙâëï¡Ö…—µïπ–µç°ïç≠Ãà¯Ò±ïùïπê˘ï¡Ö…—µïπ—ÃΩ±ïùïπê¯ëÌAIQ59QLπô•±—ï»°êÄÙ¯ÅÖç—Ω»πëï¡Ö…—µïπ—Ãπ•πç±’ëïÃ°êπ•ê§§πµÖ¿°êÄÙ¯ÅÄÒ±Öâï∞¯Ò•π¡’–Å—Â¡îÙâç°ïç≠âΩ‡àÅŸÖ±’îÙàëÌêπ•ëÙàÄëÌ¿πëï¡Ö…—µïπ—Ãπ•πç±’ëïÃ°êπ•ê§Ä¸Äâç°ïç≠ïêàÄËÄàâÙ¯ÄëÌïÕçÖ¡ï!—µ∞°êππÖµî•ÙΩ±Öâï∞˘Ä§π©Ω•∏†àà•ÙΩô•ï±ëÕï–¯Òâ’——Ω∏Åç±ÖÕÃÙââ—∏Åâ—∏µÕïçΩπëÖ…‰ÅÕÖŸîµ—…Ö•πï»µëï¡Ö…—µïπ—Ãà˘Ωπô•…¥Ωâ’——Ω∏¯Ωë•ÿ˘Ä§π©Ω•∏†àà§Ï(ÄÅçΩπÕ–ÅÕ—ÖôôQ…Ö•πï…IΩ›ÃÄÙÅŸ•Õ•â±ïM—Öôòπô•±—ï»°¿ÄÙ¯ÅlâAà∞Äâ±ïÖπï»âtπ•πç±’ëïÃ°¿π…Ω±î§§πµÖ¿°¿ÄÙ¯ÅÏÅçΩπÕ–Å…ï≈’•…ïêÄÙÅÄëÌ¿π…Ω±ïÙÅQ…Ö•πï…ÄÏÅçΩπÕ–ÅçΩµ¡Ö—•â±îÄÙÅŸ•Õ•â±ïM—Öôòπô•±—ï»°–ÄÙ¯Å–π…Ω±îÄÙÙÙÅ…ï≈’•…ïêÄòòÅ¿πëï¡Ö…—µïπ—ÃπÕΩµî°êÄÙ¯Å–πëï¡Ö…—µïπ—Ãπ•πç±’ëïÃ°ê§§§ÏÅ…ï—’…∏ÅÄÒë•ÿÅç±ÖÕÃÙâÖÕÕ•ùπµïπ–µçΩπ—…Ω∞àÅëÖ—Ñµ•êÙàëÌ¿π•ëÙà¯ëÌ•ëïπ—•—‰°¿•ÙÒÕ¡Ö∏¯ëÌ¿π…Ω±ïÙΩÕ¡Ö∏¯Ò±Öâï∞¯ÒÕ¡Ö∏˘Q…Ö•πï»ΩÕ¡Ö∏¯ÒÕï±ïç–Åç±ÖÕÃÙâÕ—Öôòµ—…Ö•πï»à¯ÒΩ¡—•Ω∏ÅŸÖ±’îÙàà˘°ΩΩÕîÅ—…Ö•πï»ΩΩ¡—•Ω∏¯ëÌçΩµ¡Ö—•â±îπµÖ¿°–ÄÙ¯ÅÏÅçΩπÕ–ÅçÖ¿ıÕ—Ω…îπ—…Ö•πï…Ö¡Öç•—‰°–π•ê§ÏÅ…ï—’…∏ÅÄÒΩ¡—•Ω∏ÅŸÖ±’îÙàëÌ–π•ëÙàÄëÌ¿π—…Ö•πï…%êÙÙı–π•ê¸âÕï±ïç—ïêàËàâÙ¯ëÌïÕçÖ¡ï!—µ∞°–ππÖµî•ÙÉ
+‹ÄëÌ–π•ëÙÄ†ëÌçÖ¿πÖç—•ŸïÙºëÌçÖ¿πçÖ¡Öç•—ÂÙ§ΩΩ¡—•Ω∏˘ÄÏÅÙ§π©Ω•∏†àà•ÙΩÕï±ïç–¯Ω±Öâï∞¯Òâ’——Ω∏Åç±ÖÕÃÙââ—∏Åâ—∏µÕïçΩπëÖ…‰ÅÕÖŸîµÕ—Öôòµ—…Ö•πï»à˘IïŸ•ï‹ÅÖπêÅçΩπô•…¥Ωâ’——Ω∏¯Ωë•ÿ˘ÄÏÅÙ§π©Ω•∏†àà§Ï(ÄÅçΩπÕ–Å…ïçΩµµïπëÖ—•ΩπÃÄÙÅ…ïçΩ…ëÃπô•±—ï»°•—ï¥ÄÙ¯Å•—ï¥πÕ—Ö—’ÃÄÙÙÙÄâMïπ–Å—ºÅ5ÖπÖùïµïπ–à§πµÖ¿°•—ï¥ÄÙ¯ÅÄÒÖ…—•ç±îÅç±ÖÕÃÙâ…ïŸ•ï‹µçÖ…êàÅëÖ—Ñµ•êÙàëÌ•—ï¥π•ëÙà¯Òë•ÿ¯ÒÕ—…Ωπú¯ëÌïÕçÖ¡ï!—µ∞°•—ï¥ππÖµî•ÙΩÕ—…Ωπú¯ÒÕ¡Ö∏¯ëÌ•—ï¥π…Ω±ïÙÉ
+‹ÄëÌïÕçÖ¡ï!—µ∞°•—ï¥πôïïëâÖç¨ÅÒÄâQ…Ö•πï»Å…ïçΩµµïπëÖ—•Ω∏à•ÙΩÕ¡Ö∏¯Ωë•ÿ¯Ò±Öâï∞˘5ÖπÖùïµïπ–ÅôïïëâÖç¨Ò—ï·—Ö…ïÑÅç±ÖÕÃÙâµÖπÖùïµïπ–µôïïëâÖç¨àÅ¡±Öçï°Ω±ëï»ÙâIï≈’•…ïêÅ›°ï∏Å…ï≈’ïÕ—•πúÅ…ïÖÕÕïÕÕµïπ–à¯Ω—ï·—Ö…ïÑ¯Ω±Öâï∞¯Òë•ÿ¯Òâ’——Ω∏Åç±ÖÕÃÙââ—∏ÅÖ¡¡…ΩŸîµÕ•ùπΩôòà˘¡¡…ΩŸîΩâ’——Ω∏¯Òâ’——Ω∏Åç±ÖÕÃÙââ—∏Åâ—∏µëÖπùï»Å…ïÖÕÕïÕÃµÕ•ùπΩôòà˘Iï≈’ïÕ–Å…ïÖÕÕïÕÕµïπ–Ωâ’——Ω∏¯Ωë•ÿ¯ΩÖ…—•ç±î˘Ä§π©Ω•∏†àà§Ï(ÄÅçΩπÕ–ÅÕ—ÖôôIΩ›ÃÄÙÅŸ•Õ•â±ïM—ÖôòπµÖ¿°¡ï…ÕΩ∏ÄÙ¯ÅÏÅçΩπÕ–Å—…Ö•πï»ıÕ—Ω…îπëÖ—ÑπÕ—Öôòπô•πê°¿Ù˘¿π•êÙÙı¡ï…ÕΩ∏π—…Ö•πï…%ê§∞ÅµÖπÖùï»ıÕ—Ω…îπëÖ—ÑπµÖπÖùï…Ãπô•πê°¿Ù˘¿π•êÙÙı¡ï…ÕΩ∏πµÖπÖùï…%ê§∞ÅΩŸï…ë’îıÕ—Ω…îπëÖ—ÑπÖÕÕ•ùπµïπ—ÃπÕΩµî°ÑÙ˘ÑπÕ—Öôô%êÙÙı¡ï…ÕΩ∏π•êÄòòÅÑπë’ïÖ—îÄÅπï‹ÅÖ—î†§π—Ω%M=M—…•πú†§πÕ±•çî†¿∞ƒ¿§ÄòòÅÑπµÖπÖùïµïπ—¡¡…ΩŸÖ±M—Ö—’ÃÑÙÙâ¡¡…ΩŸïêà§ÏÅ…ï—’…∏ÅÄÒ—»Åç±ÖÕÃÙâë•…ïç—Ω…‰µ…Ω‹àÅëÖ—ÑµÕïÖ…ç†ÙàëÌïÕçÖ¡ï!—µ∞†°¡ï…ÕΩ∏ππÖµî¨úÄú≠¡ï…ÕΩ∏π•ê¨úÄú≠¡ï…ÕΩ∏πïµÖ•∞§π—Ω1Ω›ï…ÖÕî†§•ÙàÅëÖ—Ñµ…Ω±îÙàëÌ¡ï…ÕΩ∏π…Ω±ïÙàÅëÖ—Ñµëï¡Ö…—µïπ–ÙàëÌ¡ï…ÕΩ∏πëï¡Ö…—µïπ—Ãπ©Ω•∏†úÄú•ÙàÅëÖ—ÑµÖççΩ’π–ÙàëÌ¡ï…ÕΩ∏πÖççΩ’π—M—Ö—’ÕÙàÅëÖ—Ñµïµ¡±ΩÂµïπ–ÙàëÌ¡ï…ÕΩ∏πïµ¡±ΩÂµïπ—M—Ö—’ÕÙàÅëÖ—ÑµçΩµ¡ï—ïπç‰ÙàëÌ¡ï…ÕΩ∏πçΩµ¡ï—ïπçÂM—Ö—’ÕÙàÅëÖ—Ñµ—…Ö•πï»ÙàëÌ—…Ö•πï»¸π•ëÒù’πÖÕÕ•ùπïêùÙàÅëÖ—ÑµµÖπÖùï»ÙàëÌµÖπÖùï»¸π•ëÒù’πÖÕÕ•ùπïêùÙàÅëÖ—Ñµ¡…Ωù…ïÕÃÙàëÌ¡ï…ÕΩ∏π¡…Ωù…ïÕÕÙàÅëÖ—ÑµΩŸï…ë’îÙàëÌΩŸï…ë’î¸ùΩŸï…ë’îúËùç’……ïπ–ùÙà¯Ò—ê¯Ò•π¡’–Å—Â¡îÙâç°ïç≠âΩ‡àÅç±ÖÕÃÙââ’±¨µÕï±ïç–àÅëÖ—Ñµ•êÙàëÌ¡ï…ÕΩ∏π•ëÙàÅÖ…•Ñµ±Öâï∞ÙâMï±ïç–ÄëÌïÕçÖ¡ï!—µ∞°¡ï…ÕΩ∏ππÖµî•Ùà¯ÄÒâ’——Ω∏Åç±ÖÕÃÙâ±•π¨µâ’——Ω∏ÅÕ—Öôòµ¡…Ωô•±îàÅëÖ—Ñµ•êÙàëÌ¡ï…ÕΩ∏π•ëÙà¯ëÌ•ëïπ—•—‰°¡ï…ÕΩ∏•ÙΩâ’——Ω∏¯Ω—ê¯Ò—ê¯ëÌ¡ï…ÕΩ∏π…Ω±ïÙΩ—ê¯Ò—ê¯ëÌ¡ï…ÕΩ∏πëï¡Ö…—µïπ—ÃπµÖ¿°ëï¡Ö…—µïπ—9Öµî§πµÖ¿°ïÕçÖ¡ï!—µ∞§π©Ω•∏†ú∞Äú•ÙΩ—ê¯Ò—ê¯ëÌ¡ï…ÕΩ∏π¡…Ωù…ïÕÕÙîΩ—ê¯Ò—ê¯ÒÕ¡Ö∏Åç±ÖÕÃÙâÕ—Ö—’Ãµç°•¿ÅÕ—Ö—’Ã¥ëÌ¡ï…ÕΩ∏πÖççΩ’π—M—Ö—’ÃÙÙÙùM’Õ¡ïπëïêú¸ùëÖπùï»úÈ¡ï…ÕΩ∏πÖççΩ’π—M—Ö—’ÃÙÙÙùç—•Ÿîú¸ùÕ’ççïÕÃúËù›Ö…π•πúùÙà¯ëÌ¡ï…ÕΩ∏πÖççΩ’π—M—Ö—’ÕÙΩÕ¡Ö∏¯Ω—ê¯Ω—»˘ÄÏÅÙ§π©Ω•∏†àà§Ï((ÄÅ…ïπëï…M°ï±∞°Ä(ÄÄÄÄÒÕïç—•Ω∏Åç±ÖÕÃÙâµÖπÖùïµïπ–µ—•—±îàÅ•êÙâ°Ωµîà¯Òë•ÿ¯Ò†»˘5ÖπÖùïµïπ–ÅÖÕ°âΩÖ…êΩ†»¯Ò¿Åç±ÖÕÃÙâµÖπÖùïµïπ–µÕ’â—•—±îà¯ëÌ°ΩÕ¡•—Ö±]•ëîÄ¸Äâ!ΩÕ¡•—Ö∞µ›•ëîÅ›Ω…≠Õ¡ÖçîàÄËÅÄëÌïÕçÖ¡ï!—µ∞°ëï¡Ö…—µïπ–ππÖµî•ÙÉ
+‹Åï¡Ö…—µïπ–ÅµÖπÖùïµïπ–Å›Ω…≠Õ¡ÖçïÅÙΩ¿¯Ωë•ÿ¯Òâ’——Ω∏Åç±ÖÕÃÙââ—∏Åâ—∏µÕïçΩπëÖ…‰àÅ•êÙâç°Öπùïï¡Ö…—µïπ—	—∏à˘M›•—ç†Åï¡Ö…—µïπ–Ωâ’——Ω∏¯ΩÕïç—•Ω∏¯(ÄÄÄÄÒë•ÿÅç±ÖÕÃÙâÕ—Ö—Ãµù…•êÅµÖπÖùïµïπ–µÕ—Ö—Ãà¯Òë•ÿÅç±ÖÕÃÙâÕ—Ö–µçÖ…êà¯ÒÕ¡Ö∏˘QΩ—Ö∞ÅAÅÕ—ÖôòΩÕ¡Ö∏¯ÒÕ—…Ωπú¯ëÌ…ï¡Ω…–π¡çÖÙΩÕ—…Ωπú¯Ωë•ÿ¯Òë•ÿÅç±ÖÕÃÙâÕ—Ö–µçÖ…êà¯ÒÕ¡Ö∏˘QΩ—Ö∞Å±ïÖπï»ÅÕ—ÖôòΩÕ¡Ö∏¯ÒÕ—…Ωπú¯ëÌ…ï¡Ω…–πç±ïÖπï…ÕÙΩÕ—…Ωπú¯Ωë•ÿ¯Òë•ÿÅç±ÖÕÃÙâÕ—Ö–µçÖ…êÅÕ—Ö–µçΩµ¡±ï—îà¯ÒÕ¡Ö∏˘Ωµ¡±ï—ïêÅ—…Ö•π•πúΩÕ¡Ö∏¯ÒÕ—…Ωπú¯ëÌ…ï¡Ω…–πçΩµ¡±ï—ïëÙΩÕ—…Ωπú¯Ωë•ÿ¯Òë•ÿÅç±ÖÕÃÙâÕ—Ö–µçÖ…êÅÕ—Ö–µΩŸï…ë’îà¯ÒÕ¡Ö∏˘=Ÿï…ë’îÅ—…Ö•π•πúΩÕ¡Ö∏¯ÒÕ—…Ωπú¯ëÌ…ï¡Ω…–πΩŸï…ë’ïÙΩÕ—…Ωπú¯Ωë•ÿ¯Ωë•ÿ¯(ÄÄÄÄÒÕïç—•Ω∏Åç±ÖÕÃÙâçÖ…êÅëÖÕ°âΩÖ…êµçÖ…êÅµÖπÖùïµïπ–µÕïç—•Ω∏àÅ•êÙâ—…Ö•π•πúà¯Òë•ÿÅç±ÖÕÃÙâÕïç—•Ω∏µ°ïÖë•πúà¯Òë•ÿ¯ÒÕ¡Ö∏Åç±ÖÕÃÙâïÂïâ…Ω‹à˘]=I-=IÅMM%959QLΩÕ¡Ö∏¯Ò†Ã˘ÕÕ•ùπµïπ—ÃΩ†Ã¯Ωë•ÿ¯ÒÕ¡Ö∏Åç±ÖÕÃÙâÕµÖ±∞à˘IΩ±îÅÖπêÅçÖ¡Öç•—‰Åç°ïç≠ïêΩÕ¡Ö∏¯Ωë•ÿ¯Ò¿Åç±ÖÕÃÙâ…ïÖëΩπ±‰µπΩ—îà˘ÕÕ•ù∏ÅÕ—ÖôòÅÖπêÅ—…Ö•πï…ÃÅ—ºÅëï¡Ö…—µïπ—Ã∞Å—°ï∏ÅçΩππïç–ÅïÖç†ÅÕ—ÖôòÅµïµâï»Å›•—†Å—°îÅÖ¡¡…Ω¡…•Ö—îÅ—…Ö•πï»∏Ω¿¯Òë•ÿÅç±ÖÕÃÙâÖÕÕ•ùπµïπ–µù…Ω’¡Ãà¯ÒÕïç—•Ω∏¯Ò†–¯ƒ∏ÅM—ÖôòÅëï¡Ö…—µïπ–ÅÖÕÕ•ùπµïπ—ÃΩ†–¯Òë•ÿÅç±ÖÕÃÙâÖÕÕ•ùπµïπ–µ±•Õ–à¯ëÌÕ—Öôôï¡Ö…—µïπ—IΩ›ÕÙΩë•ÿ¯ΩÕïç—•Ω∏¯ÒÕïç—•Ω∏¯Ò†–¯»∏ÅQ…Ö•πï»Åëï¡Ö…—µïπ–ÅÖÕÕ•ùπµïπ—ÃΩ†–¯Òë•ÿÅç±ÖÕÃÙâÖÕÕ•ùπµïπ–µ±•Õ–à¯ëÌ—…Ö•πï…ï¡Ö…—µïπ—IΩ›ÕÙΩë•ÿ¯ΩÕïç—•Ω∏¯ÒÕïç—•Ω∏¯Ò†–¯Ã∏ÅM—Öôòµ—ºµ—…Ö•πï»ÅÖÕÕ•ùπµïπ—ÃΩ†–¯Ò¿Åç±ÖÕÃÙâÕµÖ±∞à˘Q…Ö•πï»ÅçÖ¡Öç•—‰Å•ÃÅÕ°Ω›∏ÅâïôΩ…îÅçΩπô•…µÖ—•Ω∏∏ÅMï±ïç—•πúÅÑÅπï‹Å—…Ö•πï»Å…ï¡±ÖçïÃÅ—°îÅç’……ïπ–ÅÖÕÕ•ùπµïπ–∏Ω¿¯Òë•ÿÅç±ÖÕÃÙâÖÕÕ•ùπµïπ–µ±•Õ–à¯ëÌÕ—ÖôôQ…Ö•πï…IΩ›ÕÙΩë•ÿ¯ΩÕïç—•Ω∏¯Ωë•ÿ¯ΩÕïç—•Ω∏¯(ÄÄÄÄÒÕïç—•Ω∏Åç±ÖÕÃÙâçÖ…êÅëÖÕ°âΩÖ…êµçÖ…êÅµÖπÖùïµïπ–µÕïç—•Ω∏àÅ•êÙâ…ï¡Ω…—Ãà¯Òë•ÿÅç±ÖÕÃÙâÕïç—•Ω∏µ°ïÖë•πúà¯Òë•ÿ¯ÒÕ¡Ö∏Åç±ÖÕÃÙâïÂïâ…Ω‹à˘%90ÅAAI=Y0ΩÕ¡Ö∏¯Ò†Ã˘M•ù∏µΩôòÅ…ïçΩµµïπëÖ—•ΩπÃΩ†Ã¯Ωë•ÿ¯ÒÕ¡Ö∏Åç±ÖÕÃÙâçΩ’π–µâÖëùîà¯ëÌ…ïçΩ…ëÃπô•±—ï»°•—ï¥Ù˘•—ï¥πÕ—Ö—’ÃÙÙÙâMïπ–Å—ºÅ5ÖπÖùïµïπ–à§π±ïπù—°ÙΩÕ¡Ö∏¯Ωë•ÿ¯Òë•ÿÅç±ÖÕÃÙâ…ïŸ•ï‹µ±•Õ–à¯ëÌ…ïçΩµµïπëÖ—•ΩπÃÅÒÄúÒ¿Åç±ÖÕÃÙâïµ¡—‰µÕ—Ö—îà˘9ºÅ…ïçΩµµïπëÖ—•ΩπÃÅÖ›Ö•—•πúÅ5ÖπÖùïµïπ–∏Ω¿¯ùÙΩë•ÿ¯ΩÕïç—•Ω∏¯(ÄÄÄÄÒÕïç—•Ω∏Åç±ÖÕÃÙâçÖ…êÅëÖÕ°âΩÖ…êµçÖ…êÅµÖπÖùïµïπ–µÕïç—•Ω∏àÅ•êÙâÕ—Öôòà¯Òë•ÿÅç±ÖÕÃÙâÕïç—•Ω∏µ°ïÖë•πúà¯Òë•ÿ¯ÒÕ¡Ö∏Åç±ÖÕÃÙâïÂïâ…Ω‹à˘MQÅ%IQ=IdΩÕ¡Ö∏¯Ò†Ã˘A…Ωô•±ïÃÅÖπêÅÖÕÕ•ùπµïπ—ÃΩ†Ã¯Ωë•ÿ¯Òâ’——Ω∏Åç±ÖÕÃÙââ—∏àÅ•êÙâ•πŸ•—ïM—Öôòà˘%πŸ•—îÅÕ—ÖôòΩâ’——Ω∏¯Ωë•ÿ¯(ÄÄÄÄÄÄÒë•ÿÅç±ÖÕÃÙâë•…ïç—Ω…‰µô•±—ï…Ãà¯Ò±Öâï∞Åç±ÖÕÃÙâÕïÖ…ç†µô•±—ï»à¯ÒÕ¡Ö∏˘9Öµî∞Åïµ¡±ΩÂïîÅ%ÅΩ»ÅïµÖ•∞ΩÕ¡Ö∏¯Ò•π¡’–Å•êÙâÕ—ÖôôMïÖ…ç†àÅ—Â¡îÙâÕïÖ…ç†àÅ¡±Öçï°Ω±ëï»ÙâMïÖ…ç†ÅÕ—Öôòà¯Ω±Öâï∞¯ëÌmlâ…Ω±ï•±—ï»à∞âIΩ±îà∞â±∞Å…Ω±ïÃà±lâAà∞â±ïÖπï»à∞âAÅQ…Ö•πï»à∞â±ïÖπï»ÅQ…Ö•πï»âut±lâëï¡Ö…—µïπ—•±—ï»à∞âï¡Ö…—µïπ–à∞â±∞Åëï¡Ö…—µïπ—Ãà±AIQ59QLπô•±—ï»°êÙ˘Öç—Ω»πëï¡Ö…—µïπ—Ãπ•πç±’ëïÃ°êπ•ê§§πµÖ¿°êÙ˘mêπ•ê±êππÖµït•t±lâÖççΩ’π—•±—ï»à∞âççΩ’π–ÅÕ—Ö—’Ãà∞â±∞ÅÖççΩ’π–ÅÕ—Ö—’ÕïÃà±Õ—Ω…îπ=U9Q}MQQUMMt±lâïµ¡±ΩÂµïπ—•±—ï»à∞âµ¡±ΩÂµïπ–ÅÕ—Ö—’Ãà∞â±∞Åïµ¡±ΩÂµïπ–ÅÕ—Ö—’ÕïÃà±Õ—Ω…îπ5A1=e59Q}MQQUMMt±lâçΩµ¡ï—ïπçÂ•±—ï»à∞âΩµ¡ï—ïπç‰ÅÕ—Ö—’Ãà∞â±∞ÅçΩµ¡ï—ïπç•ïÃà±lâ9Ω–ÅM—Ö…—ïêà∞â%∏ÅA…Ωù…ïÕÃà∞â¡¡…ΩŸïêà∞âIïÖÕÕïÕÕµïπ–ÅIï≈’•…ïêâut±lâ—…Ö•πï…•±—ï»à∞âQ…Ö•πï»à∞â±∞Å—…Ö•πï…Ãà±Ÿ•Õ•â±ïM—Öôòπô•±—ï»°¿Ù˘¿π…Ω±îπ•πç±’ëïÃ†ùQ…Ö•πï»ú§§πµÖ¿°¿Ù˘m¿π•ê±¿ππÖµït•t±lâµÖπÖùï…•±—ï»à∞â5ÖπÖùï»à∞â±∞ÅµÖπÖùï…Ãà±Õ—Ω…îπëÖ—ÑπµÖπÖùï…ÃπµÖ¿°¿Ù˘m¿π•ê±¿ππÖµït•t±lâ¡…Ωù…ïÕÕ•±—ï»à∞âQ…Ö•π•πúÅ¡…Ωù…ïÕÃà∞â±∞Å¡…Ωù…ïÕÃà±mlà¿¥–‰à∞à√äL–‰îât±là‘¿¥‰‰à∞à‘√äL‰‰îât±làƒ¿¿à∞àƒ¿¿îâuut±lâΩŸï…ë’ï•±—ï»à∞â=Ÿï…ë’îÅÕ—Ö—’Ãà∞â±∞Åë’îÅëÖ—ïÃà±mlâΩŸï…ë’îà∞â=Ÿï…ë’îât±lâç’……ïπ–à∞â’……ïπ–âuuutπµÖ¿†°m•ê±±Öâï∞±Ö±∞±ŸÖ±’ïÕt§Ù˘ÄÒ±Öâï∞¯ÒÕ¡Ö∏¯ëÌ±Öâï±ÙΩÕ¡Ö∏¯ÒÕï±ïç–Å•êÙàëÌ•ëÙà¯ÒΩ¡—•Ω∏ÅŸÖ±’îÙâÖ±∞à¯ëÌÖ±±ÙΩΩ¡—•Ω∏¯ëÌŸÖ±’ïÃπµÖ¿°ÿÙ˘……Ö‰π•Õ……Ö‰°ÿ§˝ÄÒΩ¡—•Ω∏ÅŸÖ±’îÙàëÌŸl¡uÙà¯ëÌïÕçÖ¡ï!—µ∞°Ÿl≈t•ÙΩΩ¡—•Ω∏˘ÄÈÄÒΩ¡—•Ω∏¯ëÌŸÙΩΩ¡—•Ω∏˘Ä§π©Ω•∏†úú•ÙΩÕï±ïç–¯Ω±Öâï∞˘Ä§π©Ω•∏†úú•ÙΩë•ÿ¯(ÄÄÄÄÄÄÒë•ÿÅç±ÖÕÃÙââ’±¨µâÖ»à¯ÒÕ—…ΩπúÅ•êÙâÕï±ïç—•ΩπΩ’π–à¯¿ÅÕï±ïç—ïêΩÕ—…Ωπú¯Ò±Öâï∞¯ÒÕ¡Ö∏Åç±ÖÕÃÙâÕ»µΩπ±‰à˘	’±¨ÅÖç—•Ω∏ΩÕ¡Ö∏¯ÒÕï±ïç–Å•êÙââ’±≠ç—•Ω∏à¯ÒΩ¡—•Ω∏ÅŸÖ±’îÙàà˘	’±¨ÅÖç—•Ω∏ΩΩ¡—•Ω∏¯ÒΩ¡—•Ω∏ÅŸÖ±’îÙâM’Õ¡ïπëïêà˘M’Õ¡ïπêÅÖççïÕÃΩΩ¡—•Ω∏¯ÒΩ¡—•Ω∏ÅŸÖ±’îÙâ…ç°•Ÿïêà˘…ç°•ŸîÅÖççΩ’π—ÃΩΩ¡—•Ω∏¯ΩÕï±ïç–¯Ω±Öâï∞¯Òâ’——Ω∏Åç±ÖÕÃÙââ—∏Åâ—∏µÕïçΩπëÖ…‰àÅ•êÙâÖ¡¡±Â	’±¨àÅë•ÕÖâ±ïê˘IïŸ•ï‹ÅÖπêÅÖ¡¡±‰Ωâ’——Ω∏¯Ωë•ÿ¯Òë•ÿÅç±ÖÕÃÙâ—Öâ±îµ›…Ö¿à¯Ò—Öâ±îÅç±ÖÕÃÙâÕ—Öôòµ—Öâ±îà¯Ò—°ïÖê¯Ò—»¯Ò—†˘M—ÖôòÅµïµâï»Ω—†¯Ò—†˘IΩ±îΩ—†¯Ò—†˘ï¡Ö…—µïπ–Ω—†¯Ò—†˘A…Ωù…ïÕÃΩ—†¯Ò—†˘ççΩ’π–Ω—†¯Ω—»¯Ω—°ïÖê¯Ò—âΩë‰¯ëÌÕ—ÖôôIΩ›ÕÙΩ—âΩë‰¯Ω—Öâ±î¯Ωë•ÿ¯Ò¿Å•êÙâïµ¡—Â•…ïç—Ω…‰àÅç±ÖÕÃÙâïµ¡—‰µÕ—Ö—îàÅ°•ëëï∏˘9ºÅÕ—ÖôòÅµÖ—ç†Å—°ïÕîÅô•±—ï…Ã∏Ω¿¯Òë•ÿÅ•êÙâÕ—ÖôôA…Ωô•±ïAÖπï∞à¯Ωë•ÿ¯ΩÕïç—•Ω∏¯(ÄÄÄÄÒÕïç—•Ω∏Åç±ÖÕÃÙâçÖ…êÅëÖÕ°âΩÖ…êµçÖ…êÅµÖπÖùïµïπ–µÕïç—•Ω∏àÅ•êÙâÖ’ë•–à¯Òë•ÿÅç±ÖÕÃÙâÕïç—•Ω∏µ°ïÖë•πúà¯Òë•ÿ¯ÒÕ¡Ö∏Åç±ÖÕÃÙâïÂïâ…Ω‹à˘AI599PÅ!%MQ=IdΩÕ¡Ö∏¯Ò†Ã˘’ë•–Å°•Õ—Ω…‰Ω†Ã¯Ωë•ÿ¯ÒÕ¡Ö∏Åç±ÖÕÃÙâÕµÖ±∞à˘IïÖêÅΩπ±‰ΩÕ¡Ö∏¯Ωë•ÿ¯Òë•ÿÅç±ÖÕÃÙâÖ’ë•–µôïïêà¯ëÌÕ—Ω…îπëÖ—ÑπÖ’ë•–πÕ±•çî†¿∞»¿§πµÖ¿°ÑÙ˘ÄÒÖ…—•ç±î¯ÒÕ—…Ωπú¯ëÌïÕçÖ¡ï!—µ∞°ÑπÖç—•Ω∏•ÙΩÕ—…Ωπú¯ÒÕ¡Ö∏Åç±ÖÕÃÙâÕ—Öôòµ•ëïπ—•—‰à¯ÒÕ—…Ωπú¯ëÌïÕçÖ¡ï!—µ∞°ÑπÕ—Öôô9Öµî•ÙΩÕ—…Ωπú¯ÒÕµÖ±∞¯ëÌïÕçÖ¡ï!—µ∞°ÑπÕ—Öôô%ê•ÙΩÕµÖ±∞¯ΩÕ¡Ö∏¯ÒÕ¡Ö∏˘	‰ÄëÌïÕçÖ¡ï!—µ∞°ÑπÖç—Ω»•ÙÄ†ëÌïÕçÖ¡ï!—µ∞°ÑπÖç—Ω…IΩ±î•Ù§ΩÕ¡Ö∏¯ÒÕµÖ±∞¯ëÌïÕçÖ¡ï!—µ∞°ÑπÖ–•ÙÉ
+‹ÄëÌïÕçÖ¡ï!—µ∞°ëï¡Ö…—µïπ—9Öµî°Ñπëï¡Ö…—µïπ–•Òù!ΩÕ¡•—Ö∞µ›•ëîÅ›Ω…≠Õ¡Öçîú•ÙΩÕµÖ±∞¯ΩÖ…—•ç±î˘Ä§π©Ω•∏†úú§ÅÒÄúÒ¿Åç±ÖÕÃÙâïµ¡—‰µÕ—Ö—îà˘9ºÅµÖπÖùïµïπ–Åç°ÖπùïÃÅ…ïçΩ…ëïêÅÂï–∏Ω¿¯ùÙΩë•ÿ¯ΩÕïç—•Ω∏¯(ÄÄÄÄÒÕïç—•Ω∏Åç±ÖÕÃÙâçÖ…êÅçΩµ•πúµÕΩΩ∏à¯Ò†Ã˘Q…Ö•π•πúÅçΩπ—ïπ–ÅçΩµ•πúÅÕΩΩ∏Ω†Ã¯Ò¿˘5ÖπÖùïµïπ–ÅçÖ∏ÅµΩπ•—Ω»Å—…Ö•π•πúÅÖπêÅÖ¡¡…ΩŸîÅçΩµ¡ï—ïπç‰∞Åâ’–ÅçÖππΩ–Åïë•–Åç±•π•çÖ∞Å—…Ö•π•πúÅçΩπ—ïπ–∏Ω¿¯ΩÕïç—•Ω∏˘Ä§Ï((ÄÅçΩπÕ–Å¡ï…Õ•Õ–ÄÙÄ†§ÄÙ¯ÅÏÅÕ—Ö—îπµÖπÖùïµïπ—Ö—ÑıÕ—Ω…îπëÖ—ÑÏÅÕÖŸïM—Ö—î†§ÏÅÙÏ(ÄÅçΩπÕ–ÅçΩπô•…µ°ÖπùîÄÙÄ°µïÕÕÖùî∞ÅÖç—•Ω∏§ÄÙ¯ÅÏÅ•òÄ†ÖçΩπô•…¥°µïÕÕÖùî§§Å…ï—’…∏ÏÅ—…‰ÅÏÅÖç—•Ω∏†§ÏÅ¡ï…Õ•Õ–†§ÏÅ…ïπëï…5ÖπÖùïµïπ—ÖÕ°âΩÖ…ê†§ÏÅÙÅçÖ—ç†Ä°ï……Ω»§ÅÏÅÖ±ï…–°ï……Ω»πµïÕÕÖùî§ÏÅÙÅÙÏ(ÄÅëΩç’µïπ–π≈’ï…ÂMï±ïç—Ω…±∞†úπÕÖŸîµÕ—Öôòµëï¡Ö…—µïπ–ú§πôΩ…Öç†°â—∏Ù˘â—∏πÖëëŸïπ—1•Õ—ïπï»†ùç±•ç¨ú∞†§Ù˘ÌçΩπÕ–Å…Ω‹ıâ—∏πç±ΩÕïÕ–†úπÖÕÕ•ùπµïπ–µçΩπ—…Ω∞ú§±•êı…Ω‹πëÖ—ÖÕï–π•ê±ŸÖ±’îı…Ω‹π≈’ï…ÂMï±ïç—Ω»†ùÕï±ïç–ú§πŸÖ±’îÌçΩπô•…µ°Öπùî°ÅÕÕ•ù∏ÄëÌ•ëÙÅ—ºÄëÌëï¡Ö…—µïπ—9Öµî°ŸÖ±’î•Ù˝Ä∞†§Ù˘Õ—Ω…îπÖÕÕ•ùπï¡Ö…—µïπ—Ã°Öç—Ω»±•ê±mŸÖ±’ït§§ÌÙ§§Ï(ÄÅëΩç’µïπ–π≈’ï…ÂMï±ïç—Ω…±∞†úπÕÖŸîµ—…Ö•πï»µëï¡Ö…—µïπ—Ãú§πôΩ…Öç†°â—∏Ù˘â—∏πÖëëŸïπ—1•Õ—ïπï»†ùç±•ç¨ú∞†§Ù˘ÌçΩπÕ–Å…Ω‹ıâ—∏πç±ΩÕïÕ–†úπÖÕÕ•ùπµïπ–µçΩπ—…Ω∞ú§±•êı…Ω‹πëÖ—ÖÕï–π•ê±ŸÖ±’ïÃıl∏∏π…Ω‹π≈’ï…ÂMï±ïç—Ω…±∞†ù•π¡’–Èç°ïç≠ïêú•tπµÖ¿°‡Ù˘‡πŸÖ±’î§ÌçΩπô•…µ°Öπùî°ÅΩπô•…¥ÄëÌŸÖ±’ïÃπ±ïπù—°ÙÅëï¡Ö…—µïπ–ÅÖÕÕ•ùπµïπ–°Ã§ÅôΩ»ÄëÌ•ëÙ˝Ä∞†§Ù˘Õ—Ω…îπÖÕÕ•ùπï¡Ö…—µïπ—Ã°Öç—Ω»±•ê±ŸÖ±’ïÃ§§ÌÙ§§Ï(ÄÅëΩç’µïπ–π≈’ï…ÂMï±ïç—Ω…±∞†úπÕÖŸîµÕ—Öôòµ—…Ö•πï»ú§πôΩ…Öç†°â—∏Ù˘â—∏πÖëëŸïπ—1•Õ—ïπï»†ùç±•ç¨ú∞†§Ù˘ÌçΩπÕ–Å…Ω‹ıâ—∏πç±ΩÕïÕ–†úπÖÕÕ•ùπµïπ–µçΩπ—…Ω∞ú§±•êı…Ω‹πëÖ—ÖÕï–π•ê±—…Ö•πï…%êı…Ω‹π≈’ï…ÂMï±ïç—Ω»†ùÕï±ïç–ú§πŸÖ±’îÌ•ò†Ö—…Ö•πï…%ê•…ï—’…∏ÅÖ±ï…–†ù°ΩΩÕîÅÑÅçΩµ¡Ö—•â±îÅ—…Ö•πï»∏ú§ÌçΩπÕ–ÅçÖ¿ıÕ—Ω…îπ—…Ö•πï…Ö¡Öç•—‰°—…Ö•πï…%ê§ÌçΩπô•…µ°Öπùî°ÅÕÕ•ù∏Å—…Ö•πï»ÄëÌ—…Ö•πï…%ëÙÅ—ºÄëÌ•ëÙ¸ÅÖ¡Öç•—‰ËÄëÌçÖ¿πÖç—•ŸïÙºëÌçÖ¿πçÖ¡Öç•—ÂÙπÄ∞†§Ù˘Õ—Ω…îπÖÕÕ•ùπQ…Ö•πï»°Öç—Ω»±•ê±—…Ö•πï…%ê±çÖ¿πÖ—Ö¡Öç•—‰§§ÌÙ§§Ï(ÄÅçΩπÕ–Åô•±—ï…Ãımlù…Ω±îú∞ù…Ω±ï•±—ï»ùt±lùëï¡Ö…—µïπ–ú∞ùëï¡Ö…—µïπ—•±—ï»ùt±lùÖççΩ’π–ú∞ùÖççΩ’π—•±—ï»ùt±lùïµ¡±ΩÂµïπ–ú∞ùïµ¡±ΩÂµïπ—•±—ï»ùt±lùçΩµ¡ï—ïπç‰ú∞ùçΩµ¡ï—ïπçÂ•±—ï»ùt±lù—…Ö•πï»ú∞ù—…Ö•πï…•±—ï»ùt±lùµÖπÖùï»ú∞ùµÖπÖùï…•±—ï»ùt±lùΩŸï…ë’îú∞ùΩŸï…ë’ï•±—ï»ùutÏ(ÄÅçΩπÕ–Åô•±—ï…•…ïç—Ω…‰Ù†§Ù˘Ì±ï–ÅÕ°Ω›∏Ù¿ÌëΩç’µïπ–π≈’ï…ÂMï±ïç—Ω…±∞†úπë•…ïç—Ω…‰µ…Ω‹ú§πôΩ…Öç†°…Ω‹Ù˘ÌçΩπÕ–Å¡…Ωù…ïÕÃıëΩç’µïπ–πùï—±ïµïπ—	Â%ê†ù¡…Ωù…ïÕÕ•±—ï»ú§πŸÖ±’î±¿ı9’µâï»°…Ω‹πëÖ—ÖÕï–π¡…Ωù…ïÕÃ§±¡…Ωù…ïÕÕ=,ı¡…Ωù…ïÕÃÙÙÙùÖ±∞ùÒ°¡…Ωù…ïÕÃÙÙÙúƒ¿¿ú˝¿ÙÙÙƒ¿¿È¡…Ωù…ïÕÃÙÙÙú¿¥–‰ú˝¿‘¿È¿¯Ù‘¿òô¿ƒ¿¿§ÌçΩπÕ–ÅΩ¨ı…Ω‹πëÖ—ÖÕï–πÕïÖ…ç†π•πç±’ëïÃ°ëΩç’µïπ–πùï—±ïµïπ—	Â%ê†ùÕ—ÖôôMïÖ…ç†ú§πŸÖ±’îπ—Ω1Ω›ï…ÖÕî†§§òô¡…Ωù…ïÕÕ=,òôô•±—ï…ÃπïŸï…‰†°m≠ï‰±•ët§Ù˘ëΩç’µïπ–πùï—±ïµïπ—	Â%ê°•ê§πŸÖ±’îÙÙÙùÖ±∞ùÒÒ…Ω‹πëÖ—ÖÕï—m≠ïÂtπ•πç±’ëïÃ°ëΩç’µïπ–πùï—±ïµïπ—	Â%ê°•ê§πŸÖ±’î§§Ì…Ω‹π°•ëëï∏ÙÖΩ¨Ì•ò°Ω¨•Õ°Ω›∏¨¨ÌÙ§ÌëΩç’µïπ–πùï—±ïµïπ—	Â%ê†ùïµ¡—Â•…ïç—Ω…‰ú§π°•ëëï∏ıÕ°Ω›∏¯¿ÌÙÏ(ÄÅëΩç’µïπ–π≈’ï…ÂMï±ïç—Ω…±∞†úπë•…ïç—Ω…‰µô•±—ï…ÃÅ•π¡’–∞πë•…ïç—Ω…‰µô•±—ï…ÃÅÕï±ïç–ú§πôΩ…Öç†°ï∞Ù˘ï∞πÖëëŸïπ—1•Õ—ïπï»°ï∞π—Öù9ÖµîÙÙÙù%9AUPú¸ù•π¡’–úËùç°Öπùîú±ô•±—ï…•…ïç—Ω…‰§§Ï(ÄÅçΩπÕ–Å’¡ëÖ—ï	’±¨Ù†§Ù˘ÌçΩπÕ–ÅçΩ’π–ıëΩç’µïπ–π≈’ï…ÂMï±ïç—Ω…±∞†úπâ’±¨µÕï±ïç–Èç°ïç≠ïêú§π±ïπù—†ÌëΩç’µïπ–πùï—±ïµïπ—	Â%ê†ùÕï±ïç—•ΩπΩ’π–ú§π—ï·—Ωπ—ïπ–ıÄëÌçΩ’π—ÙÅÕï±ïç—ïëÄÌëΩç’µïπ–πùï—±ïµïπ—	Â%ê†ùÖ¡¡±Â	’±¨ú§πë•ÕÖâ±ïêÙÖçΩ’π—ÒÖëΩç’µïπ–πùï—±ïµïπ—	Â%ê†ùâ’±≠ç—•Ω∏ú§πŸÖ±’îÌÙÏ(ÄÅëΩç’µïπ–π≈’ï…ÂMï±ïç—Ω…±∞†úπâ’±¨µÕï±ïç–ú§πôΩ…Öç†°ï∞Ù˘ï∞πÖëëŸïπ—1•Õ—ïπï»†ùç°Öπùîú±’¡ëÖ—ï	’±¨§§ÏÅëΩç’µïπ–πùï—±ïµïπ—	Â%ê†ùâ’±≠ç—•Ω∏ú§πÖëëŸïπ—1•Õ—ïπï»†ùç°Öπùîú±’¡ëÖ—ï	’±¨§Ï(ÄÅëΩç’µïπ–πùï—±ïµïπ—	Â%ê†ùÖ¡¡±Â	’±¨ú§πÖëëŸïπ—1•Õ—ïπï»†ùç±•ç¨ú∞†§Ù˘ÌçΩπÕ–Å•ëÃıl∏∏πëΩç’µïπ–π≈’ï…ÂMï±ïç—Ω…±∞†úπâ’±¨µÕï±ïç–Èç°ïç≠ïêú•tπµÖ¿°ï∞Ù˘ï∞πëÖ—ÖÕï–π•ê§±Õ—Ö—’ÃıëΩç’µïπ–πùï—±ïµïπ—	Â%ê†ùâ’±≠ç—•Ω∏ú§πŸÖ±’îÌçΩπô•…µ°Öπùî°Å¡¡±‰ÄëÌÕ—Ö—’ÕÙÅ—ºÄëÌ•ëÃπµÖ¿°•êÙ˘Õ—Ω…îπëÖ—ÑπÕ—Öôòπô•πê°¿Ù˘¿π•êÙÙı•ê§¸ππÖµî¨úÉ
+‹Äú≠•ê§π©Ω•∏†ú∞Äú•Ù˝Ä∞†§Ù˘Õ—Ω…îπâ’±¨°Öç—Ω»±•ëÃ±ÌÖççΩ’π—M—Ö—’ÃÈÕ—Ö—’ÕÙ±—…’î§§ÌÙ§Ï(ÄÅëΩç’µïπ–πùï—±ïµïπ—	Â%ê†ù•πŸ•—ïM—Öôòú§πÖëëŸïπ—1•Õ—ïπï»†ùç±•ç¨ú±ÖÕÂπå†§Ù˘ÏÅçΩπÕ–ÅMï…Ÿ•çîıù±ΩâÖ±Q°•ÃπM≠•±±]Ö…ëMï…Ÿ•çïÃ¸π%πŸ•—Ö—•ΩπMï…Ÿ•çîÏÅçΩπÕ–Å…ïÕ’±–ıMï…Ÿ•çîÄ¸ÅÖ›Ö•–Åπï‹ÅMï…Ÿ•çî†§π•πŸ•—î°ÌïµÖ•∞Ëúú±…Ω±îËùAú±ëï¡Ö…—µïπ—%êÈëï¡Ö…—µïπ–π•ëÙ§ÄËÅÌµïÕÕÖùîËùM—ÖôòÅ•πŸ•—Ö—•ΩπÃÅÖ…îÅπΩ–ÅÖŸÖ•±Öâ±îÅ•∏Å—°•ÃÅëïŸï±Ω¡µïπ–Å•π—ïù…Ö—•Ω∏∏ÅÅ¡…Ω—ïç—ïêÅ5ÖπÖùïµïπ–ÅÕï…Ÿ•çîÅµ’Õ–ÅâîÅëï¡±ΩÂïêÅô•…Õ–∏ùÙÏÅÖ±ï…–°…ïÕ’±–πµïÕÕÖùî§ÏÅÙ§Ï(ÄÅëΩç’µïπ–π≈’ï…ÂMï±ïç—Ω…±∞†úπÕ—Öôòµ¡…Ωô•±îú§πôΩ…Öç†°â’——Ω∏Ù˘â’——Ω∏πÖëëŸïπ—1•Õ—ïπï»†ùç±•ç¨ú∞†§Ù˘ÌçΩπÕ–Å¡ï…ÕΩ∏ıÕ—Ω…îπëÖ—ÑπÕ—Öôòπô•πê°¿Ù˘¿π•êÙÙıâ’——Ω∏πëÖ—ÖÕï–π•ê§±—…Ö•πï»ıÕ—Ω…îπëÖ—ÑπÕ—Öôòπô•πê°¿Ù˘¿π•êÙÙı¡ï…ÕΩ∏π—…Ö•πï…%ê§ÌëΩç’µïπ–πùï—±ïµïπ—	Â%ê†ùÕ—ÖôôA…Ωô•±ïAÖπï∞ú§π•ππï…!Q50ıÄÒÖ…—•ç±îÅç±ÖÕÃÙâÕ—Öôòµëï—Ö•∞à¯ÒÕ¡Ö∏Åç±ÖÕÃÙâïÂïâ…Ω‹à˘MQÅAI=%1ΩÕ¡Ö∏¯Ò†Ã¯ëÌïÕçÖ¡ï!—µ∞°¡ï…ÕΩ∏ππÖµî•ÙΩ†Ã¯ÒÕ¡Ö∏Åç±ÖÕÃÙâïµ¡±ΩÂïîµ•êà¯ëÌ¡ï…ÕΩ∏π•ëÙΩÕ¡Ö∏¯Ò¿¯ëÌïÕçÖ¡ï!—µ∞°¡ï…ÕΩ∏πïµÖ•∞•ÙΩ¿¯Òë∞¯Òë•ÿ¯Òë–˘IΩ±îΩë–¯Òëê¯ëÌ¡ï…ÕΩ∏π…Ω±ïÙΩëê¯Ωë•ÿ¯Òë•ÿ¯Òë–˘ï¡Ö…—µïπ–Ωë–¯Òëê¯ëÌ¡ï…ÕΩ∏πëï¡Ö…—µïπ—ÃπµÖ¿°ëï¡Ö…—µïπ—9Öµî§π©Ω•∏†ú∞Äú•ÙΩëê¯Ωë•ÿ¯Òë•ÿ¯Òë–˘Q…Ö•πï»Ωë–¯Òëê¯ëÌ—…Ö•πï»˝ÄëÌïÕçÖ¡ï!—µ∞°—…Ö•πï»ππÖµî•ÙÒÕµÖ±∞¯ëÌ—…Ö•πï»π•ëÙΩÕµÖ±∞˘ÄËù9Ω–ÅÖÕÕ•ùπïêùÙΩëê¯Ωë•ÿ¯Òë•ÿ¯Òë–˘ççΩ’π–Ωë–¯Òëê¯ëÌ¡ï…ÕΩ∏πÖççΩ’π—M—Ö—’ÕÙΩëê¯Ωë•ÿ¯Ωë∞¯ΩÖ…—•ç±î˘ÄÌÙ§§Ï(ÄÅëΩç’µïπ–π≈’ï…ÂMï±ïç—Ω…±∞†úπÖ¡¡…ΩŸîµÕ•ùπΩôò∞π…ïÖÕÕïÕÃµÕ•ùπΩôòú§πôΩ…Öç†°â’——Ω∏Ù˘â’——Ω∏πÖëëŸïπ—1•Õ—ïπï»†ùç±•ç¨ú∞†§Ù˘ÌçΩπÕ–ÅçÖ…êıâ’——Ω∏πç±ΩÕïÕ–†úπ…ïŸ•ï‹µçÖ…êú§±…ïçΩ…êı›Ω…≠ô±Ω›IïçΩ…ëÃ†§πô•πê°•—ï¥Ù˘•—ï¥π•êÙÙıçÖ…êπëÖ—ÖÕï–π•ê§±…ïÖÕÕïÕÃıâ’——Ω∏πç±ÖÕÕ1•Õ–πçΩπ—Ö•πÃ†ù…ïÖÕÕïÕÃµÕ•ùπΩôòú§±ôïïëâÖç¨ıçÖ…êπ≈’ï…ÂMï±ïç—Ω»†úπµÖπÖùïµïπ–µôïïëâÖç¨ú§πŸÖ±’îπ—…•¥†§Ì•ò°…ïÖÕÕïÕÃòòÖôïïëâÖç¨•…ï—’…∏ÅÖ±ï…–†ùπ—ï»ÅôïïëâÖç¨ÅôΩ»Å—°îÅ—…Ö•πï»ÅâïôΩ…îÅ…ï≈’ïÕ—•πúÅ…ïÖÕÕïÕÕµïπ–∏ú§Ì…ïçΩ…êπÕ—Ö—’Ãı…ïÖÕÕïÕÃ¸ùIïÖÕÕïÕÕµïπ–ÅIï≈’•…ïêúËù¡¡…ΩŸïêúÌ…ïçΩ…êπôïïëâÖç¨ıôïïëâÖç≠Òù5ÖπÖùïµïπ–ÅÖ¡¡…ΩŸïêÅô•πÖ∞ÅçΩµ¡ï—ïπç‰∏úÌÕÖŸïM—Ö—î†§Ì…ïπëï…5ÖπÖùïµïπ—ÖÕ°âΩÖ…ê†§ÌÙ§§Ï)Ù()ô’πç—•Ω∏Å…ïπëï…ï¡Ö…—µïπ—Mï±ïç—•Ω∏†§ÅÏ(ÄÅçΩπÕ–ÅµÖπÖùïµïπ—Mï±ïç—•Ω∏ÄÙÅÕ—Ö—îπç’……ïπ—UÕï»¸π…Ω±îÄÙÙÙÄâµÖπÖùïµïπ–àÏ(ÄÅçΩπÕ–Åëï¡Ö…—µïπ—Ö…ëÃÄÙÅAIQ59QLπµÖ¿°ëï¡Ö…—µïπ–ÄÙ¯ÅÄ(ÄÄÄÄÒÖ…—•ç±îÅç±ÖÕÃÙâëï¡Ö…—µïπ–µçÖ…êÄëÌëï¡Ö…—µïπ–πÖç—•ŸîÅÒÅµÖπÖùïµïπ—Mï±ïç—•Ω∏Ä¸Äâëï¡Ö…—µïπ–µÖç—•ŸîàÄËÄâëï¡Ö…—µïπ–µ¡±ÖππïêâÙà¯(ÄÄÄÄÄÄÒë•ÿÅç±ÖÕÃÙâëï¡Ö…—µïπ–µçÖ…êµ—Ω¿à¯(ÄÄÄÄÄÄÄÄÒÕ¡Ö∏Åç±ÖÕÃÙâëï¡Ö…—µïπ–µ•çΩ∏àÅÖ…•Ñµ°•ëëï∏Ùâ—…’îà¯ëÌëï¡Ö…—µïπ—%çΩ∏°ëï¡Ö…—µïπ–π•ê•ÙΩÕ¡Ö∏¯(ÄÄÄÄÄÄÄÄÒÕ¡Ö∏Åç±ÖÕÃÙâëï¡Ö…—µïπ–µÕ—Ö—’ÃÄëÌëï¡Ö…—µïπ–πÖç—•ŸîÅÒÅµÖπÖùïµïπ—Mï±ïç—•Ω∏Ä¸ÄâÕ—Ö—’ÃµÖç—•ŸîàÄËÄâÕ—Ö—’Ãµ¡±ÖππïêâÙà¯(ÄÄÄÄÄÄÄÄÄÄëÌëï¡Ö…—µïπ–πÖç—•ŸîÅÒÅµÖπÖùïµïπ—Mï±ïç—•Ω∏Ä¸ÄâŸÖ•±Öâ±îàÄËÄâΩµ•πúÅÕΩΩ∏âÙ(ÄÄÄÄÄÄÄÄΩÕ¡Ö∏¯(ÄÄÄÄÄÄΩë•ÿ¯(ÄÄÄÄÄÄÒë•ÿ¯(ÄÄÄÄÄÄÄÄÒ†Ã¯ëÌëï¡Ö…—µïπ–ππÖµïÙΩ†Ã¯(ÄÄÄÄÄÄÄÄÒ¿¯ëÌëï¡Ö…—µïπ–πÕ’µµÖ…ÂÙΩ¿¯(ÄÄÄÄÄÄΩë•ÿ¯(ÄÄÄÄÄÄÒë•ÿÅç±ÖÕÃÙâëï¡Ö…—µïπ–µçÖ…êµôΩΩ—ï»à¯(ÄÄÄÄÄÄÄÄÒÕ¡Ö∏¯ëÌëï¡Ö…—µïπ–πëï—Ö•±ÙΩÕ¡Ö∏¯(ÄÄÄÄÄÄÄÄëÌëï¡Ö…—µïπ–πÖç—•ŸîÅÒÅµÖπÖùïµïπ—Mï±ïç—•Ω∏(ÄÄÄÄÄÄÄÄÄÄ¸ÅÄÒâ’——Ω∏Åç±ÖÕÃÙââ—∏ÅΩ¡ï∏µëï¡Ö…—µïπ–àÅëÖ—Ñµ•êÙàëÌëï¡Ö…—µïπ–π•ëÙà˘=¡ï∏Åëï¡Ö…—µïπ–Ωâ’——Ω∏˘Ä(ÄÄÄÄÄÄÄÄÄÄËÅÄÒâ’——Ω∏Åç±ÖÕÃÙââ—∏Åâ—∏µë•ÕÖâ±ïêàÅë•ÕÖâ±ïê˘%∏ÅëïŸï±Ω¡µïπ–Ωâ’——Ω∏˘ÅÙ(ÄÄÄÄÄÄΩë•ÿ¯(ÄÄÄÄΩÖ…—•ç±î¯(ÄÅÄ§π©Ω•∏†àà§Ï((ÄÅ…ïπëï…M°ï±∞°Ä(ÄÄÄÄÒÕïç—•Ω∏Åç±ÖÕÃÙâëï¡Ö…—µïπ–µ°ïÖë•πúà¯(ÄÄÄÄÄÄÒÕ¡Ö∏Åç±ÖÕÃÙâïÂïâ…Ω‹à˘QI%9%9Å%IQ=IdΩÕ¡Ö∏¯(ÄÄÄÄÄÄÒ†»˘°ΩΩÕîÅÂΩ’»Åëï¡Ö…—µïπ–Ω†»¯(ÄÄÄÄÄÄÒ¿˘=¡ï∏Å—°îÅ±ïÖ…π•πúÅ¡Ö—°›Ö‰ÅÖÕÕ•ùπïêÅ—ºÅÂΩ’»Å…Ω±î∏Åëë•—•ΩπÖ∞Åëï¡Ö…—µïπ—ÃÅ›•±∞ÅâîÅ•π—…Ωë’çïêÅÖÃÅ—°ï•»ÅçΩπ—ïπ–Å•ÃÅÖ¡¡…ΩŸïê∏Ω¿¯(ÄÄÄÄΩÕïç—•Ω∏¯((ÄÄÄÄÒë•ÿÅç±ÖÕÃÙâëï¡Ö…—µïπ–µù…•êà¯ëÌëï¡Ö…—µïπ—Ö…ëÕÙΩë•ÿ¯((ÄÄÄÄÒë•ÿÅç±ÖÕÃÙâ¡±Ö—ôΩ…¥µπΩ—îà¯(ÄÄÄÄÄÄÒÕ—…Ωπú˘=πîÅ¡±Ö—ôΩ…¥∞Åµ’±—•¡±îÅëï¡Ö…—µïπ—Ã∏ΩÕ—…Ωπú¯(ÄÄÄÄÄÄÒÕ¡Ö∏˘M≠•±±]Ö…êÅ≠ïï¡ÃÅ…Ω±îµâÖÕïêÅ±ïÖ…π•πú∞ÅçΩµ¡ï—ïπç‰ÅÖπêÅ¡…Ωù…ïÕÃÅ•∏ÅΩπîÅçΩπÕ•Õ—ïπ–Åï·¡ï…•ïπçî∏ΩÕ¡Ö∏¯(ÄÄÄÄΩë•ÿ¯(ÄÅÄ§Ï((ÄÅëΩç’µïπ–π≈’ï…ÂMï±ïç—Ω…±∞†àπΩ¡ï∏µëï¡Ö…—µïπ–à§πôΩ…Öç†°â’——Ω∏ÄÙ¯ÅÏ(ÄÄÄÅâ’——Ω∏πÖëëŸïπ—1•Õ—ïπï»†âç±•ç¨à∞Ä†§ÄÙ¯ÅÏ(ÄÄÄÄÄÅÕ—Ö—îπÕï±ïç—ïëï¡Ö…—µïπ–ÄÙÅâ’——Ω∏πëÖ—ÖÕï–π•êÏ(ÄÄÄÄÄÅÕÖŸïM—Ö—î†§Ï(ÄÄÄÄÄÅ…Ω’—ï’……ïπ—UÕï»†§Ï(ÄÄÄÅÙ§Ï(ÄÅÙ§Ï)Ù()ô’πç—•Ω∏Å…ïπëï…1ïÖ…πï…ÖÕ°âΩÖ…ê†§ÅÏ(ÄÅçΩπÕ–Å¡…Ωù…ïÕÃÄÙÅΩŸï…Ö±±A…Ωù…ïÕÃ†§Ï(ÄÅçΩπÕ–ÅçΩµ¡±ï—ïë1ïÕÕΩπÃÄÙÅQI%9%9}5=U1Lπô•±—ï»°µΩë’±îÄÙ¯Åùï—5Ωë’±ïM—Ö—î°µΩë’±îπ•ê§π±ïÕÕΩπΩµ¡±ï—î§π±ïπù—†Ï(ÄÅçΩπÕ–Å¡ÖÕÕïêÄÙÅ¡ÖÕÕïë5Ωë’±ïÃ†§Ï(ÄÅçΩπÕ–Å…ïµÖ•π•πúÄÙÅQI%9%9}5=U1Lπ±ïπù—†Ä¥Å¡ÖÕÕïêÏ((ÄÅçΩπÕ–ÅÖ…ïÖÖ…ëÃÄÙÅQI%9%9}ILπµÖ¿†°Ö…ïÑ∞Å•πëï‡§ÄÙ¯ÅÏ(ÄÄÄÅçΩπÕ–ÅÖ…ïÖ5Ωë’±ïÃÄÙÅµΩë’±ïÕΩ……ïÑ°Ö…ïÑπ•ê§Ï(ÄÄÄÅçΩπÕ–ÅÖ…ïÖAÖÕÕïêÄÙÅÖ…ïÖ5Ωë’±ïÃπô•±—ï»°µΩë’±îÄÙ¯Åùï—5Ωë’±ïM—Ö—î°µΩë’±îπ•ê§π≈’•ÈAÖÕÕïê§π±ïπù—†Ï(ÄÄÄÅçΩπÕ–ÅÖ…ïÖAï…çïπ–ÄÙÅ5Ö—†π…Ω’πê†°Ö…ïÖAÖÕÕïêÄºÅÖ…ïÖ5Ωë’±ïÃπ±ïπù—†§Ä®Äƒ¿¿§Ï(ÄÄÄÅ…ï—’…∏ÅÄ(ÄÄÄÄÄÄÒÖ…—•ç±îÅç±ÖÕÃÙâçÖ…êÅ—…Ö•π•πúµÖ…ïÑµçÖ…êà¯(ÄÄÄÄÄÄÄÄÒë•ÿÅç±ÖÕÃÙâ—…Ö•π•πúµÖ…ïÑµ—Ω¿à¯(ÄÄÄÄÄÄÄÄÄÄÒÕ¡Ö∏Åç±ÖÕÃÙâÖ…ïÑµçΩëîà¯ëÌÖ…ïÑπçΩëïÙΩÕ¡Ö∏¯(ÄÄÄÄÄÄÄÄÄÄÒÕ¡Ö∏Åç±ÖÕÃÙâÕµÖ±∞à˘IÄëÌ•πëï‡Ä¨Ä≈ÙΩÕ¡Ö∏¯(ÄÄÄÄÄÄÄÄΩë•ÿ¯(ÄÄÄÄÄÄÄÄÒë•ÿ¯(ÄÄÄÄÄÄÄÄÄÄÒ†Ã¯ëÌÖ…ïÑππÖµïÙΩ†Ã¯(ÄÄÄÄÄÄÄÄÄÄÒÕ¡Ö∏Åç±ÖÕÃÙâÖ…ïÑµô’±∞µπÖµîà¯ëÌÖ…ïÑπô’±±9ÖµïÙΩÕ¡Ö∏¯(ÄÄÄÄÄÄÄÄÄÄÒ¿¯ëÌÖ…ïÑπÕ’µµÖ…ÂÙΩ¿¯(ÄÄÄÄÄÄÄÄΩë•ÿ¯(ÄÄÄÄÄÄÄÄÒë•ÿÅç±ÖÕÃÙâÖ…ïÑµ¡…Ωù…ïÕÃà¯ÒÕ¡Ö∏ÅÕ—Â±îÙâ›•ë—†ËëÌÖ…ïÖAï…çïπ—Ùîà¯ΩÕ¡Ö∏¯Ωë•ÿ¯(ÄÄÄÄÄÄÄÄÒë•ÿÅç±ÖÕÃÙâµΩë’±îµµï—Ñà¯(ÄÄÄÄÄÄÄÄÄÄÒÕ¡Ö∏Åç±ÖÕÃÙâÕµÖ±∞à¯ëÌÖ…ïÖAÖÕÕïëÙºëÌÖ…ïÖ5Ωë’±ïÃπ±ïπù—°ÙÅµΩë’±ïÃÅçΩµ¡±ï—îΩÕ¡Ö∏¯(ÄÄÄÄÄÄÄÄÄÄÒâ’——Ω∏Åç±ÖÕÃÙââ—∏ÅΩ¡ï∏µÖ…ïÑàÅëÖ—Ñµ•êÙàëÌÖ…ïÑπ•ëÙà˘=¡ï∏ÅÖ…ïÑΩâ’——Ω∏¯(ÄÄÄÄÄÄÄÄΩë•ÿ¯(ÄÄÄÄÄÄΩÖ…—•ç±î¯(ÄÄÄÅÄÏ(ÄÅÙ§π©Ω•∏†àà§Ï((ÄÅ…ïπëï…M°ï±∞°Ä(ÄÄÄÄÒÕïç—•Ω∏Åç±ÖÕÃÙâëÖÕ°âΩÖ…êµ°ï…ºàÅ•êÙâ°Ωµîà¯(ÄÄÄÄÄÄÒë•ÿÅç±ÖÕÃÙâëÖÕ°âΩÖ…êµ›ï±çΩµîà¯(ÄÄÄÄÄÄÄÄÒÕ¡Ö∏Åç±ÖÕÃÙâïÂïâ…Ω‹à¯ëÌïÕçÖ¡ï!—µ∞°ëï¡Ö…—µïπ—9Öµî°Õ—Ö—îπÕï±ïç—ïëï¡Ö…—µïπ–§•ÙΩÕ¡Ö∏¯(ÄÄÄÄÄÄÄÄÒ†»˘AÅQ…Ö•π•πúÅ!’àΩ†»¯(ÄÄÄÄÄÄÄÄÒ¿˘]ï±çΩµî∞ÄëÌïÕçÖ¡ï!—µ∞°Õ—Ö—îπ±ïÖ…πï…9Öµî•ÙΩ¿¯(ÄÄÄÄÄÄÄÄÒ¿˘°ΩΩÕîÅÂΩ’»ÅÖÕÕ•ùπïêÅ›Ω…¨ÅÖ…ïÑÅÖπêÅçΩπ—•π’îÅ—°îÅ=¡ï…Ö—•πúÅQ°ïÖ—…îÄòÅIïçΩŸï…‰Å±ïÖ…π•πúÅ¡Ö—°›Ö‰∏Ω¿¯(ÄÄÄÄÄÄΩë•ÿ¯(ÄÄÄÄÄÄÒë•ÿÅç±ÖÕÃÙâ¡…Ωù…ïÕÃµ…•πúàÅÕ—Â±îÙà¥µ¡…Ωù…ïÕÃËëÌ¡…Ωù…ïÕÃÄ®ÄÃ∏ŸıëïúàÅÖ…•Ñµ±Öâï∞ÙàëÌ¡…Ωù…ïÕÕÙîÅΩŸï…Ö±∞Å¡…Ωù…ïÕÃà¯(ÄÄÄÄÄÄÄÄÒë•ÿ¯ÒÕ—…Ωπú¯ëÌ¡…Ωù…ïÕÕÙîΩÕ—…Ωπú¯ÒÕ¡Ö∏˘çΩµ¡±ï—îΩÕ¡Ö∏¯Ωë•ÿ¯(ÄÄÄÄÄÄΩë•ÿ¯(ÄÄÄÄΩÕïç—•Ω∏¯((ÄÄÄÄÒë•ÿÅç±ÖÕÃÙâÕ—Ö—Ãµù…•êà¯(ÄÄÄÄÄÄÒë•ÿÅç±ÖÕÃÙâÕ—Ö–µçÖ…êà¯ÒÕ¡Ö∏˘1ïÕÕΩπÃÅŸ•ï›ïêΩÕ¡Ö∏¯ÒÕ—…Ωπú¯ëÌçΩµ¡±ï—ïë1ïÕÕΩπÕÙºëÌQI%9%9}5=U1Lπ±ïπù—°ÙΩÕ—…Ωπú¯Ωë•ÿ¯(ÄÄÄÄÄÄÒë•ÿÅç±ÖÕÃÙâÕ—Ö–µçÖ…êà¯ÒÕ¡Ö∏˘-πΩ›±ïëùîÅç°ïç≠ÃΩÕ¡Ö∏¯ÒÕ—…Ωπú¯ëÌ¡ÖÕÕïëÙºëÌQI%9%9}5=U1Lπ±ïπù—°ÙΩÕ—…Ωπú¯Ωë•ÿ¯(ÄÄÄÄÄÄÒë•ÿÅç±ÖÕÃÙâÕ—Ö–µçÖ…êà¯ÒÕ¡Ö∏˘5Ωë’±ïÃÅ…ïµÖ•π•πúΩÕ¡Ö∏¯ÒÕ—…Ωπú¯ëÌ…ïµÖ•π•πùÙΩÕ—…Ωπú¯Ωë•ÿ¯(ÄÄÄÄΩë•ÿ¯((ÄÄÄÄÒÕïç—•Ω∏Åç±ÖÕÃÙâ¡Ö—•ïπ–µ©Ω’…πï‰àÅÖ…•Ñµ±Öâï±±ïëâ‰Ùâ¡Ö—•ïπ—)Ω’…πïÂQ•—±îà¯(ÄÄÄÄÄÄÒë•ÿÅç±ÖÕÃÙâ©Ω’…πï‰µ°ïÖë•πúà¯(ÄÄÄÄÄÄÄÄÒë•ÿ¯(ÄÄÄÄÄÄÄÄÄÄÒÕ¡Ö∏Åç±ÖÕÃÙâïÂïâ…Ω‹à˘AQ%9PÅ)=UI9dΩÕ¡Ö∏¯(ÄÄÄÄÄÄÄÄÄÄÒ†ÃÅ•êÙâ¡Ö—•ïπ—)Ω’…πïÂQ•—±îà˘…Ω¥Å›Ö…êÅ¡•ç≠’¿Å—ºÅÕÖôîÅ…ï—’…∏Ω†Ã¯(ÄÄÄÄÄÄÄÄΩë•ÿ¯(ÄÄÄÄÄÄÄÄÒÕ¡Ö∏Åç±ÖÕÃÙâ©Ω’…πï‰µçÖ¡—•Ω∏à˘=¡ï…Ö—•πúÅQ°ïÖ—…îÄòÅIïçΩŸï…‰Å¡Ö—°›Ö‰ΩÕ¡Ö∏¯(ÄÄÄÄÄÄΩë•ÿ¯(ÄÄÄÄÄÄÒΩ∞Åç±ÖÕÃÙâ©Ω’…πï‰µ—…Öç¨à¯(ÄÄÄÄÄÄÄÄÒ±§¯(ÄÄÄÄÄÄÄÄÄÄÒÕ¡Ö∏Åç±ÖÕÃÙâ©Ω’…πï‰µ•çΩ∏àÅÖ…•Ñµ°•ëëï∏Ùâ—…’îà¯(ÄÄÄÄÄÄÄÄÄÄÄÄÒÕŸúÅŸ•ï›	Ω‡Ùà¿Ä¿Ä»–Ä»–à¯Ò¡Ö—†ÅêÙâ4ÃÄƒ·X·¥¿Ä›†ƒ·ÿÕ4ÿÄƒ’ÿ¥—†’ÑÃÄÃÄ¿Ä¿ÄƒÄÃÄÕÿƒàº¯Òç•…ç±îÅç‡Ùà‡àÅç‰Ùà‡àÅ»Ùà»àº¯ΩÕŸú¯(ÄÄÄÄÄÄÄÄÄÄΩÕ¡Ö∏¯(ÄÄÄÄÄÄÄÄÄÄÒÕ¡Ö∏Åç±ÖÕÃÙâ©Ω’…πï‰µçΩ¡‰à¯ÒÕµÖ±∞¯¿ƒΩÕµÖ±∞¯ÒÕ—…Ωπú˘]Ö…êÅ¡•ç≠’¿ΩÕ—…Ωπú¯ÒÕ¡Ö∏˘Ω±±ïç–ÅÖÕÕ•ùπïêÅ¡Ö—•ïπ–ΩÕ¡Ö∏¯ΩÕ¡Ö∏¯(ÄÄÄÄÄÄÄÄΩ±§¯(ÄÄÄÄÄÄÄÄÒ±§¯(ÄÄÄÄÄÄÄÄÄÄÒÕ¡Ö∏Åç±ÖÕÃÙâ©Ω’…πï‰µ•çΩ∏àÅÖ…•Ñµ°•ëëï∏Ùâ—…’îà¯(ÄÄÄÄÄÄÄÄÄÄÄÄÒÕŸúÅŸ•ï›	Ω‡Ùà¿Ä¿Ä»–Ä»–à¯Ò¡Ö—†ÅêÙâ4‡Ä—†·ÿÕ ·È4ÿÄŸ†ƒ…ÿƒ’ ŸËàº¯Ò¡Ö—†ÅêÙâ4‰Äƒ…†Ÿ¥¥Ã¥Õÿÿàº¯ΩÕŸú¯(ÄÄÄÄÄÄÄÄÄÄΩÕ¡Ö∏¯(ÄÄÄÄÄÄÄÄÄÄÒÕ¡Ö∏Åç±ÖÕÃÙâ©Ω’…πï‰µçΩ¡‰à¯ÒÕµÖ±∞¯¿»ΩÕµÖ±∞¯ÒÕ—…Ωπú˘AIΩÕ—…Ωπú¯ÒÕ¡Ö∏˘AÖ—•ïπ–ÅIïçï¡—•Ω∏Å…ïÑΩÕ¡Ö∏¯ΩÕ¡Ö∏¯(ÄÄÄÄÄÄÄÄΩ±§¯(ÄÄÄÄÄÄÄÄÒ±§¯(ÄÄÄÄÄÄÄÄÄÄÒÕ¡Ö∏Åç±ÖÕÃÙâ©Ω’…πï‰µ•çΩ∏àÅÖ…•Ñµ°•ëëï∏Ùâ—…’îà¯(ÄÄÄÄÄÄÄÄÄÄÄÄÒÕŸúÅŸ•ï›	Ω‡Ùà¿Ä¿Ä»–Ä»–à¯Ò¡Ö—†ÅêÙâ4–Äƒ›†ƒŸ4ÿÄƒ›ÿÕ¥ƒ»¥ÕÿÕ4‹Äƒ—†ƒ¡∞»ÄÕ ’∞»¥Õhàº¯Ò¡Ö—†ÅêÙâ4ƒ»ÄÕÿÕ¥¥–¥ƒÄ»Ä…¥ÿ¥»¥»Ä…4‡Äƒ…Ñ–Ä–Ä¿Ä¿ÄƒÄ‡Ä¿àº¯ΩÕŸú¯(ÄÄÄÄÄÄÄÄÄÄΩÕ¡Ö∏¯(ÄÄÄÄÄÄÄÄÄÄÒÕ¡Ö∏Åç±ÖÕÃÙâ©Ω’…πï‰µçΩ¡‰à¯ÒÕµÖ±∞¯¿ÃΩÕµÖ±∞¯ÒÕ—…Ωπú˘Q°ïÖ—…îΩÕ—…Ωπú¯ÒÕ¡Ö∏˘A…ï¿µÖ…ïÑÅÕ’¡¡Ω…–ΩÕ¡Ö∏¯ΩÕ¡Ö∏¯(ÄÄÄÄÄÄÄÄΩ±§¯(ÄÄÄÄÄÄÄÄÒ±§¯(ÄÄÄÄÄÄÄÄÄÄÒÕ¡Ö∏Åç±ÖÕÃÙâ©Ω’…πï‰µ•çΩ∏àÅÖ…•Ñµ°•ëëï∏Ùâ—…’îà¯(ÄÄÄÄÄÄÄÄÄÄÄÄÒÕŸúÅŸ•ï›	Ω‡Ùà¿Ä¿Ä»–Ä»–à¯Ò¡Ö—†ÅêÙâ4ƒ»Ä»¡Ã¥‹¥–∏–¥‹¥ƒ¡Ñ–Ä–Ä¿Ä¿ÄƒÄ‹¥»∏Ÿ–Ä–Ä¿Ä¿ÄƒÄƒ‰Äƒ¡å¿Ä‘∏ÿ¥‹Äƒ¿¥‹Äƒ¡hàº¯Ò¡Ö—†ÅêÙâ¥‡Äƒ»Ä»¥ƒÄ»ÄÃÄ»¥‘Ä»ÄÃàº¯ΩÕŸú¯(ÄÄÄÄÄÄÄÄÄÄΩÕ¡Ö∏¯(ÄÄÄÄÄÄÄÄÄÄÒÕ¡Ö∏Åç±ÖÕÃÙâ©Ω’…πï‰µçΩ¡‰à¯ÒÕµÖ±∞¯¿–ΩÕµÖ±∞¯ÒÕ—…Ωπú˘IïçΩŸï…‰ΩÕ—…Ωπú¯ÒÕ¡Ö∏˘AΩÕ–µ¡…Ωçïë’…îÅçÖ…îΩÕ¡Ö∏¯ΩÕ¡Ö∏¯(ÄÄÄÄÄÄÄÄΩ±§¯(ÄÄÄÄÄÄÄÄÒ±§¯(ÄÄÄÄÄÄÄÄÄÄÒÕ¡Ö∏Åç±ÖÕÃÙâ©Ω’…πï‰µ•çΩ∏àÅÖ…•Ñµ°•ëëï∏Ùâ—…’îà¯(ÄÄÄÄÄÄÄÄÄÄÄÄÒÕŸúÅŸ•ï›	Ω‡Ùà¿Ä¿Ä»–Ä»–à¯Ò¡Ö—†ÅêÙâ4–Äƒ·XÂ∞‡¥ÿÄ‡ÄŸÿÂ —hàº¯Ò¡Ö—†ÅêÙâ4‡Äƒ·ÿ¥’†·ÿ’4ÃÄ»≈†ƒ‡àº¯ΩÕŸú¯(ÄÄÄÄÄÄÄÄÄÄΩÕ¡Ö∏¯(ÄÄÄÄÄÄÄÄÄÄÒÕ¡Ö∏Åç±ÖÕÃÙâ©Ω’…πï‰µçΩ¡‰à¯ÒÕµÖ±∞¯¿‘ΩÕµÖ±∞¯ÒÕ—…Ωπú˘Iï—’…∏Å—ºÅ›Ö…êΩÕ—…Ωπú¯ÒÕ¡Ö∏˘ÕÕ•Õ–ÅÕÖôîÅ—…ÖπÕ¡Ω…–ΩÕ¡Ö∏¯ΩÕ¡Ö∏¯(ÄÄÄÄÄÄÄÄΩ±§¯(ÄÄÄÄÄÄΩΩ∞¯(ÄÄÄÄΩÕïç—•Ω∏¯((ÄÄÄÄÒë•ÿÅç±ÖÕÃÙâÕïç—•Ω∏µ°ïÖë•πúàÅ•êÙâ—…Ö•π•πúà¯(ÄÄÄÄÄÄÒë•ÿ¯ÒÕ¡Ö∏Åç±ÖÕÃÙâïÂïâ…Ω‹à˘=AIQ%9ÅQ!QIÄòÅI=YIdΩÕ¡Ö∏¯Ò†Ã˘°ΩΩÕîÅÑÅ—…Ö•π•πúÅÖ…ïÑΩ†Ã¯Ωë•ÿ¯(ÄÄÄÄÄÄÒÕ¡Ö∏Åç±ÖÕÃÙâÕµÖ±∞à¯ÃÅÖ…ïÖÃÉ
+‹ÄëÌQI%9%9}5=U1Lπ±ïπù—°ÙÅµΩë’±ïÃΩÕ¡Ö∏¯(ÄÄÄÄΩë•ÿ¯(ÄÄÄÄÒë•ÿÅç±ÖÕÃÙâù…•êÅù…•ê¥Ãà¯ëÌÖ…ïÖÖ…ëÕÙΩë•ÿ¯((ÄÄÄÄÒë•ÿÅç±ÖÕÃÙâÕïç—•Ω∏µ—•—±îà¯(ÄÄÄÄÄÄÒ†Ã˘•πÖ∞Å¡…Öç—•çÖ∞ÅçΩµ¡ï—ïπç‰Ω†Ã¯(ÄÄÄÄΩë•ÿ¯((ÄÄÄÄÒÕïç—•Ω∏Åç±ÖÕÃÙâçÖ…êà¯(ÄÄÄÄÄÄÒ¿¯ëÌÕ—Ö—îπ¡…Öç—•çÖ±M•ùπΩôò(ÄÄÄÄÄÄÄÄ¸ÄâeΩ’»Å¡…Öç—•çÖ∞ÅçΩµ¡ï—ïπç‰Å°ÖÃÅâïï∏ÅÕ•ùπïêÅΩôò∏à(ÄÄÄÄÄÄÄÄËÄâÅ—…Ö•πï»Åµ’Õ–ÅΩâÕï…ŸîÅÂΩ’»Å¡…Öç—•çÖ∞Å›Ω…¨ÅÖô—ï»ÅÂΩ‘ÅçΩµ¡±ï—îÅ—°îÅ…ï≈’•…ïêÅΩπ±•πîÅµΩë’±ïÃ∏âÙΩ¿¯(ÄÄÄÄÄÄÒÕ¡Ö∏Åç±ÖÕÃÙââÖëùîÄëÌÕ—Ö—îπ¡…Öç—•çÖ±M•ùπΩôòÄ¸ÄââÖëùîµçΩµ¡±ï—îàÄËÄââÖëùîµ•∏µ¡…Ωù…ïÕÃâÙà¯(ÄÄÄÄÄÄÄÄëÌÕ—Ö—îπ¡…Öç—•çÖ±M•ùπΩôòÄ¸ÄâM•ùπïêÅΩôòàÄËÄâAïπë•πúâÙ(ÄÄÄÄÄÄΩÕ¡Ö∏¯(ÄÄÄÄΩÕïç—•Ω∏¯((ÄÄÄÄÒ¿Åç±ÖÕÃÙâôΩΩ—ï»µπΩ—îà˘Q…Ö•π•πúÅçΩπ—ïπ–Åµ’Õ–ÅâîÅ…ïŸ•ï›ïêÅÖπêÅÖ¡¡…ΩŸïêÅâ‰Å—°îÅ…ï±ïŸÖπ–Å°ΩÕ¡•—Ö∞Å—ïÖµÃÅâïôΩ…îÅ›Ω…≠¡±ÖçîÅ’Õî∏Ω¿¯(ÄÅÄ§Ï((ÄÅëΩç’µïπ–π≈’ï…ÂMï±ïç—Ω…±∞†àπΩ¡ï∏µÖ…ïÑà§πôΩ…Öç†°â—∏ÄÙ¯ÅÏ(ÄÄÄÅâ—∏πÖëëŸïπ—1•Õ—ïπï»†âç±•ç¨à∞Ä†§ÄÙ¯ÅÏ(ÄÄÄÄÄÅç’……ïπ—…ïÖ%êÄÙÅâ—∏πëÖ—ÖÕï–π•êÏ(ÄÄÄÄÄÅ…ïπëï……ïÖÖÕ°âΩÖ…ê°ç’……ïπ—…ïÖ%ê§Ï(ÄÄÄÅÙ§Ï(ÄÅÙ§Ï)Ù()ô’πç—•Ω∏Å…ïπëï……ïÖÖÕ°âΩÖ…ê°Ö…ïÖ%ê§ÅÏ(ÄÅçΩπÕ–ÅÖ…ïÑÄÙÅùï—…ïÑ°Ö…ïÖ%ê§Ï(ÄÅ•òÄ†ÖÖ…ïÑ§ÅÏ(ÄÄÄÅ…ïπëï…1ïÖ…πï…ÖÕ°âΩÖ…ê†§Ï(ÄÄÄÅ…ï—’…∏Ï(ÄÅÙ((ÄÅç’……ïπ—…ïÖ%êÄÙÅÖ…ïÖ%êÏ(ÄÅçΩπÕ–ÅÖ…ïÖ5Ωë’±ïÃÄÙÅµΩë’±ïÕΩ……ïÑ°Ö…ïÖ%ê§Ï(ÄÅçΩπÕ–ÅçΩµ¡±ï—ïêÄÙÅÖ…ïÖ5Ωë’±ïÃπô•±—ï»°µΩë’±îÄÙ¯Åùï—5Ωë’±ïM—Ö—î°µΩë’±îπ•ê§π≈’•ÈAÖÕÕïê§π±ïπù—†Ï((ÄÅ…ïπëï…M°ï±∞°Ä(ÄÄÄÄÒâ’——Ω∏Åç±ÖÕÃÙââ—∏Åâ—∏µÕïçΩπëÖ…‰àÅ•êÙââÖç≠	—∏à˚ä@Å	Öç¨Å—ºÅ—…Ö•π•πúÅÖ…ïÖÃΩâ’——Ω∏¯((ÄÄÄÄÒÕïç—•Ω∏Åç±ÖÕÃÙâÖ…ïÑµ°ï…ºà¯(ÄÄÄÄÄÄÒë•ÿÅç±ÖÕÃÙâÖ…ïÑµçΩëîÅÖ…ïÑµçΩëîµ±Ö…ùîà¯ëÌÖ…ïÑπçΩëïÙΩë•ÿ¯(ÄÄÄÄÄÄÒë•ÿ¯(ÄÄÄÄÄÄÄÄÒÕ¡Ö∏Åç±ÖÕÃÙâïÂïâ…Ω‹à˘=AIQ%9ÅQ!QIÄòÅI=YIdΩÕ¡Ö∏¯(ÄÄÄÄÄÄÄÄÒ†»¯ëÌÖ…ïÑππÖµïÙΩ†»¯(ÄÄÄÄÄÄÄÄÒ¿¯ëÌÖ…ïÑπô’±±9ÖµïÙΩ¿¯(ÄÄÄÄÄÄΩë•ÿ¯(ÄÄÄÄÄÄÒë•ÿÅç±ÖÕÃÙâÖ…ïÑµçΩµ¡±ï—•Ω∏à¯ÒÕ—…Ωπú¯ëÌçΩµ¡±ï—ïëÙºëÌÖ…ïÖ5Ωë’±ïÃπ±ïπù—°ÙΩÕ—…Ωπú¯ÒÕ¡Ö∏˘çΩµ¡±ï—îΩÕ¡Ö∏¯Ωë•ÿ¯(ÄÄÄÄΩÕïç—•Ω∏¯((ÄÄÄÄÒë•ÿÅç±ÖÕÃÙâÖ…ïÑµ›Ω…≠ô±Ω‹µπΩ—îà¯(ÄÄÄÄÄÄÒÕ—…Ωπú˘eΩ’»Å…Ω±îÅ•∏Å—°•ÃÅÖ…ïÑΩÕ—…Ωπú¯(ÄÄÄÄÄÄÒÕ¡Ö∏¯ëÌÖ…ïÑπÕ’µµÖ…ÂÙΩÕ¡Ö∏¯(ÄÄÄÄΩë•ÿ¯((ÄÄÄÄÒë•ÿÅç±ÖÕÃÙâÕïç—•Ω∏µ°ïÖë•πúà¯(ÄÄÄÄÄÄÒë•ÿ¯ÒÕ¡Ö∏Åç±ÖÕÃÙâïÂïâ…Ω‹à˘IÅQI%9%9ΩÕ¡Ö∏¯Ò†Ã˘1ïÕÕΩπÃÅÖπêÅ≠πΩ›±ïëùîÅç°ïç≠ÃΩ†Ã¯Ωë•ÿ¯(ÄÄÄÄÄÄÒÕ¡Ö∏Åç±ÖÕÃÙâÕµÖ±∞à¯ëÌÖ…ïÖ5Ωë’±ïÃπ±ïπù—°ÙÅµΩë’±ïÃΩÕ¡Ö∏¯(ÄÄÄÄΩë•ÿ¯(ÄÄÄÄÒë•ÿÅç±ÖÕÃÙâù…•êÅù…•ê¥»à¯ëÌÖ…ïÖ5Ωë’±ïÃπµÖ¿°µΩë’±ïÖ…ê§π©Ω•∏†àà•ÙΩë•ÿ¯((ÄÄÄÄÒ¿Åç±ÖÕÃÙâôΩΩ—ï»µπΩ—îà˘…Öô–Å—…Ö•π•πúÅçΩπ—ïπ–Åµ’Õ–ÅâîÅ…ïŸ•ï›ïêÅÖπêÅÖ¡¡…ΩŸïêÅâ‰Å—°îÅ…ï±ïŸÖπ–Å°ΩÕ¡•—Ö∞Å—ïÖµÃÅâïôΩ…îÅ›Ω…≠¡±ÖçîÅ’Õî∏Ω¿¯(ÄÅÄ§Ï((ÄÅëΩç’µïπ–πùï—±ïµïπ—	Â%ê†ââÖç≠	—∏à§πÖëëŸïπ—1•Õ—ïπï»†âç±•ç¨à∞Å…ïπëï…1ïÖ…πï…ÖÕ°âΩÖ…ê§Ï(ÄÅâ•πë5Ωë’±ï	’——ΩπÃ†§Ï)Ù()ô’πç—•Ω∏Å…ïπëï…1ïÕÕΩ∏°µΩë’±ï%ê§ÅÏ(ÄÅçΩπÕ–ÅµΩë’±îÄÙÅQI%9%9}5=U1Lπô•πê°¥ÄÙ¯Å¥π•êÄÙÙÙÅµΩë’±ï%ê§Ï(ÄÅçΩπÕ–Å¥ÄÙÅùï—5Ωë’±ïM—Ö—î°µΩë’±ï%ê§Ï((ÄÅ…ïπëï…M°ï±∞°Ä(ÄÄÄÄÒâ’——Ω∏Åç±ÖÕÃÙââ—∏Åâ—∏µÕïçΩπëÖ…‰àÅ•êÙââÖç≠	—∏à˚ä@Å	Öç¨Å—ºÄëÌùï—…ïÑ°µΩë’±îπÖ…ïÑ§¸ππÖµîÅÒÄâ—…Ö•π•πúÅÖ…ïÑâÙΩâ’——Ω∏¯((ÄÄÄÄÒÖ…—•ç±îÅç±ÖÕÃÙâçÖ…êÅ±ïÕÕΩ∏àÅÕ—Â±îÙâµÖ…ù•∏µ—Ω¿ËƒŸ¡‡Ïà¯(ÄÄÄÄÄÄÒë•ÿÅç±ÖÕÃÙâÕµÖ±∞à¯ëÌµΩë’±îπë’…Ö—•ΩπÙΩë•ÿ¯(ÄÄÄÄÄÄÒ†»¯ëÌµΩë’±îπ—•—±ïÙΩ†»¯((ÄÄÄÄÄÄÒ†Ã˘1ïÖ…π•πúÅΩâ©ïç—•ŸîΩ†Ã¯(ÄÄÄÄÄÄÒ¿¯ëÌµΩë’±îπ±ïÕÕΩ∏πΩâ©ïç—•ŸïÙΩ¿¯((ÄÄÄÄÄÄÒ†Ã˘]°‰Å—°•ÃÅµÖ——ï…ÃΩ†Ã¯(ÄÄÄÄÄÄÒ¿¯ëÌµΩë’±îπ±ïÕÕΩ∏π›°ÂÙΩ¿¯((ÄÄÄÄÄÄÒë•ÿÅç±ÖÕÃÙâπΩ—•çîà¯(ÄÄÄÄÄÄÄÅ±›ÖÂÃÅôΩ±±Ω‹ÅÂΩ’»ÅΩ…ùÖπ•ÕÖ—•Ω∏ùÃÅç’……ïπ–ÅÖ¡¡…ΩŸïêÅ¡…Ωçïë’…ïÃ∏Å1ΩçÖ∞Å…ï≈’•…ïµïπ—ÃÅ—Ö≠îÅ¡…•Ω…•—‰Å•òÅ—°ï‰Åë•ôôï»Åô…Ω¥Å—°•ÃÅµΩë’±î∏(ÄÄÄÄÄÄΩë•ÿ¯((ÄÄÄÄÄÄÒ†Ã˘A±ÖππïêÅ—…Ö•π•πúÅŸ•ëïºΩ†Ã¯(ÄÄÄÄÄÄÒë•ÿÅç±ÖÕÃÙâŸ•ëïºµ¡±Öçï°Ω±ëï»àÅëÖ—Ñµ¡±ÖππïêµçΩπ—ïπ–Ùâ—…’îà¯(ÄÄÄÄÄÄÄÄÒë•ÿ¯(ÄÄÄÄÄÄÄÄÄÄÒÕ—…Ωπú˘¡¡…ΩŸïêÅµïë•ÑÅπΩ–ÅÂï–ÅÖŸÖ•±Öâ±îΩÕ—…Ωπú¯(ÄÄÄÄÄÄÄÄÄÄÒ¿Åç±ÖÕÃÙâÕµÖ±∞à˘Q°•ÃÅ•ÃÅÑÅ¡±ÖππïêÅçΩπ—ïπ–ÅÖ…ïÑ∞ÅπΩ–ÅÑÅ¡±ÖÂÖâ±îÅŸ•ëïº∏Å∏ÅÖ¡¡…ΩŸïêÅ›Ω…≠¡±ÖçîÅ—…Ö•π•πúÅŸ•ëïºÅçÖ∏ÅâîÅÖëëïêÅÖô—ï»Åç±•π•çÖ∞Å…ïŸ•ï‹∏Ω¿¯(ÄÄÄÄÄÄÄÄΩë•ÿ¯(ÄÄÄÄÄÄΩë•ÿ¯((ÄÄÄÄÄÄÒ†Ã˘¡¡…ΩŸïêÅ¡…ΩçïÕÃÅÕ—…’ç—’…îΩ†Ã¯(ÄÄÄÄÄÄÒΩ∞¯ëÌµΩë’±îπ±ïÕÕΩ∏πÕ—ï¡ÃπµÖ¿°Õ—ï¿ÄÙ¯ÅÄÒ±§¯ëÌÕ—ï¡ÙΩ±§˘Ä§π©Ω•∏†àà•ÙΩΩ∞¯((ÄÄÄÄÄÄÒ†Ã˘ΩµµΩ∏Åµ•Õ—Ö≠ïÃΩ†Ã¯(ÄÄÄÄÄÄÒ’∞¯ëÌµΩë’±îπ±ïÕÕΩ∏πµ•Õ—Ö≠ïÃπµÖ¿°•—ï¥ÄÙ¯ÅÄÒ±§¯ëÌ•—ïµÙΩ±§˘Ä§π©Ω•∏†àà•ÙΩ’∞¯((ÄÄÄÄÄÄÒâ’——Ω∏Åç±ÖÕÃÙââ—∏àÅ•êÙâçΩµ¡±ï—ï1ïÕÕΩπ	—∏à¯(ÄÄÄÄÄÄÄÄëÌ¥π±ïÕÕΩπΩµ¡±ï—îÄ¸ÄâΩπ—•π’îÅ—ºÅ≈’•ËàÄËÄâ5Ö…¨Å±ïÕÕΩ∏ÅçΩµ¡±ï—îâÙ(ÄÄÄÄÄÄΩâ’——Ω∏¯(ÄÄÄÄΩÖ…—•ç±î¯(ÄÅÄ§Ï((ÄÅëΩç’µïπ–πùï—±ïµïπ—	Â%ê†ââÖç≠	—∏à§πÖëëŸïπ—1•Õ—ïπï»†âç±•ç¨à∞Ä†§ÄÙ¯Å…ïπëï……ïÖÖÕ°âΩÖ…ê°µΩë’±îπÖ…ïÑ§§Ï(ÄÅëΩç’µïπ–πùï—±ïµïπ—	Â%ê†âçΩµ¡±ï—ï1ïÕÕΩπ	—∏à§πÖëëŸïπ—1•Õ—ïπï»†âç±•ç¨à∞Ä†§ÄÙ¯ÅÏ(ÄÄÄÅÕï—5Ωë’±ïM—Ö—î°µΩë’±ï%ê∞ÅÏÅ±ïÕÕΩπΩµ¡±ï—îËÅ—…’îÅÙ§Ï(ÄÄÄÅ…ïπëï…E’•Ë°µΩë’±ï%ê§Ï(ÄÅÙ§Ï)Ù()ô’πç—•Ω∏Å…ïπëï…E’•Ë°µΩë’±ï%ê§ÅÏ(ÄÅçΩπÕ–ÅµΩë’±îÄÙÅQI%9%9}5=U1Lπô•πê°¥ÄÙ¯Å¥π•êÄÙÙÙÅµΩë’±ï%ê§Ï((ÄÅçΩπÕ–Å≈’ïÕ—•ΩπÃÄÙÅµΩë’±îπ≈’•ËπµÖ¿†°•—ï¥∞Å•πëï‡§ÄÙ¯ÅÄ(ÄÄÄÄÒô•ï±ëÕï–¯(ÄÄÄÄÄÄÒ±ïùïπê¯ÒÕ—…Ωπú¯ëÌ•πëï‡Ä¨Ä≈Ù∏ÄëÌ•—ï¥π≈ÙΩÕ—…Ωπú¯Ω±ïùïπê¯(ÄÄÄÄÄÄëÌ•—ï¥πΩ¡—•ΩπÃπµÖ¿†°Ω¡—•Ω∏∞ÅΩ¡—•Ωπ%πëï‡§ÄÙ¯ÅÄ(ÄÄÄÄÄÄÄÄÒ±Öâï∞Åç±ÖÕÃÙâ≈’•ËµΩ¡—•Ω∏à¯(ÄÄÄÄÄÄÄÄÄÄÒ•π¡’–Å—Â¡îÙâ…Öë•ºàÅπÖµîÙâƒëÌ•πëï·ÙàÅŸÖ±’îÙàëÌΩ¡—•Ωπ%πëï·ÙàÄº¯(ÄÄÄÄÄÄÄÄÄÄëÌΩ¡—•ΩπÙ(ÄÄÄÄÄÄÄÄΩ±Öâï∞¯(ÄÄÄÄÄÅÄ§π©Ω•∏†àà•Ù(ÄÄÄÄΩô•ï±ëÕï–¯(ÄÅÄ§π©Ω•∏†àà§Ï((ÄÅ…ïπëï…M°ï±∞°Ä(ÄÄÄÄÒâ’——Ω∏Åç±ÖÕÃÙââ—∏Åâ—∏µÕïçΩπëÖ…‰àÅ•êÙââÖç≠	—∏à˚ä@Å	Öç¨Å—ºÅ±ïÕÕΩ∏Ωâ’——Ω∏¯((ÄÄÄÄÒôΩ…¥Åç±ÖÕÃÙâçÖ…êÅ±ïÕÕΩ∏àÅ•êÙâ≈’•ÈΩ…¥àÅÕ—Â±îÙâµÖ…ù•∏µ—Ω¿ËƒŸ¡‡Ïà¯(ÄÄÄÄÄÄÒ†»¯ëÌµΩë’±îπ—•—±ïÙËÅ-πΩ›±ïëùîÅ°ïç¨Ω†»¯(ÄÄÄÄÄÄÒ¿Åç±ÖÕÃÙâÕµÖ±∞à˘AÖÕÃÅµÖ…¨ËÄ‡¿îΩ¿¯(ÄÄÄÄÄÄëÌ≈’ïÕ—•ΩπÕÙ(ÄÄÄÄÄÄÒâ’——Ω∏Åç±ÖÕÃÙââ—∏àÅ—Â¡îÙâÕ’âµ•–à˘M’âµ•–Å≈’•ËΩâ’——Ω∏¯(ÄÄÄÄÄÄÒë•ÿÅ•êÙâ≈’•ÈIïÕ’±–à¯Ωë•ÿ¯(ÄÄÄÄΩôΩ…¥¯(ÄÅÄ§Ï((ÄÅëΩç’µïπ–πùï—±ïµïπ—	Â%ê†ââÖç≠	—∏à§πÖëëŸïπ—1•Õ—ïπï»†âç±•ç¨à∞Ä†§ÄÙ¯Å…ïπëï…1ïÕÕΩ∏°µΩë’±ï%ê§§Ï((ÄÅëΩç’µïπ–πùï—±ïµïπ—	Â%ê†â≈’•ÈΩ…¥à§πÖëëŸïπ—1•Õ—ïπï»†âÕ’âµ•–à∞ÅïŸïπ–ÄÙ¯ÅÏ(ÄÄÄÅïŸïπ–π¡…ïŸïπ—ïôÖ’±–†§Ï((ÄÄÄÅ±ï–ÅçΩ……ïç–ÄÙÄ¿Ï(ÄÄÄÅ±ï–ÅÖπÕ›ï…ïêÄÙÄ¿Ï((ÄÄÄÅµΩë’±îπ≈’•ËπôΩ…Öç††°•—ï¥∞Å•πëï‡§ÄÙ¯ÅÏ(ÄÄÄÄÄÅçΩπÕ–ÅÕï±ïç—ïêÄÙÅëΩç’µïπ–π≈’ï…ÂMï±ïç—Ω»°Å•π¡’—mπÖµîÙâƒëÌ•πëï·ÙâtÈç°ïç≠ïëÄ§Ï(ÄÄÄÄÄÅ•òÄ°Õï±ïç—ïê§ÅÏ(ÄÄÄÄÄÄÄÅÖπÕ›ï…ïê¨¨Ï(ÄÄÄÄÄÄÄÅ•òÄ°9’µâï»°Õï±ïç—ïêπŸÖ±’î§ÄÙÙÙÅ•—ï¥πÖπÕ›ï»§ÅçΩ……ïç–¨¨Ï(ÄÄÄÄÄÅÙ(ÄÄÄÅÙ§Ï((ÄÄÄÅçΩπÕ–Å…ïÕ’±–ÄÙÅëΩç’µïπ–πùï—±ïµïπ—	Â%ê†â≈’•ÈIïÕ’±–à§Ï((ÄÄÄÅ•òÄ°ÖπÕ›ï…ïêÄÑÙÙÅµΩë’±îπ≈’•Ëπ±ïπù—†§ÅÏ(ÄÄÄÄÄÅ…ïÕ’±–πç±ÖÕÕ9ÖµîÄÙÄâ…ïÕ’±–Å…ïÕ’±–µôÖ•∞àÏ(ÄÄÄÄÄÅ…ïÕ’±–π—ï·—Ωπ—ïπ–ÄÙÄâA±ïÖÕîÅÖπÕ›ï»ÅïŸï…‰Å≈’ïÕ—•Ω∏∏àÏ(ÄÄÄÄÄÅ…ï—’…∏Ï(ÄÄÄÅÙ((ÄÄÄÅçΩπÕ–ÅÕçΩ…îÄÙÅ5Ö—†π…Ω’πê†°çΩ……ïç–ÄºÅµΩë’±îπ≈’•Ëπ±ïπù—†§Ä®Äƒ¿¿§Ï(ÄÄÄÅçΩπÕ–Å¡ÖÕÕïêÄÙÅÕçΩ…îÄ¯ÙÄ‡¿Ï(ÄÄÄÅÕï—5Ωë’±ïM—Ö—î°µΩë’±ï%ê∞ÅÏÅ≈’•ÈAÖÕÕïêËÅ¡ÖÕÕïê∞Å≈’•ÈMçΩ…îËÅÕçΩ…îÅÙ§Ï((ÄÄÄÅ…ïÕ’±–πç±ÖÕÕ9ÖµîÄÙÅÅ…ïÕ’±–ÄëÌ¡ÖÕÕïêÄ¸Äâ…ïÕ’±–µ¡ÖÕÃàÄËÄâ…ïÕ’±–µôÖ•∞âıÄÏ(ÄÄÄÅ…ïÕ’±–π•ππï…!Q50ÄÙÅ¡ÖÕÕïê(ÄÄÄÄÄÄ¸ÅÅAÖÕÕïêËÄëÌÕçΩ…ïÙî∏ÄÒâ’——Ω∏Å—Â¡îÙââ’——Ω∏àÅç±ÖÕÃÙââ—∏àÅ•êÙâëÖÕ°âΩÖ…ë	—∏àÅÕ—Â±îÙâµÖ…ù•∏µ±ïô–Ëƒ¡¡‡Ïà˘Iï—’…∏Å—ºÄëÌùï—…ïÑ°µΩë’±îπÖ…ïÑ§¸ππÖµîÅÒÄâ—…Ö•π•πúÅÖ…ïÑâÙΩâ’——Ω∏˘Ä(ÄÄÄÄÄÄËÅÅMçΩ…îËÄëÌÕçΩ…ïÙî∏ÅIïŸ•ï‹Å—°îÅ±ïÕÕΩ∏ÅÖπêÅ—…‰ÅÖùÖ•∏πÄÏ((ÄÄÄÅëΩç’µïπ–πùï—±ïµïπ—	Â%ê†âëÖÕ°âΩÖ…ë	—∏à§¸πÖëëŸïπ—1•Õ—ïπï»†âç±•ç¨à∞Ä†§ÄÙ¯Å…ïπëï……ïÖÖÕ°âΩÖ…ê°µΩë’±îπÖ…ïÑ§§Ï(ÄÅÙ§Ï)Ù()ô’πç—•Ω∏Å…ïπëï…Q…Ö•πï…ÖÕ°âΩÖ…ê†§ÅÏ(ÄÅçΩπÕ–Å…Ω±îÄÙÅÕ—Ö—îπç’……ïπ—UÕï»¸π…Ω±îÏ(ÄÅ•òÄ†Ö…Ω±î¸π•πç±’ëïÃ†â—…Ö•πï»à§§Å…ï—’…∏Å…Ω’—ïM•ùπïë%πUÕï»†§Ï(ÄÅçΩπÕ–ÅÖÕÕ•ùπïêÄÙÅÖÕÕ•ùπïëï¡Ö…—µïπ—ÕΩ…’……ïπ—Q…Ö•πï»†§Ï(ÄÅ•òÄ†ÖÖÕÕ•ùπïêπ•πç±’ëïÃ°Õ—Ö—îπÕï±ïç—ïëï¡Ö…—µïπ–§§ÅÏ(ÄÄÄÅÕ—Ö—îπÕï±ïç—ïëï¡Ö…—µïπ–ÄÙÅÖÕÕ•ùπïël¡tÅÒÅπ’±∞Ï(ÄÄÄÅÕÖŸïM—Ö—î†§Ï(ÄÅÙ(ÄÅçΩπÕ–Å…Ω±ï1Öâï∞ÄÙÅ…Ω±îÄÙÙÙÄâ¡çÑµ—…Ö•πï»àÄ¸ÄâAàÄËÄâ±ïÖπï»àÏ(ÄÅçΩπÕ–Å…ïçΩ…ëÃÄÙÅ›Ω…≠ô±Ω›IïçΩ…ëÃ†§πô•±—ï»°•—ï¥ÄÙ¯Å•—ï¥π…Ω±îÄÙÙÙÅ…Ω±ï1Öâï∞ÄòòÅÖÕÕ•ùπïêπ•πç±’ëïÃ°•—ï¥πëï¡Ö…—µïπ–§§Ï(ÄÅçΩπÕ–ÅÖç—•ŸïIïçΩ…ëÃÄÙÅ…ïçΩ…ëÃπô•±—ï»°•—ï¥ÄÙ¯Å•—ï¥πëï¡Ö…—µïπ–ÄÙÙÙÅÕ—Ö—îπÕï±ïç—ïëï¡Ö…—µïπ–§Ï(ÄÅçΩπÕ–ÅΩ¡—•ΩπÃÄÙÅÖÕÕ•ùπïêπµÖ¿°•êÄÙ¯ÅÄÒΩ¡—•Ω∏ÅŸÖ±’îÙàëÌ•ëÙàÄëÌ•êÄÙÙÙÅÕ—Ö—îπÕï±ïç—ïëï¡Ö…—µïπ–Ä¸ÄâÕï±ïç—ïêàÄËÄàâÙ¯ëÌïÕçÖ¡ï!—µ∞°ëï¡Ö…—µïπ—9Öµî°•ê§•ÙΩΩ¡—•Ω∏˘Ä§π©Ω•∏†àà§Ï(ÄÅçΩπÕ–Å…Ω›ÃÄÙÅÖç—•ŸïIïçΩ…ëÃπµÖ¿°•—ï¥ÄÙ¯ÅÄÒ—»Åç±ÖÕÃÙâ—…Ö•πïîµ…Ω‹àÅëÖ—ÑµÕïÖ…ç†ÙàëÌïÕçÖ¡ï!—µ∞†°•—ï¥ππÖµîÄ¨ÄúÄúÄ¨Å•—ï¥π•ê§π—Ω1Ω›ï…ÖÕî†§•ÙàÅëÖ—Ñµ¡…Ωù…ïÕÃÙàëÌ•—ï¥π¡…Ωù…ïÕÃÄÙÙÙÄƒ¿¿Ä¸ÄùçΩµ¡±ï—îúÄËÄù•∏µ¡…Ωù…ïÕÃùÙàÅëÖ—ÑµΩŸï…ë’îÙàëÌ•—ï¥πΩŸï…ë’ïÙàÅëÖ—Ñµ…ïŸ•ï‹ÙàëÌïÕçÖ¡ï!—µ∞°•—ï¥π…ïŸ•ï›M—Ö—’Ãπ—Ω1Ω›ï…ÖÕî†§π…ï¡±Öçï±∞†úÄú∞Äú¥ú§•ÙàÅëÖ—ÑµÕ•ùπΩôòÙàëÌïÕçÖ¡ï!—µ∞°•—ï¥πÕ—Ö—’Ãπ—Ω1Ω›ï…ÖÕî†§π…ï¡±Öçï±∞†úÄú∞Äú¥ú§•Ùà¯Ò—ê¯Òâ’——Ω∏Åç±ÖÕÃÙâ±•π¨µâ’——Ω∏ÅΩ¡ï∏µ¡…Ωô•±îÅÕ—Öôòµ•ëïπ—•—‰àÅëÖ—Ñµ•êÙàëÌ•—ï¥π•ëÙà¯ÒÕ—…Ωπú¯ëÌïÕçÖ¡ï!—µ∞°•—ï¥ππÖµî•ÙΩÕ—…Ωπú¯ÒÕµÖ±∞¯ëÌ•—ï¥π•ëÙΩÕµÖ±∞¯Ωâ’——Ω∏¯Ω—ê¯Ò—ê¯ëÌ•—ï¥π¡…Ωù…ïÕÕÙîΩ—ê¯Ò—ê¯ëÌ•—ï¥π≠πΩ›±ïëùîπÖ–†¥ƒ§¸πÕçΩ…îÅÒÄ¡ÙîΩ—ê¯Ò—ê¯ÒÕ¡Ö∏Åç±ÖÕÃÙâÕ—Ö—’Ãµç°•¿ÅÕ—Ö—’Ã¥ëÌÕ—Ö—’ÕQΩπî°•—ï¥πÕ—Ö—’Ã•Ùà¯ëÌ•—ï¥πÕ—Ö—’ÕÙΩÕ¡Ö∏¯Ω—ê¯Ò—ê¯ëÌ•—ï¥πΩŸï…ë’îÄ¸ÄúÒÕ¡Ö∏Åç±ÖÕÃÙâÕ—Ö—’Ãµç°•¿ÅÕ—Ö—’ÃµëÖπùï»à˘=Ÿï…ë’îΩÕ¡Ö∏¯úÄËÄù=∏Å—…Öç¨ùÙΩ—ê¯Ω—»˘Ä§π©Ω•∏†àà§Ï(ÄÅ…ïπëï…M°ï±∞°Ä(ÄÄÄÄÒÕïç—•Ω∏Åç±ÖÕÃÙâëÖÕ°âΩÖ…êµ°ï…ºÅ—…Ö•πï»µ°ï…ºàÅ•êÙâ°Ωµîà¯Òë•ÿÅç±ÖÕÃÙâëÖÕ°âΩÖ…êµ›ï±çΩµîà¯ÒÕ¡Ö∏Åç±ÖÕÃÙâïÂïâ…Ω‹à¯ëÌïÕçÖ¡ï!—µ∞°ëï¡Ö…—µïπ—9Öµî°Õ—Ö—îπÕï±ïç—ïëï¡Ö…—µïπ–§•ÙΩÕ¡Ö∏¯Ò†»¯ëÌ…Ω±ï1Öâï±ÙÅQ…Ö•πï»Å]Ω…≠Õ¡ÖçîΩ†»¯Ò¿˘5Ωπ•—Ω»Å¡…Ωù…ïÕÃ∞Å…ïçΩ…êÅΩâÕï…ŸÖ—•ΩπÃÅÖπêÅ…ïçΩµµïπêÅÕ•ù∏µΩôò∏Ω¿¯Ωë•ÿ¯Òë•ÿÅç±ÖÕÃÙâ—…Ö•πï»µ•ëïπ—•—‰à¯ÒÕ¡Ö∏˘ÕÕ•ùπïêÅëï¡Ö…—µïπ—ÃΩÕ¡Ö∏¯ÒÕ—…Ωπú¯ëÌÖÕÕ•ùπïêπ±ïπù—°ÙΩÕ—…Ωπú¯Ωë•ÿ¯ΩÕïç—•Ω∏¯(ÄÄÄÄëÌÖÕÕ•ùπïêπ±ïπù—†Ä¸ÅÄÒÕïç—•Ω∏Åç±ÖÕÃÙâëï¡Ö…—µïπ–µÕ›•—ç°ï»à¯Ò±Öâï∞˘ï¡Ö…—µïπ–ÒÕï±ïç–Å•êÙâ—…Ö•πï…ï¡Ö…—µïπ–à¯ëÌΩ¡—•ΩπÕÙΩÕï±ïç–¯Ω±Öâï∞¯ÒÕ¡Ö∏¯ëÌÖÕÕ•ùπïêπµÖ¿°ëï¡Ö…—µïπ—9Öµî§πµÖ¿°ïÕçÖ¡ï!—µ∞§π©Ω•∏†àÉ
+‹Äà•ÙΩÕ¡Ö∏¯ΩÕïç—•Ω∏˘ÄÄËÄúÒÕïç—•Ω∏Åç±ÖÕÃÙâçÖ…êÅÖ±ï…–µëÖπùï»à¯Ò†Ã˘9ºÅëï¡Ö…—µïπ–ÅÖÕÕ•ùπïêΩ†Ã¯Ò¿˘Õ¨Å5ÖπÖùïµïπ–Å—ºÅÖÕÕ•ù∏ÅÑÅëï¡Ö…—µïπ–∏Ω¿¯ΩÕïç—•Ω∏¯ùÙ(ÄÄÄÄÒë•ÿÅç±ÖÕÃÙâÕ—Ö—Ãµù…•êÅ—…Ö•πï»µÕ—Ö—Ãà¯Òë•ÿÅç±ÖÕÃÙâÕ—Ö–µçÖ…êà¯ÒÕ¡Ö∏¯ëÌ…Ω±ï1Öâï±ÙÅ—…Ö•πïïÃΩÕ¡Ö∏¯ÒÕ—…Ωπú¯ëÌÖç—•ŸïIïçΩ…ëÃπ±ïπù—°ÙΩÕ—…Ωπú¯Ωë•ÿ¯Òë•ÿÅç±ÖÕÃÙâÕ—Ö–µçÖ…êà¯ÒÕ¡Ö∏˘Aïπë•πúÅ…ïŸ•ï›ÃΩÕ¡Ö∏¯ÒÕ—…Ωπú¯ëÌÖç—•ŸïIïçΩ…ëÃπô•±—ï»°§ÄÙ¯Å§πÕ—Ö—’ÃÄÙÙÙÄùIïÖë‰ÅôΩ»ÅQ…Ö•πï»ÅIïŸ•ï‹úÅÒÅ§πÕ—Ö—’ÃÄÙÙÙÄùIïÖÕÕïÕÕµïπ–ÅIï≈’•…ïêú§π±ïπù—°ÙΩÕ—…Ωπú¯Ωë•ÿ¯Òë•ÿÅç±ÖÕÃÙâÕ—Ö–µçÖ…êÅÕ—Ö–µΩŸï…ë’îà¯ÒÕ¡Ö∏˘=Ÿï…ë’îÅ—…Ö•π•πúΩÕ¡Ö∏¯ÒÕ—…Ωπú¯ëÌÖç—•ŸïIïçΩ…ëÃπô•±—ï»°§ÄÙ¯Å§πΩŸï…ë’î§π±ïπù—°ÙΩÕ—…Ωπú¯Ωë•ÿ¯Òë•ÿÅç±ÖÕÃÙâÕ—Ö–µçÖ…êà¯ÒÕ¡Ö∏˘IïçΩµµïπëÖ—•ΩπÃÅÕïπ–ΩÕ¡Ö∏¯ÒÕ—…Ωπú¯ëÌÖç—•ŸïIïçΩ…ëÃπô•±—ï»°§ÄÙ¯Å§πÕ—Ö—’ÃÄÙÙÙÄùMïπ–Å—ºÅ5ÖπÖùïµïπ–ú§π±ïπù—°ÙΩÕ—…Ωπú¯Ωë•ÿ¯Ωë•ÿ¯(ÄÄÄÄÒÕïç—•Ω∏Åç±ÖÕÃÙâçÖ…êÅëÖÕ°âΩÖ…êµçÖ…êàÅ•êÙâÕ—Öôòà¯Òë•ÿÅç±ÖÕÃÙâÕïç—•Ω∏µ°ïÖë•πúà¯Òë•ÿ¯ÒÕ¡Ö∏Åç±ÖÕÃÙâïÂïâ…Ω‹à˘QI%9LΩÕ¡Ö∏¯Ò†Ã˘Q…Ö•π•πúÅÖπêÅçΩµ¡ï—ïπç‰Ω†Ã¯Ωë•ÿ¯Ωë•ÿ¯Òë•ÿÅç±ÖÕÃÙâ—…Ö•πï»µô•±—ï…Ãà¯Ò•π¡’–Å•êÙâ—…Ö•πïïMïÖ…ç†àÅ—Â¡îÙâÕïÖ…ç†àÅ¡±Öçï°Ω±ëï»ÙâMïÖ…ç†Å—…Ö•πïïÃà¯ÒÕï±ïç–Å•êÙâ¡…Ωù…ïÕÕ•±—ï»à¯ÒΩ¡—•Ω∏ÅŸÖ±’îÙâÖ±∞à˘±∞Å¡…Ωù…ïÕÃΩΩ¡—•Ω∏¯ÒΩ¡—•Ω∏ÅŸÖ±’îÙâçΩµ¡±ï—îà˘Ωµ¡±ï—îΩΩ¡—•Ω∏¯ÒΩ¡—•Ω∏ÅŸÖ±’îÙâ•∏µ¡…Ωù…ïÕÃà˘%∏Å¡…Ωù…ïÕÃΩΩ¡—•Ω∏¯ΩÕï±ïç–¯ÒÕï±ïç–Å•êÙâΩŸï…ë’ï•±—ï»à¯ÒΩ¡—•Ω∏ÅŸÖ±’îÙâÖ±∞à˘±∞Åë’îÅëÖ—ïÃΩΩ¡—•Ω∏¯ÒΩ¡—•Ω∏ÅŸÖ±’îÙâ—…’îà˘=Ÿï…ë’îΩΩ¡—•Ω∏¯ÒΩ¡—•Ω∏ÅŸÖ±’îÙâôÖ±Õîà˘=∏Å—…Öç¨ΩΩ¡—•Ω∏¯ΩÕï±ïç–¯ÒÕï±ïç–Å•êÙâ…ïŸ•ï›•±—ï»à¯ÒΩ¡—•Ω∏ÅŸÖ±’îÙâÖ±∞à˘±∞Å…ïŸ•ï›ÃΩΩ¡—•Ω∏¯ÒΩ¡—•Ω∏ÅŸÖ±’îÙâ¡ïπë•πúµ…ïŸ•ï‹à˘Aïπë•πúÅ…ïŸ•ï‹ΩΩ¡—•Ω∏¯ÒΩ¡—•Ω∏ÅŸÖ±’îÙâ…ïÖÕÕïÕÕµïπ–à˘IïÖÕÕïÕÕµïπ–ΩΩ¡—•Ω∏¯ΩÕï±ïç–¯ÒÕï±ïç–Å•êÙâÕ•ùπΩôô•±—ï»à¯ÒΩ¡—•Ω∏ÅŸÖ±’îÙâÖ±∞à˘±∞ÅÕ•ù∏µΩôôÃΩΩ¡—•Ω∏¯ÒΩ¡—•Ω∏ÅŸÖ±’îÙâÕïπ–µ—ºµµÖπÖùïµïπ–à˘Mïπ–Å—ºÅ5ÖπÖùïµïπ–ΩΩ¡—•Ω∏¯ÒΩ¡—•Ω∏ÅŸÖ±’îÙâÖ¡¡…ΩŸïêà˘¡¡…ΩŸïêΩΩ¡—•Ω∏¯ΩÕï±ïç–¯Ωë•ÿ¯Òë•ÿÅç±ÖÕÃÙâ—Öâ±îµ›…Ö¿à¯Ò—Öâ±î¯Ò—°ïÖê¯Ò—»¯Ò—†˘Q…Ö•πïîΩ—†¯Ò—†˘A…Ωù…ïÕÃΩ—†¯Ò—†˘1Ö—ïÕ–Å…ïÕ’±–Ω—†¯Ò—†˘M•ù∏µΩôòΩ—†¯Ò—†˘’îΩ—†¯Ω—»¯Ω—°ïÖê¯Ò—âΩë‰¯ëÌ…Ω›ÕÙΩ—âΩë‰¯Ω—Öâ±î¯Ωë•ÿ¯Ò¿Å•êÙâπΩQ…Ö•πïïÃàÅç±ÖÕÃÙâïµ¡—‰µÕ—Ö—îàÄëÌÖç—•ŸïIïçΩ…ëÃπ±ïπù—†Ä¸Äù°•ëëï∏úÄËÄúùÙ˘9ºÄëÌ…Ω±ï1Öâï±ÙÅ—…Ö•πïïÃÅ•∏Å—°•ÃÅÖÕÕ•ùπïêÅëï¡Ö…—µïπ–∏Ω¿¯ΩÕïç—•Ω∏¯(ÄÄÄÄÒÕïç—•Ω∏Åç±ÖÕÃÙâçÖ…êÅçΩµ•πúµÕΩΩ∏àÅ•êÙâ—…Ö•π•πúà¯Ò†Ã˘Q…Ö•π•πúÅçΩπ—ïπ–ÅçΩµ•πúÅÕΩΩ∏Ω†Ã¯Ò¿˘Q…Ö•πï»ÅÖççïÕÃÅ•ÃÅÖÕÕïÕÕµïπ–µΩπ±‰∏ÅΩπ—ïπ–Åïë•—•πúÅÖπêÅ5ÖπÖùïµïπ–ÅÕï——•πùÃÅÖ…îÅ’πÖŸÖ•±Öâ±î∏Ω¿¯ΩÕïç—•Ω∏¯Òë•ÿÅ•êÙâ¡…Ωô•±ïAÖπï∞à¯Ωë•ÿ¯(ÄÅÄ§Ï(ÄÅëΩç’µïπ–πùï—±ïµïπ—	Â%ê†â—…Ö•πï…ï¡Ö…—µïπ–à§¸πÖëëŸïπ—1•Õ—ïπï»†âç°Öπùîà∞ÅïŸïπ–ÄÙ¯ÅÏÅ•òÄ°ÖÕÕ•ùπïêπ•πç±’ëïÃ°ïŸïπ–π—Ö…ùï–πŸÖ±’î§§ÅÏÅÕ—Ö—îπÕï±ïç—ïëï¡Ö…—µïπ–ÄÙÅïŸïπ–π—Ö…ùï–πŸÖ±’îÏÅÕÖŸïM—Ö—î†§ÏÅ…ïπëï…Q…Ö•πï…ÖÕ°âΩÖ…ê†§ÏÅÙÅÙ§Ï(ÄÅçΩπÕ–ÅÖ¡¡±Â•±—ï…ÃÄÙÄ†§ÄÙ¯ÅÏÅ±ï–ÅŸ•Õ•â±îÄÙÄ¿ÏÅëΩç’µïπ–π≈’ï…ÂMï±ïç—Ω…±∞†àπ—…Ö•πïîµ…Ω‹à§πôΩ…Öç†°…Ω‹ÄÙ¯ÅÏÅçΩπÕ–ÅµÖ—ç†ÄÙÅ…Ω‹πëÖ—ÖÕï–πÕïÖ…ç†π•πç±’ëïÃ°ëΩç’µïπ–πùï—±ïµïπ—	Â%ê†â—…Ö•πïïMïÖ…ç†à§πŸÖ±’îπ—Ω1Ω›ï…ÖÕî†§§ÄòòÅlâ¡…Ωù…ïÕÃà∞ÄâΩŸï…ë’îà∞Äâ…ïŸ•ï‹à∞ÄâÕ•ùπΩôòâtπïŸï…‰°≠ï‰ÄÙ¯ÅÏÅçΩπÕ–ÅŸÖ±’îÄÙÅëΩç’µïπ–πùï—±ïµïπ—	Â%ê°ÄëÌ≠ïÂı•±—ï…Ä§πŸÖ±’îÏÅ…ï—’…∏ÅŸÖ±’îÄÙÙÙÄâÖ±∞àÅÒÅ…Ω‹πëÖ—ÖÕï—m≠ïÂtÄÙÙÙÅŸÖ±’îÏÅÙ§ÏÅ…Ω‹π°•ëëï∏ÄÙÄÖµÖ—ç†ÏÅ•òÄ°µÖ—ç†§ÅŸ•Õ•â±î¨¨ÏÅÙ§ÏÅëΩç’µïπ–πùï—±ïµïπ—	Â%ê†âπΩQ…Ö•πïïÃà§π°•ëëï∏ÄÙÅŸ•Õ•â±îÄ¯Ä¿ÏÅÙÏ(ÄÅëΩç’µïπ–π≈’ï…ÂMï±ïç—Ω…±∞†àπ—…Ö•πï»µô•±—ï…ÃÅ•π¡’–∞Äπ—…Ö•πï»µô•±—ï…ÃÅÕï±ïç–à§πôΩ…Öç†°çΩπ—…Ω∞ÄÙ¯ÅçΩπ—…Ω∞πÖëëŸïπ—1•Õ—ïπï»°çΩπ—…Ω∞π—Öù9ÖµîÄÙÙÙÄâ%9AUPàÄ¸Äâ•π¡’–àÄËÄâç°Öπùîà∞ÅÖ¡¡±Â•±—ï…Ã§§Ï(ÄÅëΩç’µïπ–π≈’ï…ÂMï±ïç—Ω…±∞†àπΩ¡ï∏µ¡…Ωô•±îà§πôΩ…Öç†°â’——Ω∏ÄÙ¯Åâ’——Ω∏πÖëëŸïπ—1•Õ—ïπï»†âç±•ç¨à∞Ä†§ÄÙ¯Å…ïπëï…Q…Ö•πïïA…Ωô•±î°â’——Ω∏πëÖ—ÖÕï–π•ê§§§Ï)Ù()ô’πç—•Ω∏Å…ïπëï…Q…Ö•πïïA…Ωô•±î°•ê§ÅÏ(ÄÅçΩπÕ–Å…ïçΩ…êÄÙÅ›Ω…≠ô±Ω›IïçΩ…ëÃ†§πô•πê°•—ï¥ÄÙ¯Å•—ï¥π•êÄÙÙÙÅ•ê§Ï(ÄÅçΩπÕ–ÅÖ±±Ω›ïêÄÙÅ…ïçΩ…êÄòòÅ…ïçΩ…êπ…Ω±îÄÙÙÙÄ°Õ—Ö—îπç’……ïπ—UÕï»π…Ω±îÄÙÙÙÄâ¡çÑµ—…Ö•πï»àÄ¸ÄâAàÄËÄâ±ïÖπï»à§ÄòòÅÖÕÕ•ùπïëï¡Ö…—µïπ—ÕΩ…’……ïπ—Q…Ö•πï»†§π•πç±’ëïÃ°…ïçΩ…êπëï¡Ö…—µïπ–§Ï(ÄÅ•òÄ†ÖÖ±±Ω›ïê§Å…ï—’…∏ÅÖ±ï…–†âeΩ‘ÅëºÅπΩ–Å°ÖŸîÅÖççïÕÃÅ—ºÅ—°•ÃÅ—…Ö•πïîÅΩ»Åëï¡Ö…—µïπ–∏à§Ï(ÄÅçΩπÕ–Å°•Õ—Ω…‰ÄÙÅ…ïçΩ…êπ°•Õ—Ω…‰πµÖ¿°•—ï¥ÄÙ¯ÅÄÒ±§¯Òë•ÿ¯ÒÕ—…Ωπú¯ëÌïÕçÖ¡ï!—µ∞°•—ï¥πÖç—•Ω∏•ÙΩÕ—…Ωπú¯ÒÕ¡Ö∏¯ëÌïÕçÖ¡ï!—µ∞°•—ï¥πÖç—Ω»•ÙÉ
+‹ÄëÌïÕçÖ¡ï!—µ∞°•—ï¥π…Ω±î•ÙÉ
+‹ÄëÌïÕçÖ¡ï!—µ∞°•—ï¥πÖ–•ÙΩÕ¡Ö∏¯Ωë•ÿ¯Ò¿¯ëÌïÕçÖ¡ï!—µ∞°•—ï¥πëï—Ö•∞ÅÒÄüäPú•ÙΩ¿¯ÒÕµÖ±∞¯ëÌïÕçÖ¡ï!—µ∞°•—ï¥π¡…ïŸ•Ω’ÕM—Ö—’Ã•ÙÉäHÄëÌïÕçÖ¡ï!—µ∞°•—ï¥ππï›M—Ö—’Ã•ÙΩÕµÖ±∞¯Ω±§˘Ä§π©Ω•∏†àà§Ï(ÄÅëΩç’µïπ–πùï—±ïµïπ—	Â%ê†â¡…Ωô•±ïAÖπï∞à§π•ππï…!Q50ÄÙÅÄÒÕïç—•Ω∏Åç±ÖÕÃÙâçÖ…êÅ—…Ö•πïîµ¡…Ωô•±îàÅ•êÙâ…ï¡Ω…—Ãà¯Òë•ÿÅç±ÖÕÃÙâÕïç—•Ω∏µ°ïÖë•πúà¯Òë•ÿ¯ÒÕ¡Ö∏Åç±ÖÕÃÙâïÂïâ…Ω‹à˘QI%9ÅAI=%1ΩÕ¡Ö∏¯Ò†Ã¯ëÌïÕçÖ¡ï!—µ∞°…ïçΩ…êππÖµî•ÙΩ†Ã¯ÒÕ¡Ö∏Åç±ÖÕÃÙâïµ¡±ΩÂïîµ•êà¯ëÌïÕçÖ¡ï!—µ∞°…ïçΩ…êπ•ê•ÙΩÕ¡Ö∏¯Ò¿¯ëÌ…ïçΩ…êπ…Ω±ïÙÉ
+‹ÄëÌïÕçÖ¡ï!—µ∞°ëï¡Ö…—µïπ—9Öµî°…ïçΩ…êπëï¡Ö…—µïπ–§•ÙΩ¿¯Ωë•ÿ¯ÒÕ¡Ö∏Åç±ÖÕÃÙâÕ—Ö—’Ãµç°•¿ÅÕ—Ö—’Ã¥ëÌÕ—Ö—’ÕQΩπî°…ïçΩ…êπÕ—Ö—’Ã•Ùà¯ëÌ…ïçΩ…êπÕ—Ö—’ÕÙΩÕ¡Ö∏¯Ωë•ÿ¯Òë•ÿÅç±ÖÕÃÙâ¡…Ωô•±îµù…•êà¯Òë•ÿ¯Ò†–˘5Ωë’±ïÃΩ†–¯ÒÕ—…Ωπú¯ëÌ…ïçΩ…êπµΩë’±ïÃπçΩµ¡±ï—ïêπ±ïπù—°ÙÅçΩµ¡±ï—ïêÉ
+‹ÄëÌ…ïçΩ…êπµΩë’±ïÃπ…ïµÖ•π•πúπ±ïπù—°ÙÅ…ïµÖ•π•πúΩÕ—…Ωπú¯Ò¿¯ëÌïÕçÖ¡ï!—µ∞°…ïçΩ…êπµΩë’±ïÃπ…ïµÖ•π•πúπ©Ω•∏†à∞Äà§ÅÒÄâ±∞Å…ï≈’•…ïêÅµΩë’±ïÃÅçΩµ¡±ï—ïêà•ÙΩ¿¯Ωë•ÿ¯Òë•ÿ¯Ò†–˘-πΩ›±ïëùîÅç°ïç≠ÃΩ†–¯ëÌ…ïçΩ…êπ≠πΩ›±ïëùîπµÖ¿°¨ÄÙ¯ÅÄÒ¿¯ëÌïÕçÖ¡ï!—µ∞°¨πµΩë’±î•ÙÄÒÕ—…Ωπú¯ëÌ¨πÕçΩ…ïÙîΩÕ—…Ωπú¯Ω¿˘Ä§π©Ω•∏†àà•ÙΩë•ÿ¯Òë•ÿ¯Ò†–˘A…Öç—•çÖ∞ÅΩâÕï…ŸÖ—•ΩπÃΩ†–¯ëÌ…ïçΩ…êπΩâÕï…ŸÖ—•ΩπÃπµÖ¿°ºÄÙ¯ÅÄÒ¿¯ÒÕ—…Ωπú¯ëÌïÕçÖ¡ï!—µ∞°ºπ…ïÕ’±–•ÙΩÕ—…Ωπú¯É
+‹ÄëÌïÕçÖ¡ï!—µ∞°ºπëÖ—î•ÙÒâ»¯ëÌïÕçÖ¡ï!—µ∞°ºππΩ—î•ÙΩ¿˘Ä§π©Ω•∏†àà§ÅÒÄúÒ¿˘9ºÅΩâÕï…ŸÖ—•Ω∏Å…ïçΩ…ëïê∏Ω¿¯ùÙΩë•ÿ¯Òë•ÿ¯Ò†–˘Q…Ö•πï»ÄºÅ5ÖπÖùïµïπ–ÅôïïëâÖç¨Ω†–¯Ò¿Åç±ÖÕÃÙàëÌ…ïçΩ…êπÕ—Ö—’ÃÄÙÙÙÄùIïÖÕÕïÕÕµïπ–ÅIï≈’•…ïêúÄ¸ÄùÖ±ï…–µ—ï·–úÄËÄúùÙà¯ëÌïÕçÖ¡ï!—µ∞°…ïçΩ…êπôïïëâÖç¨ÅÒÄâ9ºÅôïïëâÖç¨ÅÂï–∏à•ÙΩ¿¯Ωë•ÿ¯Ωë•ÿ¯Ò±Öâï∞˘ÕÕïÕÕµïπ–ÅΩâÕï…ŸÖ—•Ω∏Ò—ï·—Ö…ïÑÅ•êÙâÖÕÕïÕÕµïπ—9Ω—îàÅ¡±Öçï°Ω±ëï»ÙâIïçΩ…êÅΩâÕï…ŸÖâ±îÅçΩµ¡ï—ïπç‰ÅïŸ•ëïπçîà¯Ω—ï·—Ö…ïÑ¯Ω±Öâï∞¯Òë•ÿÅç±ÖÕÃÙâ¡…Ωô•±îµÖç—•ΩπÃà¯Òâ’——Ω∏Åç±ÖÕÃÙââ—∏àÅ•êÙâ…ïçΩ…ë=âÕï…ŸÖ—•Ω∏à˘IïçΩ…êÅΩâÕï…ŸÖ—•Ω∏Ωâ’——Ω∏¯Òâ’——Ω∏Åç±ÖÕÃÙââ—∏àÅ•êÙâ…ïçΩµµïπëM•ùπΩôòàÄëÌ…ïçΩ…êπ¡…Ωù…ïÕÃÄÄƒ¿¿ÅÒÄÖlùIïÖë‰ÅôΩ»ÅQ…Ö•πï»ÅIïŸ•ï‹ú∞ùIïÖÕÕïÕÕµïπ–ÅIï≈’•…ïêùtπ•πç±’ëïÃ°…ïçΩ…êπÕ—Ö—’Ã§Ä¸Äùë•ÕÖâ±ïêúÄËÄúùÙ˘M’âµ•–Å…ïçΩµµïπëÖ—•Ω∏Ωâ’——Ω∏¯Ωë•ÿ¯Ò†–˘ç—•Ÿ•—‰Å°•Õ—Ω…‰Ω†–¯ÒΩ∞Åç±ÖÕÃÙâÖç—•Ÿ•—‰µ°•Õ—Ω…‰à¯ëÌ°•Õ—Ω…ÂÙΩΩ∞¯ΩÕïç—•Ω∏˘ÄÏ(ÄÅëΩç’µïπ–πùï—±ïµïπ—	Â%ê†â¡…Ωô•±ïAÖπï∞à§πÕç…Ω±±%π—ΩY•ï‹°ÏÅâï°ÖŸ•Ω»ËÄâÕµΩΩ—†àÅÙ§Ï(ÄÅëΩç’µïπ–πùï—±ïµïπ—	Â%ê†â…ïçΩ…ë=âÕï…ŸÖ—•Ω∏à§πÖëëŸïπ—1•Õ—ïπï»†âç±•ç¨à∞Ä†§ÄÙ¯ÅÏÅçΩπÕ–ÅπΩ—îÄÙÅëΩç’µïπ–πùï—±ïµïπ—	Â%ê†âÖÕÕïÕÕµïπ—9Ω—îà§πŸÖ±’îπ—…•¥†§ÏÅ•òÄ†ÖπΩ—î§Å…ï—’…∏ÅÖ±ï…–†âπ—ï»ÅÖ∏ÅΩâÕï…ŸÖ—•Ω∏Åô•…Õ–∏à§ÏÅ…ïçΩ…êπΩâÕï…ŸÖ—•ΩπÃπ’πÕ°•ô–°ÏÅëÖ—îËÅπï‹ÅÖ—î†§π—Ω1ΩçÖ±ïM—…•πú†âï∏µTà§∞Å…ïÕ’±–ËÄâ=âÕï…Ÿïêà∞ÅπΩ—îÅÙ§ÏÅ…ïçΩ…êπôïïëâÖç¨ÄÙÅπΩ—îÏÅ…ïçΩ…êπ°•Õ—Ω…‰π’πÕ°•ô–°ÏÅÖç—Ω»ËÅÕ—Ö—îπç’……ïπ—UÕï»ππÖµî∞Å…Ω±îËÅ›Ω…≠¡±ÖçïIΩ±ï1Öâï∞°Õ—Ö—îπç’……ïπ—UÕï»π…Ω±î§∞ÅÖç—•Ω∏ËÄâIïçΩ…ëïêÅçΩµ¡ï—ïπç‰ÅΩâÕï…ŸÖ—•Ω∏à∞ÅÖ–ËÅπï‹ÅÖ—î†§π—Ω1ΩçÖ±ïM—…•πú†âï∏µTà§∞Åëï—Ö•∞ËÅπΩ—î∞Å¡…ïŸ•Ω’ÕM—Ö—’ÃËÅ…ïçΩ…êπÕ—Ö—’Ã∞Åπï›M—Ö—’ÃËÅ…ïçΩ…êπÕ—Ö—’ÃÅÙ§ÏÅÕÖŸïM—Ö—î†§ÏÅ…ïπëï…Q…Ö•πïïA…Ωô•±î°•ê§ÏÅÙ§Ï(ÄÅëΩç’µïπ–πùï—±ïµïπ—	Â%ê†â…ïçΩµµïπëM•ùπΩôòà§πÖëëŸïπ—1•Õ—ïπï»†âç±•ç¨à∞Ä†§ÄÙ¯ÅÏÅçΩπÕ–Å¡…ïŸ•Ω’ÃÄÙÅ…ïçΩ…êπÕ—Ö—’ÃÏÅçΩπÕ–Åëï—Ö•∞ÄÙÅëΩç’µïπ–πùï—±ïµïπ—	Â%ê†âÖÕÕïÕÕµïπ—9Ω—îà§πŸÖ±’îπ—…•¥†§ÅÒÅ…ïçΩ…êπôïïëâÖç¨ÅÒÄâΩµ¡ï—ïπç‰Å…ïçΩµµïπëïêàÏÅ…ïçΩ…êπÕ—Ö—’ÃÄÙÄâMïπ–Å—ºÅ5ÖπÖùïµïπ–àÏÅ…ïçΩ…êπ…ïŸ•ï›M—Ö—’ÃÄÙÄâ5ÖπÖùïµïπ–Å…ïŸ•ï‹àÏÅ…ïçΩ…êπôïïëâÖç¨ÄÙÅëï—Ö•∞ÏÅ…ïçΩ…êπ°•Õ—Ω…‰π’πÕ°•ô–°ÏÅÖç—Ω»ËÅÕ—Ö—îπç’……ïπ—UÕï»ππÖµî∞Å…Ω±îËÅ›Ω…≠¡±ÖçïIΩ±ï1Öâï∞°Õ—Ö—îπç’……ïπ—UÕï»π…Ω±î§∞ÅÖç—•Ω∏ËÄâM’âµ•——ïêÅÕ•ù∏µΩôòÅ…ïçΩµµïπëÖ—•Ω∏à∞ÅÖ–ËÅπï‹ÅÖ—î†§π—Ω1ΩçÖ±ïM—…•πú†âï∏µTà§∞Åëï—Ö•∞∞Å¡…ïŸ•Ω’ÕM—Ö—’ÃËÅ¡…ïŸ•Ω’Ã∞Åπï›M—Ö—’ÃËÅ…ïçΩ…êπÕ—Ö—’ÃÅÙ§ÏÅÕÖŸïM—Ö—î†§ÏÅ…ïπëï…Q…Ö•πï…ÖÕ°âΩÖ…ê†§ÏÅÙ§Ï)Ù()ô’πç—•Ω∏ÅïÕçÖ¡ï!—µ∞°ŸÖ±’î§ÅÏ(ÄÅ…ï—’…∏ÅM—…•πú°ŸÖ±’î§(ÄÄÄÄπ…ï¡±Öçï±∞†àòà∞ÄàôÖµ¿Ïà§(ÄÄÄÄπ…ï¡±Öçï±∞†àà∞Äàô±–Ïà§(ÄÄÄÄπ…ï¡±Öçï±∞†à¯à∞Äàôù–Ïà§(ÄÄÄÄπ…ï¡±Öçï±∞†úàú∞Äàô≈’Ω–Ïà§(ÄÄÄÄπ…ï¡±Öçï±∞†àúà∞Äàòå¿Ã‰Ïà§Ï)Ù()ÖÕÂπåÅô’πç—•Ω∏ÅâΩΩ—Õ—…Ö¿†§ÅÏ(ÄÅ•òÄ†Öù±ΩâÖ±Q°•ÃπM≠•±±]Ö…ëMï…Ÿ•çïÃ§Å…ï—’…∏ÅÕ—Ö—îπç’……ïπ—UÕï»Ä¸Å…Ω’—ïM•ùπïë%πUÕï»†§ÄËÅ…ïπëï…1Ωù•∏†§Ï(ÄÅÖ’—°Mï…Ÿ•çîÄÙÅπï‹Åù±ΩâÖ±Q°•ÃπM≠•±±]Ö…ëMï…Ÿ•çïÃπ’—°Mï…Ÿ•çî†§Ï(ÄÅçΩπÕ–Å•πŸ•—Ö—•Ω∏ÄÙÅù±ΩâÖ±Q°•ÃπM≠•±±]Ö…ë%πŸ•—Ö—•Ω∏¸π¡Ö…Õï%πŸ•—Ö—•ΩπÖ±±âÖç¨°ù±ΩâÖ±Q°•Ãπ±ΩçÖ—•Ω∏π°…ïò§Ï(ÄÅ•òÄ°•πŸ•—Ö—•Ω∏¸π…ï≈’ïÕ—ïê§Å…ï—’…∏Å¡…ΩçïÕÕ%πŸ•—Ö—•ΩπÖ±±âÖç¨°•πŸ•—Ö—•Ω∏§Ï(ÄÅçΩπÕ–Å…ïçΩŸï…‰ÄÙÅù±ΩâÖ±Q°•ÃπM≠•±±]Ö…ëIïçΩŸï…‰π¡Ö…ÕïIïçΩŸï…ÂÖ±±âÖç¨°ù±ΩâÖ±Q°•Ãπ±ΩçÖ—•Ω∏π°…ïò§Ï(ÄÅ•òÄ°…ïçΩŸï…‰π…ï≈’ïÕ—ïê§Å…ï—’…∏Å¡…ΩçïÕÕIïçΩŸï…ÂÖ±±âÖç¨°…ïçΩŸï…‰§Ï(ÄÅ•òÄ°πï‹ÅUI1MïÖ…ç°AÖ…ÖµÃ°±ΩçÖ—•Ω∏πÕïÖ…ç†§πùï–†âëïµºà§ÄÙÙÙÄàƒà§ÅÏ(ÄÄÄÅÕ—Ö—îπç’……ïπ—UÕï»ÄÙÅπ’±∞ÏÅÕ—Ö—îπÕï±ïç—ïëï¡Ö…—µïπ–ÄÙÅπ’±∞ÏÅÕÖŸïM—Ö—î†§Ï(ÄÄÄÅ…ï—’…∏Å…ïπëï…’•ëïëïµΩπ—…‰†§Ï(ÄÅÙ(ÄÅ•òÄ°ù±ΩâÖ±Q°•ÃπM≠•±±]Ö…ëIïçΩŸï…‰π•ÕIïçΩŸï…ÂAïπë•πú°ÕïÕÕ•ΩπM—Ω…Öùî§§ÅÏ(ÄÄÄÅçΩπÕ–ÅÕïÕÕ•Ω∏ÄÙÅÖ›Ö•–ÅÖ’—°Mï…Ÿ•çîπ…ïçΩŸï…ÂMïÕÕ•Ω∏†§Ï(ÄÄÄÅ•òÄ°ÕïÕÕ•Ω∏¸π’Õï»§Å…ï—’…∏Å…ïπëï…AÖÕÕ›Ω…ëU¡ëÖ—î†§Ï(ÄÄÄÅù±ΩâÖ±Q°•ÃπM≠•±±]Ö…ëIïçΩŸï…‰πç±ïÖ…IïçΩŸï…ÂAïπë•πú°ÕïÕÕ•ΩπM—Ω…Öùî§Ï(ÄÄÄÅ…ï—’…∏Å…ïπëï…IïçΩŸï…Â%πŸÖ±•ê†§Ï(ÄÅÙ(ÄÅ•òÄ°Õ—Ö—îπç’……ïπ—UÕï»¸πµΩëîÄÙÙÙÄâëïµºàÅÒÄ°Õ—Ö—îπç’……ïπ—UÕï»ÄòòÄÖÕ—Ö—îπç’……ïπ—UÕï»πµΩëî§§Å…ï—’…∏Å…Ω’—ïM•ùπïë%πUÕï»†§Ï(ÄÅ…ïπëï…M°ï±∞†úÒÕïç—•Ω∏Åç±ÖÕÃÙâçÖ…êà¯Ò†»˘1ΩÖë•πúÅM≠•±±]Ö…ìäòΩ†»¯Ò¿˘IïÕΩ±Ÿ•πúÅÂΩ’»ÅÕïç’…îÅÕïÕÕ•Ω∏ÅÖπêÅ›Ω…≠¡±ÖçîÅÖççïÕÃ∏Ω¿¯ΩÕïç—•Ω∏¯ú§Ï(ÄÅÖ’—°Mï…Ÿ•çîπΩπ°Öπùî†°ïŸïπ–§ÄÙ¯ÅÏ(ÄÄÄÅ•òÄ°ïŸïπ–ÄÙÙÙÄâM%9}=UPàÅÒÅïŸïπ–ÄÙÙÙÄâQ=-9}IIM!àÄòòÄÖÖ’—°ïπ—•çÖ—ïëΩπ—ï·–§ÅÏ(ÄÄÄÄÄÅÖ’—°ïπ—•çÖ—ïëΩπ—ï·–ÄÙÅπ’±∞Ï(ÄÄÄÄÄÅ…ïπëï…ççïÕÕM—Ö—î†âMMM%=9}aA%Ià§Ï(ÄÄÄÅÙ(ÄÅÙ§Ï(ÄÅ—…‰ÅÏ(ÄÄÄÅçΩπÕ–Å…ïÕ—Ω…ïêÄÙÅÖ›Ö•–ÅÖ’—°Mï…Ÿ•çîπ…ïÕ—Ω…î°Õ—Ö—îπÖç—•Ÿï=…ùÖπ•ÈÖ—•Ωπ%ê§Ï(ÄÄÄÅ•òÄ°…ïÕ—Ω…ïê§Å…ï—’…∏ÅÖççï¡—IïÕΩ±Ÿïëπ—…‰°…ïÕ—Ω…ïê§Ï(ÄÅÙÅçÖ—ç†Ä°ï……Ω»§ÅÏ(ÄÄÄÅÖ›Ö•–ÅÖ’—°Mï…Ÿ•çîπÕ•ùπ=’–†â±ΩçÖ∞à∞Åï……Ω»πµïÕÕÖùîÄÑÙÙÄâ5%MM%9}AI=%1à§Ï(ÄÄÄÅ•òÄ°lâ=U9Q}MUMA9à∞Äâ=U9Q}I!%Yà∞Äâ55	IM!%A}aA%Ià∞Äâ5%MM%9}55	IM!%@à∞Äâ5%MM%9}AI=%1à∞Äâ%9Y%QQ%=9}aA%Ià∞ÄâMM}9%âtπ•πç±’ëïÃ°ï……Ω»πµïÕÕÖùî§§Å…ï—’…∏Å…ïπëï…ççïÕÕM—Ö—î°ï……Ω»πµïÕÕÖùî§Ï(ÄÄÄÅ…ï—’…∏Å…ïπëï…ççïÕÕM—Ö—î†âMeMQ5}U9Y%1	1à§Ï(ÄÅÙ(ÄÅ…ïπëï…1Ωù•∏†§Ï)Ù)ÖÕÂπåÅô’πç—•Ω∏Å¡…ΩçïÕÕ%πŸ•—Ö—•ΩπÖ±±âÖç¨°•πŸ•—Ö—•Ω∏§ÅÏ(ÄÅ…ïπëï…M°ï±∞†úÒÕïç—•Ω∏Åç±ÖÕÃÙâçÖ…êÅ…ïçΩŸï…‰µçÖ…êà¯Ò†»˘=¡ïπ•πúÅÂΩ’»ÅÕïç’…îÅ•πŸ•—Ö—•ΩªäòΩ†»¯Ò¿˘A±ïÖÕîÅ›Ö•–Å›°•±îÅM≠•±±]Ö…êÅŸï…•ô•ïÃÅ—°îÅΩπîµ—•µîÅ±•π¨∏Ω¿¯ΩÕïç—•Ω∏¯ú§Ï(ÄÅ—…‰ÅÏ(ÄÄÄÅÖ›Ö•–ÅÖ’—°Mï…Ÿ•çîπïÕ—Öâ±•Õ°%πŸ•—Ö—•Ω∏°•πŸ•—Ö—•Ω∏§Ï(ÄÄÄÅ°•Õ—Ω…‰π…ï¡±ÖçïM—Ö—î°ÌÙ∞Äàà∞ÄàΩÖ¡¿ºà§Ï(ÄÄÄÅçΩπÕ–Å…ïÕ’±–ÄÙÅÖ›Ö•–ÅÖ’—°Mï…Ÿ•çîπ…ïÕ—Ω…î†§Ï(ÄÄÄÅ•òÄ†Ö…ïÕ’±–ÅÒÅ…ïÕ’±–πïπ—…ÂM—Ö—îÄÑÙÙÄâ•πŸ•—Ö—•Ω∏à§Å…ï—’…∏Å…ïπëï…%πŸ•—Ö—•Ωπ%πŸÖ±•ê†â’Õïêà§Ï(ÄÄÄÅ…ïπëï…%πŸ•—Ö—•ΩπMï—’¿°…ïÕ’±–§Ï(ÄÅÙÅçÖ—ç†ÅÏ(ÄÄÄÅ…ïπëï…%πŸ•—Ö—•Ωπ%πŸÖ±•ê°•πŸ•—Ö—•Ω∏πï……Ω…ΩëîÄ¸Äâï·¡•…ïêàÄËÄâ•πŸÖ±•êà§Ï(ÄÅÙ)Ù)ô’πç—•Ω∏Å…ïπëï…%πŸ•—Ö—•Ωπ%πŸÖ±•ê°…ïÖÕΩ∏ÄÙÄâ•πŸÖ±•êà§ÅÏ(ÄÅçΩπÕ–Å°ïÖë•πúÄÙÅ…ïÖÕΩ∏ÄÙÙÙÄâ’ÕïêàÄ¸Äâ%πŸ•—Ö—•Ω∏ÅÖ±…ïÖë‰Å’ÕïêàÄËÅ…ïÖÕΩ∏ÄÙÙÙÄâï·¡•…ïêàÄ¸Äâ%πŸ•—Ö—•Ω∏Åï·¡•…ïêàÄËÄâ%πŸ•—Ö—•Ω∏Å’πÖŸÖ•±Öâ±îàÏ(ÄÅ…ïπëï…M°ï±∞°ÄÒÕïç—•Ω∏Åç±ÖÕÃÙâçÖ…êÅ…ïçΩŸï…‰µçÖ…êà¯Ò†»¯ëÌ°ïÖë•πùÙΩ†»¯Ò¿Åç±ÖÕÃÙâÖ’—†µÕ—Ö—’ÃàÅ…Ω±îÙâÖ±ï…–à˘Q°•ÃÅ•πŸ•—Ö—•Ω∏Å•ÃÅ•πŸÖ±•ê∞Åï·¡•…ïê∞Å…ïŸΩ≠ïêÅΩ»Å°ÖÃÅÖ±…ïÖë‰Åâïï∏Å’Õïê∏Ω¿¯Ò¿˘Õ¨ÅÂΩ’»Å=…ùÖπ•ÕÖ—•Ω∏Åëµ•π•Õ—…Ö—Ω»Å—ºÅ…ïÕïπêÅ—°îÅ•πŸ•—Ö—•Ω∏∞ÅΩ»ÅÕ•ù∏Å•∏Å•òÅÂΩ’»ÅÖççΩ’π–Å•ÃÅÖ±…ïÖë‰ÅÖç—•Ÿî∏Ω¿¯Òâ’——Ω∏Åç±ÖÕÃÙââ—∏àÅ•êÙâ•πŸ•—Ö—•ΩπM•ùπ%∏à˘ºÅ—ºÅM•ù∏Å%∏Ωâ’——Ω∏¯ΩÕïç—•Ω∏˘Ä§Ï(ÄÅëΩç’µïπ–πùï—±ïµïπ—	Â%ê†â•πŸ•—Ö—•ΩπM•ùπ%∏à§¸πÖëëŸïπ—1•Õ—ïπï»†âç±•ç¨à∞Ä†§ÄÙ¯Å…ïπëï…1Ωù•∏†§§Ï)Ù)ÖÕÂπåÅô’πç—•Ω∏Å¡…ΩçïÕÕIïçΩŸï…ÂÖ±±âÖç¨°…ïçΩŸï…‰§ÅÏ(ÄÅ…ïπëï…M°ï±∞†úÒÕïç—•Ω∏Åç±ÖÕÃÙâçÖ…êÅ…ïçΩŸï…‰µçÖ…êà¯Ò†»˘=¡ïπ•πúÅÂΩ’»ÅÕïç’…îÅ…ïçΩŸï…‰Å±•πØäòΩ†»¯Ò¿˘A±ïÖÕîÅ›Ö•–Å›°•±îÅM≠•±±]Ö…êÅŸï…•ô•ïÃÅ—°îÅ±•π¨∏Ω¿¯ΩÕïç—•Ω∏¯ú§Ï(ÄÅ—…‰ÅÏ(ÄÄÄÅÖ›Ö•–ÅÖ’—°Mï…Ÿ•çîπïÕ—Öâ±•Õ°IïçΩŸï…‰°…ïçΩŸï…‰§Ï(ÄÄÄÅù±ΩâÖ±Q°•ÃπM≠•±±]Ö…ëIïçΩŸï…‰πµÖ…≠IïçΩŸï…ÂAïπë•πú°ÕïÕÕ•ΩπM—Ω…Öùî§Ï(ÄÄÄÅ°•Õ—Ω…‰π…ï¡±ÖçïM—Ö—î°ÌÙ∞Äàà∞Å±ΩçÖ—•Ω∏π¡Ö—°πÖµî§Ï(ÄÄÄÅ…ïπëï…AÖÕÕ›Ω…ëU¡ëÖ—î†§Ï(ÄÅÙÅçÖ—ç†ÅÏ(ÄÄÄÅ…ïπëï…IïçΩŸï…Â%πŸÖ±•ê†§Ï(ÄÅÙ)Ù)ô’πç—•Ω∏Å…ïπëï…IïçΩŸï…Â%πŸÖ±•ê†§ÅÏ(ÄÅ…ïπëï…M°ï±∞†úÒÕïç—•Ω∏Åç±ÖÕÃÙâçÖ…êÅ…ïçΩŸï…‰µçÖ…êà¯Ò†»˘IïçΩŸï…‰Å±•π¨Å’πÖŸÖ•±Öâ±îΩ†»¯Ò¿Åç±ÖÕÃÙâÖ’—†µÕ—Ö—’ÃàÅ…Ω±îÙâÖ±ï…–à˘Q°•ÃÅ…ïçΩŸï…‰Å±•π¨Å•ÃÅ•πŸÖ±•ê∞Åï·¡•…ïêÅΩ»Å°ÖÃÅÖ±…ïÖë‰Åâïï∏Å’Õïê∏Ω¿¯Òâ’——Ω∏Åç±ÖÕÃÙââ—∏àÅ•êÙâ…ï≈’ïÕ—IïçΩŸï…‰à˘Iï≈’ïÕ–ÅÖπΩ—°ï»Å…ïçΩŸï…‰ÅïµÖ•∞Ωâ’——Ω∏¯ΩÕïç—•Ω∏¯ú§Ï(ÄÅëΩç’µïπ–πùï—±ïµïπ—	Â%ê†â…ï≈’ïÕ—IïçΩŸï…‰à§πÖëëŸïπ—1•Õ—ïπï»†âç±•ç¨à∞Ä†§ÄÙ¯Å…ïπëï…1Ωù•∏†àà∞Å—…’î§§Ï)Ù)ô’πç—•Ω∏Å…ïπëï…AÖÕÕ›Ω…ëU¡ëÖ—î†§ÅÏ(ÄÅ…ïπëï…M°ï±∞°ÄÒÕïç—•Ω∏Åç±ÖÕÃÙâçÖ…êÅ…ïçΩŸï…‰µçÖ…êà¯Ò†»˘…ïÖ—îÅπï‹Å¡ÖÕÕ›Ω…êΩ†»¯Ò¿˘UÕîÅÖ–Å±ïÖÕ–Äƒ»Åç°Ö…Öç—ï…ÃÅ›•—†Å’¡¡ï»µçÖÕî∞Å±Ω›ï»µçÖÕîÅÖπêÅÑÅπ’µâï»∏Ω¿¯ÒôΩ…¥Å•êÙâ’¡ëÖ—ïAÖÕÕ›Ω…ëΩ…¥à¯Ò±Öâï∞¯ÒÕ¡Ö∏˘9ï‹Å¡ÖÕÕ›Ω…êΩÕ¡Ö∏¯ÒÕ¡Ö∏Åç±ÖÕÃÙâ¡ÖÕÕ›Ω…êµçΩπ—…Ω∞à¯Ò•π¡’–Å•êÙâπï›AÖÕÕ›Ω…êàÅ—Â¡îÙâ¡ÖÕÕ›Ω…êàÅÖ’—ΩçΩµ¡±ï—îÙâπï‹µ¡ÖÕÕ›Ω…êàÅµ•π±ïπù—†Ùàƒ»àÅ…ï≈’•…ïê¯Òâ’——Ω∏Åç±ÖÕÃÙâ±•π¨µâ’——Ω∏Å¡ÖÕÕ›Ω…êµ—Ωùù±îàÅ—Â¡îÙââ’——Ω∏àÅëÖ—ÑµôΩ»Ùâπï›AÖÕÕ›Ω…êà˘M°Ω‹Ωâ’——Ω∏¯ΩÕ¡Ö∏¯Ω±Öâï∞¯Ò±Öâï∞¯ÒÕ¡Ö∏˘Ωπô•…¥Åπï‹Å¡ÖÕÕ›Ω…êΩÕ¡Ö∏¯ÒÕ¡Ö∏Åç±ÖÕÃÙâ¡ÖÕÕ›Ω…êµçΩπ—…Ω∞à¯Ò•π¡’–Å•êÙâçΩπô•…µAÖÕÕ›Ω…êàÅ—Â¡îÙâ¡ÖÕÕ›Ω…êàÅÖ’—ΩçΩµ¡±ï—îÙâπï‹µ¡ÖÕÕ›Ω…êàÅµ•π±ïπù—†Ùàƒ»àÅ…ï≈’•…ïê¯Òâ’——Ω∏Åç±ÖÕÃÙâ±•π¨µâ’——Ω∏Å¡ÖÕÕ›Ω…êµ—Ωùù±îàÅ—Â¡îÙââ’——Ω∏àÅëÖ—ÑµôΩ»ÙâçΩπô•…µAÖÕÕ›Ω…êà˘M°Ω‹Ωâ’——Ω∏¯ΩÕ¡Ö∏¯Ω±Öâï∞¯Ò¿Å•êÙâ…ïçΩŸï…Â……Ω»àÅç±ÖÕÃÙâÖ’—†µÕ—Ö—’ÃàÅ…Ω±îÙâÖ±ï…–à¯Ω¿¯Òâ’——Ω∏Åç±ÖÕÃÙââ—∏àÅ—Â¡îÙâÕ’âµ•–à˘MÖŸîÅπï‹Å¡ÖÕÕ›Ω…êΩâ’——Ω∏¯ΩôΩ…¥¯ΩÕïç—•Ω∏˘Ä§Ï(ÄÅëΩç’µïπ–π≈’ï…ÂMï±ïç—Ω…±∞†àπ¡ÖÕÕ›Ω…êµ—Ωùù±îà§πôΩ…Öç†°â’——Ω∏ÄÙ¯Åâ’——Ω∏πÖëëŸïπ—1•Õ—ïπï»†âç±•ç¨à∞Ä†§ÄÙ¯ÅÏÅçΩπÕ–Å•π¡’–ıëΩç’µïπ–πùï—±ïµïπ—	Â%ê°â’——Ω∏πëÖ—ÖÕï–πôΩ»§∞ÅÕ°Ω›•πúı•π¡’–π—Â¡îÙÙÙâ—ï·–àÏÅ•π¡’–π—Â¡îıÕ°Ω›•πú¸â¡ÖÕÕ›Ω…êàËâ—ï·–àÏÅâ’——Ω∏π—ï·—Ωπ—ïπ–ıÕ°Ω›•πú¸âM°Ω‹àËâ!•ëîàÏÅÙ§§Ï(ÄÅëΩç’µïπ–πùï—±ïµïπ—	Â%ê†â’¡ëÖ—ïAÖÕÕ›Ω…ëΩ…¥à§πÖëëŸïπ—1•Õ—ïπï»†âÕ’âµ•–à∞ÅÖÕÂπåÅïŸïπ–ÄÙ¯ÅÏÅïŸïπ–π¡…ïŸïπ—ïôÖ’±–†§ÏÅçΩπÕ–Å¡ÖÕÕ›Ω…êıëΩç’µïπ–πùï—±ïµïπ—	Â%ê†âπï›AÖÕÕ›Ω…êà§πŸÖ±’î∞ÅçΩπô•…µÖ—•Ω∏ıëΩç’µïπ–πùï—±ïµïπ—	Â%ê†âçΩπô•…µAÖÕÕ›Ω…êà§πŸÖ±’î∞Åï……Ω»ıëΩç’µïπ–πùï—±ïµïπ—	Â%ê†â…ïçΩŸï…Â……Ω»à§∞Åâ’——Ω∏ıïŸïπ–πç’……ïπ—QÖ…ùï–π≈’ï…ÂMï±ïç—Ω»†ââ’——Ωπm—Â¡îıÕ’âµ•—tà§ÏÅ•ò°¡ÖÕÕ›Ω…êπ±ïπù—†ƒ»ÅÒÄÑΩmµitºπ—ïÕ–°¡ÖÕÕ›Ω…ê§ÅÒÄÑΩmÑµÈtºπ—ïÕ–°¡ÖÕÕ›Ω…ê§ÅÒÄÑΩl¿¥Âtºπ—ïÕ–°¡ÖÕÕ›Ω…ê§ÅÒÅ¡ÖÕÕ›Ω…êÑÙıçΩπô•…µÖ—•Ω∏•ÏÅï……Ω»π—ï·—Ωπ—ïπ–ÙâUÕîÅÖ–Å±ïÖÕ–Äƒ»Åç°Ö…Öç—ï…ÃÅ›•—†Å’¡¡ï»µçÖÕî∞Å±Ω›ï»µçÖÕîÅÖπêÅÑÅπ’µâï»∞ÅÖπêÅµÖ≠îÅâΩ—†Åïπ—…•ïÃÅµÖ—ç†∏àÏÅ…ï—’…∏ÏÅÙÅâ’——Ω∏πë•ÕÖâ±ïêı—…’îÏÅ—…‰ÅÏÅÖ›Ö•–ÅÖ’—°Mï…Ÿ•çîπ’¡ëÖ—ïAÖÕÕ›Ω…ê°¡ÖÕÕ›Ω…ê§ÏÅù±ΩâÖ±Q°•ÃπM≠•±±]Ö…ëIïçΩŸï…‰πç±ïÖ…IïçΩŸï…ÂAïπë•πú°ÕïÕÕ•ΩπM—Ω…Öùî§ÏÅÖ›Ö•–ÅÖ’—°Mï…Ÿ•çîπÕ•ùπ=’–†§ÏÅ…ïπëï…1Ωù•∏†âAÖÕÕ›Ω…êÅ’¡ëÖ—ïêÅÕ’ççïÕÕô’±±‰∏ÅM•ù∏Å•∏Å›•—†ÅÂΩ’»Åπï‹Å¡ÖÕÕ›Ω…ê∏à§ÏÅÙÅçÖ—ç†ÅÏÅï……Ω»π—ï·—Ωπ—ïπ–ıÖ’—°5ïÕÕÖùî†âI=YIe}%9Y1%à§ÏÅâ’——Ω∏πë•ÕÖâ±ïêıôÖ±ÕîÏÅÙÅÙ§Ï)Ù)âΩΩ—Õ—…Ö¿†§Ï(
