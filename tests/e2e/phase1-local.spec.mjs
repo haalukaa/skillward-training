@@ -76,6 +76,20 @@ async function signIn(page, account, password = LOCAL_PASSWORD) {
   await page.getByRole("button", { name: /^Sign In/ }).click();
 }
 
+async function expectHeading(page, name) {
+  try {
+    await expect(page.getByRole("heading", { name })).toBeVisible();
+  } catch (error) {
+    const diagnostic = await page.evaluate(() => ({
+      url: location.href,
+      title: document.title,
+      headings: [...document.querySelectorAll("h1, h2, h3")].map(item => item.textContent.trim()).filter(Boolean),
+      alerts: [...document.querySelectorAll('[role="alert"], [role="status"]')].map(item => item.textContent.trim()).filter(Boolean)
+    }));
+    throw new Error(`${error.message}\nSafe fictional-page diagnostic: ${JSON.stringify(diagnostic)}`);
+  }
+}
+
 async function profileAction(page, action) {
   await page.locator("#profileButton").click();
   await page.locator(`[data-profile-action="${action}"]`).click();
@@ -125,7 +139,7 @@ test("valid login routes single memberships and enforces role navigation", async
   const accounts = localProject(testInfo);
 
   await signIn(page, accounts.management);
-  await expect(page.getByRole("heading", { name: "SkillWard Demo Organisation" })).toBeVisible();
+  await expectHeading(page, "SkillWard Demo Organisation");
   for (const name of ["Home", "Pathways", "People", "Competency", "Reports", "Admin"]) {
     await expect(page.locator(`button[aria-label="${name}"]:visible`).first()).toBeVisible();
   }
@@ -134,14 +148,14 @@ test("valid login routes single memberships and enforces role navigation", async
   await signOut(page);
 
   await signIn(page, accounts.worker);
-  await expect(page.getByRole("heading", { name: "PCA Training Workspace" })).toBeVisible();
+  await expectHeading(page, "PCA Training Workspace");
   await expect(page.getByRole("button", { name: "People" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Admin" })).toHaveCount(0);
   await capture(page, testInfo, "worker-dashboard");
   await signOut(page);
 
   await signIn(page, accounts.trainer);
-  await expect(page.getByRole("heading", { name: "PCA Trainer Workspace" })).toBeVisible();
+  await expectHeading(page, "PCA Trainer Workspace");
   await expect(page.getByText("ASSIGNED TRAINEES")).toBeVisible();
   await expect(page.getByRole("button", { name: "People" })).toHaveCount(0);
   await capture(page, testInfo, "trainer-dashboard");
@@ -196,8 +210,8 @@ test("invitation email and one-time account acceptance work through Mailpit", as
   await form.getByLabel("Employee ID").fill(invitation.employeeId);
   await form.getByLabel("Email").fill(invitation.email);
   await form.getByLabel("Role").selectOption({ label: invitation.role });
-  await form.getByLabel("Facility").selectOption({ index: 1 });
-  await form.getByLabel("Department").selectOption({ index: 1 });
+  await form.locator('select[name="facilityId"]').selectOption({ index: 1 });
+  await form.locator('select[name="departmentId"]').selectOption({ index: 1 });
   await form.getByRole("button", { name: "Send secure invitation" }).click();
   await expect(page.getByText(invitation.email)).toBeVisible();
 
@@ -208,7 +222,7 @@ test("invitation email and one-time account acceptance work through Mailpit", as
   await page.locator("#invitationPassword").fill(UPDATED_PASSWORD);
   await page.locator("#invitationPasswordConfirm").fill(UPDATED_PASSWORD);
   await page.getByRole("button", { name: "Create account and continue" }).click();
-  await expect(page.getByRole("heading", { name: "PCA Training Workspace" })).toBeVisible();
+  await expectHeading(page, "PCA Training Workspace");
   await expect(page.locator("#profileButton")).toHaveAttribute("aria-label", new RegExp(invitation.fullName));
   await capture(page, testInfo, "invitation-accepted");
 });
@@ -232,7 +246,7 @@ test("password recovery email, link, reset route and new login work", async ({ p
   await page.locator("#emailInput").fill(account.email);
   await page.locator("#passwordInput").fill(UPDATED_PASSWORD);
   await page.getByRole("button", { name: /^Sign In/ }).click();
-  await expect(page.getByRole("heading", { name: "PCA Training Workspace" })).toBeVisible();
+  await expectHeading(page, "PCA Training Workspace");
   await capture(page, testInfo, "recovery-login");
 });
 
@@ -261,7 +275,7 @@ test("Guided Demo is functional and isolated from authenticated services", async
   await page.locator("#roleInput").selectOption("management");
   await page.getByRole("button", { name: "Open Guided Demo" }).click();
   await expect(page.getByText("GUIDED DEMO · SAMPLE DATA").first()).toBeVisible();
-  await expect(page.locator(".demo-context").getByText("SkillWard Metropolitan Hospital")).toBeVisible();
+  await expect(page.locator(".demo-context").getByText("Perth Metro Hospital Network")).toBeVisible();
   await capture(page, testInfo, "guided-demo");
   expect(supabaseRequests, "Guided Demo must not call local Auth, REST, RPC or Functions").toEqual([]);
 });

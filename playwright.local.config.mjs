@@ -11,7 +11,7 @@ export default defineConfig({
   reporter: [["line"]],
   use: {
     baseURL: process.env.SKILLWARD_BASE_URL || "http://127.0.0.1:4173",
-    screenshot: "off",
+    screenshot: "only-on-failure",
     trace: "off",
     video: "off"
   },
