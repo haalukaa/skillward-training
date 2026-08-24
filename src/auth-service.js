@@ -79,6 +79,7 @@ export class AuthService {
       });
       return {
         ...context,
+        memberships: currentMemberships,
         appUser: { name: context.profile.full_name, role: "platform-admin" },
         departmentIds: []
       };
