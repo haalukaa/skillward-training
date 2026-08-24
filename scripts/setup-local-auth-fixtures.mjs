@@ -1,11 +1,12 @@
 import { createClient } from "@supabase/supabase-js";
+import { spawnSync } from "node:child_process";
 import { FIXTURES, LOCAL_IDS, LOCAL_PASSWORD } from "../tests/e2e/fixtures.mjs";
 
 const url = process.env.SKILLWARD_LOCAL_API_ENDPOINT?.trim();
 const serviceRoleKey = process.env.SKILLWARD_LOCAL_SETUP_KEY?.trim();
 if (!url || !serviceRoleKey) throw new Error("Local Supabase setup credentials are required.");
-const host = new URL(url).hostname;
-if (!new Set(["127.0.0.1", "localhost", "::1"]).has(host)) {
+const loopbackHosts = new Set(["127.0.0.1", "localhost", "::1"]);
+if (!loopbackHosts.has(new URL(url).hostname)) {
   throw new Error("Refusing to create CI users outside loopback Supabase.");
 }
 
@@ -13,14 +14,14 @@ const admin = createClient(url, serviceRoleKey, {
   auth: { autoRefreshToken: false, persistSession: false }
 });
 
-async function requireResult(label, request) {
+async function requireAuthResult(label, request) {
   const { data, error } = await request;
   if (error) throw new Error(`${label}: ${error.message}`);
   return data;
 }
 
 async function createLoginUser(account) {
-  const data = await requireResult(
+  const data = await requireAuthResult(
     `create ${account.email}`,
     admin.auth.admin.createUser({
       email: account.email,
@@ -111,11 +112,6 @@ for (const [project, accounts] of Object.entries(FIXTURES)) {
   }
 }
 
-await requireResult("insert fictional profiles", admin.from("user_profiles").insert(profiles));
-await requireResult("insert fictional memberships", admin.from("organization_memberships").insert(memberships));
-await requireResult("insert fictional staff profiles", admin.from("organization_staff_profiles").insert(staffProfiles));
-await requireResult("insert fictional department assignments", admin.from("department_assignments").insert(departmentAssignments));
-
 const trainingAssignments = [];
 const trainerAssignments = [];
 for (const project of Object.keys(FIXTURES)) {
@@ -146,13 +142,55 @@ for (const project of Object.keys(FIXTURES)) {
     is_active: true
   });
 }
-await requireResult("insert fictional training assignments", admin.from("training_assignments").insert(trainingAssignments));
-await requireResult("insert fictional trainer assignments", admin.from("trainer_assignments").insert(trainerAssignments));
-await requireResult(
-  "set CI idle timeout",
-  admin.from("organization_auth_settings")
-    .update({ idle_timeout_minutes: 5 })
-    .eq("organization_id", LOCAL_IDS.alphaOrganization)
+function sqlValue(value) {
+  if (value === null || value === undefined) return "null";
+  if (typeof value === "number") return String(value);
+  if (typeof value === "boolean") return value ? "true" : "false";
+  return `'${String(value).replaceAll("'", "''")}'`;
+}
+
+function insertRows(table, columns, rows) {
+  const values = rows.map(row => `(${columns.map(column => sqlValue(row[column])).join(",")})`).join(",\n");
+  return `insert into public.${table}(${columns.join(",")}) values\n${values};`;
+}
+
+const sql = [
+  "begin;",
+  insertRows("user_profiles", [
+    "user_id", "full_name", "employee_id", "email_display", "account_status",
+    "employment_status", "active_hospital_id", "active_organization_id", "onboarding_completed_at"
+  ], profiles),
+  insertRows("organization_memberships", [
+    "organization_id", "user_id", "role", "membership_status", "joined_at"
+  ], memberships),
+  insertRows("organization_staff_profiles", [
+    "organization_id", "user_id", "employee_id", "employment_status"
+  ], staffProfiles),
+  insertRows("department_assignments", [
+    "organization_id", "facility_id", "department_id", "user_id", "role", "is_active"
+  ], departmentAssignments),
+  insertRows("training_assignments", [
+    "hospital_id", "organization_id", "facility_id", "department_id", "user_id",
+    "pathway_id", "status", "progress_percentage"
+  ], trainingAssignments),
+  insertRows("trainer_assignments", [
+    "hospital_id", "organization_id", "facility_id", "department_id", "trainer_user_id",
+    "trainee_user_id", "trainer_role", "trainee_role", "is_active"
+  ], trainerAssignments),
+  `update public.organization_auth_settings set idle_timeout_minutes = 5 where organization_id = '${LOCAL_IDS.alphaOrganization}';`,
+  "commit;"
+].join("\n");
+
+const childEnvironment = { ...process.env };
+delete childEnvironment.SKILLWARD_LOCAL_SETUP_KEY;
+const databaseSetup = spawnSync(
+  "docker",
+  ["exec", "-i", "supabase_db_skillward-local", "psql", "--username", "postgres",
+    "--dbname", "postgres", "--no-psqlrc", "--set", "ON_ERROR_STOP=1", "--quiet"],
+  { input: sql, encoding: "utf8", env: childEnvironment }
 );
+if (databaseSetup.error || databaseSetup.status !== 0) {
+  throw new Error(`Local database fixture setup failed: ${databaseSetup.stderr || databaseSetup.error?.message}`);
+}
 
 console.log(`Created ${Object.values(created).flatMap(Object.values).length} fictional login-capable local Auth users.`);
