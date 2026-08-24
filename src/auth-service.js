@@ -14,6 +14,8 @@ const publicRole = {
   "PCA Trainer": "pca-trainer", "Cleaner Trainer": "cleaner-trainer"
 };
 
+export const PLATFORM_WORKSPACE_ID = "__skillward_platform__";
+
 function isCurrentMembership(membership, now = Date.now()) {
   return membership.membership_status === "Active"
     && membership.organizations?.status !== "Archived"
@@ -69,6 +71,19 @@ export class AuthService {
       };
     }
 
+    if (organizationId === PLATFORM_WORKSPACE_ID) {
+      if (!entry.platformAdministrator?.is_active) throw new Error("ACCESS_DENIED");
+      const context = await this.database.loadSessionContext(user, null, {
+        ...entry,
+        memberships: []
+      });
+      return {
+        ...context,
+        appUser: { name: context.profile.full_name, role: "platform-admin" },
+        departmentIds: []
+      };
+    }
+
     if (!currentMemberships.length && !entry.platformAdministrator?.is_active) {
       const statuses = new Set(entry.memberships.map(membership => membership.membership_status));
       const expired = entry.memberships.some(membership =>
@@ -119,7 +134,11 @@ export class AuthService {
     const { data } = await this.client.auth.getUser();
     if (!data.user) throw new Error("INVALID_CREDENTIALS");
     const context = await this.resolve(data.user, organizationId);
-    await this.database.recordAuthenticationEvent("workspace_changed", organizationId);
+    await this.database.recordAuthenticationEvent(
+      "workspace_changed",
+      organizationId === PLATFORM_WORKSPACE_ID ? null : organizationId,
+      { destination: organizationId === PLATFORM_WORKSPACE_ID ? "platform" : "organization" }
+    );
     return context;
   }
 
@@ -171,4 +190,4 @@ export class AuthService {
   }
 }
 
-globalThis.SkillWardServices = { AuthService, InvitationService };
+globalThis.SkillWardServices = { AuthService, InvitationService, PLATFORM_WORKSPACE_ID };
