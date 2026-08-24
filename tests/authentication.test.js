@@ -231,6 +231,13 @@ test("invitation UI uses a protected Edge Function boundary rather than browser 
   assert.doesNotMatch(app + invitationSource + database, /auth\.admin|inviteUserByEmail/);
 });
 
+test("invitation delivery uses the canonical production origin for CORS and email redirects", () => {
+  const configuredOrigins = invitationFunction.match(/Deno\.env\.get\("PUBLIC_SITE_[A-Z]+"\)/g) || [];
+  assert.deepEqual([...new Set(configuredOrigins)], ['Deno.env.get("PUBLIC_SITE_ORIGIN")']);
+  assert.match(invitationFunction, /url\.pathname = "\/app\/"/);
+  assert.match(invitationFunction, /url\.search = "\?invitation=1"/);
+});
+
 test("invitation service has explicit minimum setup grants", () => {
   for (const table of ["user_profiles", "organization_staff_profiles", "organization_memberships", "facility_assignments", "department_assignments"]) {
     assert.match(authMigration, new RegExp(`public\\.${table}`));
