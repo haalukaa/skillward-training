@@ -173,9 +173,14 @@ jobs:
 
       - name: Show non-sensitive local diagnostics on failure
         if: failure()
+        shell: bash
         run: |
           docker ps --format 'table {{.Names}}\t{{.Status}}'
           curl --silent --show-error http://127.0.0.1:54324/api/v1/info || true
+          if test -f "$RUNNER_TEMP/skillward-functions.log"; then
+            tail -200 "$RUNNER_TEMP/skillward-functions.log" \
+              | sed -E 's/eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}/[REDACTED_JWT]/g; s/(sb_secret|sb_publishable)_[A-Za-z0-9_-]+/[REDACTED_KEY]/g'
+          fi
 
       - name: Stop isolated local Supabase services
         if: always()

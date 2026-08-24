@@ -593,7 +593,8 @@ function authMessage(code) {
     CONTEXT_TABLE_PERMISSION: "We could not load your workplace access. Check your connection or contact Management.",
     RECOVERY_INVALID: "This recovery link is invalid or has expired. Request a new link."
   };
-  return messages[code] || "We could not sign you in. Check your details and try again.";
+  const normalized = String(code).split(":")[0];
+  return messages[normalized] || "We could not sign you in. Check your details and try again.";
 }
 
 function renderDeprecatedEntry(message = "") {
@@ -816,7 +817,14 @@ function renderLogin(message = "", showRecovery = false) {
       }
       failedAttempts += 1;
       error.textContent = authMessage(caught.message);
-      if (["MISSING_PROFILE", "MISSING_MEMBERSHIP"].includes(caught.message)) await authService?.signOut("local", caught.message !== "MISSING_PROFILE");
+      if (["localhost", "127.0.0.1"].includes(location.hostname)) error.dataset.diagnosticCode = caught.message;
+      if (["MISSING_PROFILE", "MISSING_MEMBERSHIP"].includes(caught.message)) {
+        await authService?.signOut("local", caught.message !== "MISSING_PROFILE");
+        renderLogin();
+        const renderedError = document.getElementById("authError");
+        renderedError.textContent = authMessage(caught.message);
+        if (["localhost", "127.0.0.1"].includes(location.hostname)) renderedError.dataset.diagnosticCode = caught.message;
+      }
       if (failedAttempts >= 3) {
         error.textContent = "Too many unsuccessful attempts. Wait 30 seconds before trying again.";
         setTimeout(() => { failedAttempts = 0; button.disabled = false; error.textContent = ""; }, 30000);

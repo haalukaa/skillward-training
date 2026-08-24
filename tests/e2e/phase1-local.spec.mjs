@@ -84,7 +84,9 @@ async function expectHeading(page, name) {
       url: location.href,
       title: document.title,
       headings: [...document.querySelectorAll("h1, h2, h3")].map(item => item.textContent.trim()).filter(Boolean),
-      alerts: [...document.querySelectorAll('[role="alert"], [role="status"]')].map(item => item.textContent.trim()).filter(Boolean)
+      alerts: [...document.querySelectorAll('[role="alert"], [role="status"]')].map(item => ({
+        text: item.textContent.trim(), diagnosticCode: item.dataset.diagnosticCode || null
+      })).filter(item => item.text || item.diagnosticCode)
     }));
     throw new Error(`${error.message}\nSafe fictional-page diagnostic: ${JSON.stringify(diagnostic)}`);
   }
@@ -96,7 +98,9 @@ async function profileAction(page, action) {
 }
 
 async function signOut(page) {
+  const logout = page.waitForResponse(response => response.url().includes("/auth/v1/logout") && response.request().method() === "POST");
   await profileAction(page, "signout");
+  await logout;
   await expect(page.getByRole("heading", { name: "Sign in to your SkillWard workspace" })).toBeVisible();
 }
 
@@ -170,6 +174,7 @@ test("multiple workspaces, profile, switching and sign-out are functional", asyn
   await capture(page, testInfo, "workspace-chooser");
 
   await page.locator('[data-entry-organization="a0000000-0000-0000-0000-000000000001"]').click();
+  await expectHeading(page, "PCA Training Workspace");
   await expect(page.locator("#organizationWorkspace")).toHaveValue("a0000000-0000-0000-0000-000000000001");
   await profileAction(page, "profile");
   await expect(page.getByRole("heading", { name: account.fullName })).toBeVisible();
@@ -191,11 +196,15 @@ test("suspended and unauthorised users are blocked", async ({ page }, testInfo) 
   await signIn(page, accounts.suspended);
   await expect(page.getByRole("heading", { name: "Account suspended" })).toBeVisible();
   await capture(page, testInfo, "suspended-block");
+  const suspendedLogout = page.waitForResponse(response => response.url().includes("/auth/v1/logout") && response.request().method() === "POST");
   await page.locator("#accessStateSignIn").click();
+  await suspendedLogout;
 
   await page.locator("#emailInput").fill(accounts.unauthorized.email);
   await page.locator("#passwordInput").fill(LOCAL_PASSWORD);
+  const unauthorizedLogout = page.waitForResponse(response => response.url().includes("/auth/v1/logout") && response.request().method() === "POST");
   await page.getByRole("button", { name: /^Sign In/ }).click();
+  await unauthorizedLogout;
   await expect(page.locator("#authError")).toContainText("not configured for SkillWard");
   await capture(page, testInfo, "unauthorized-block");
 });
@@ -254,7 +263,9 @@ test("configured idle session expiry returns to a safe access state", async ({ p
   await page.clock.install();
   await signIn(page, localProject(testInfo).session);
   await expect(page.getByRole("heading", { name: "Department Management Workspace" })).toBeVisible();
+  const logout = page.waitForResponse(response => response.url().includes("/auth/v1/logout") && response.request().method() === "POST");
   await page.clock.fastForward(301_000);
+  await logout;
   await expect(page.getByRole("heading", { name: "Session expired" })).toBeVisible();
   await capture(page, testInfo, "session-expired");
 });

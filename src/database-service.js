@@ -2,12 +2,14 @@
 export class SkillWardDatabaseService {
   constructor(client) { this.client = client; }
 
-  contextError(error) {
+  contextError(error, table = "unknown") {
     const permissionDenied = error?.code === "42501" || /permission denied/i.test(error?.message || "");
     const development = ["localhost", "127.0.0.1"].includes(globalThis.location?.hostname);
-    if (permissionDenied && development) {
-      console.warn("SkillWard development diagnostic: authenticated table privilege missing.");
-      return new Error("CONTEXT_TABLE_PERMISSION");
+    if (development) {
+      const code = String(error?.code || "unknown").replace(/[^A-Za-z0-9_-]/g, "");
+      const safeTable = String(table).replace(/[^A-Za-z0-9_]/g, "");
+      console.warn(`SkillWard development diagnostic: ${safeTable}:${code}`);
+      return new Error(`${permissionDenied ? "CONTEXT_TABLE_PERMISSION" : "CONTEXT_READ_FAILED"}:${safeTable}:${code}`);
     }
     return new Error("CONTEXT_READ_FAILED");
   }
@@ -16,13 +18,13 @@ export class SkillWardDatabaseService {
     let request = this.client.from(table).select(columns);
     request = configure(request);
     const { data, error } = await request;
-    if (error) throw this.contextError(error);
+    if (error) throw this.contextError(error, table);
     return data || [];
   }
 
   async one(table, userId) {
     const { data, error } = await this.client.from(table).select("*").eq("user_id", userId).maybeSingle();
-    if (error) throw this.contextError(error);
+    if (error) throw this.contextError(error, table);
     return data;
   }
 
@@ -30,7 +32,7 @@ export class SkillWardDatabaseService {
     let request = this.client.from(table).select(columns); request = configure(request);
     const { data, error } = await request;
     if (error?.code === "42P01" || error?.code === "PGRST205" || error?.code === "42501") return [];
-    if (error) throw this.contextError(error);
+    if (error) throw this.contextError(error, table);
     return data || [];
   }
 
