@@ -2312,11 +2312,42 @@ th {
 .demo-session-controls .link-button { color: var(--teal-dark); font-size: .74rem; }
 .profile-signout-all { width: 100%; margin-top: 18px; color: #9d2d2d; }
 
+.pathway-authoring-layout { display: grid; grid-template-columns: minmax(280px, .72fr) minmax(0, 1.8fr); gap: 22px; align-items: start; }
+.pathway-library { position: sticky; top: 94px; display: grid; gap: 20px; }
+.pathway-library-list, .pathway-builder-main, .authoring-module-list, .module-item-list { display: grid; gap: 12px; }
+.pathway-library-row { width: 100%; display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 13px; color: inherit; text-align: left; border: 1px solid var(--border); border-radius: 13px; background: white; cursor: pointer; }
+.pathway-library-row.is-active { border-color: var(--teal); box-shadow: 0 0 0 3px rgba(32,184,173,.12); background: #f3fcfa; }
+.pathway-library-row > span:first-child { color: var(--teal-dark); font-size: 1.3rem; }
+.pathway-library-row strong, .pathway-library-row small { display: block; }
+.pathway-library-row small { margin-top: 3px; color: var(--muted); font-size: .72rem; }
+.pathway-create-form { display: grid; gap: 12px; padding-top: 18px; border-top: 1px solid var(--border); }
+.pathway-version-header { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; }
+.pathway-version-header h3 { margin: 5px 0 8px; font-size: 1.55rem; }
+.version-tabs { display: flex; gap: 8px; overflow-x: auto; padding: 3px 2px 7px; }
+.version-tab { min-width: 84px; display: grid; gap: 2px; padding: 10px 13px; border: 1px solid var(--border); border-radius: 11px; color: var(--muted); background: white; cursor: pointer; }
+.version-tab.is-active { color: white; border-color: var(--navy); background: var(--navy); }
+.version-tab span { font-size: .68rem; }
+.authoring-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.authoring-actions .auth-status { flex-basis: 100%; }
+.authoring-module { padding: clamp(18px, 3vw, 28px); }
+.module-item-row { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 13px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-soft); }
+.module-item-row strong, .module-item-row small { display: block; }
+.module-item-row small { margin-top: 3px; color: var(--muted); font-size: .72rem; }
+.item-type-icon { display: grid; place-items: center; width: 36px; height: 36px; color: var(--teal-dark); border-radius: 10px; background: #e8f7f4; font-weight: 900; }
+.authoring-item-form { display: grid; gap: 12px; margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--border); }
+.authoring-item-form fieldset { display: grid; gap: 10px; margin: 0; padding: 14px; border: 1px solid var(--border); border-radius: 12px; }
+.authoring-item-form legend { padding: 0 7px; color: var(--teal-dark); font-size: .75rem; font-weight: 900; }
+.checkbox-label { display: flex !important; flex-direction: row !important; align-items: center; gap: 9px; }
+.checkbox-label input { width: auto; }
+.locked-content-note { border-left: 4px solid var(--teal); }
+
 @media (max-width: 900px) {
   .auth-entry-v2 { grid-template-columns: 1fr; margin-top: 4px; }
   .auth-entry-story { min-height: auto; }
   .guided-demo-sector-grid { grid-template-columns: 1fr; }
   .guided-demo-sector { min-height: 210px; }
+  .pathway-authoring-layout { grid-template-columns: 1fr; }
+  .pathway-library { position: static; }
 }
 
 @media (max-width: 560px) {
@@ -2331,4 +2362,8 @@ th {
   .invitation-scope { grid-template-columns: 1fr; }
   .workspace-entry-card, .invitation-setup, .access-state-card { margin-top: 18px; padding: 24px 20px; }
   .demo-session-controls { justify-content: flex-start; }
+  .pathway-version-header { display: grid; }
+  .pathway-library-row, .module-item-row { grid-template-columns: 34px minmax(0, 1fr); }
+  .pathway-library-row .status-chip, .module-item-row .status-chip { grid-column: 2; justify-self: start; }
+  .authoring-actions .btn { width: 100%; }
 }
