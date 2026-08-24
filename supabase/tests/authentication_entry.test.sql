@@ -46,8 +46,16 @@ select ok(
   and has_table_privilege('authenticated','public.organization_auth_settings','SELECT,INSERT,UPDATE')
   and not has_table_privilege('authenticated','public.organization_auth_settings','DELETE')
   and has_table_privilege('authenticated','public.authentication_audit_events','SELECT')
-  and not has_table_privilege('authenticated','public.authentication_audit_events','INSERT,UPDATE,DELETE'),
-  'authenticated base grants leave all mutations behind RLS or protected functions'
+  and not has_table_privilege('authenticated','public.authentication_audit_events','INSERT,UPDATE,DELETE')
+  and has_table_privilege('service_role','public.user_profiles','SELECT,INSERT,UPDATE')
+  and has_table_privilege('service_role','public.organization_staff_profiles','SELECT,INSERT,UPDATE')
+  and has_table_privilege('service_role','public.organization_memberships','SELECT,INSERT,UPDATE')
+  and has_table_privilege('service_role','public.facility_assignments','SELECT,INSERT,UPDATE')
+  and has_table_privilege('service_role','public.department_assignments','SELECT,INSERT,UPDATE')
+  and has_table_privilege('service_role','public.organization_invitations','SELECT,UPDATE')
+  and has_table_privilege('service_role','public.departments','SELECT')
+  and has_table_privilege('service_role','public.audit_logs','INSERT'),
+  'authenticated grants remain RLS-scoped and the invitation service has only its explicit setup privileges'
 );
 
 select ok(

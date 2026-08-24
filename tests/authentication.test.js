@@ -218,6 +218,15 @@ test("invitation UI uses a protected Edge Function boundary rather than browser 
   assert.doesNotMatch(app + invitationSource + database, /auth\.admin|inviteUserByEmail/);
 });
 
+test("invitation service has explicit minimum setup grants", () => {
+  for (const table of ["user_profiles", "organization_staff_profiles", "organization_memberships", "facility_assignments", "department_assignments"]) {
+    assert.match(authMigration, new RegExp(`public\\.${table}`));
+  }
+  assert.match(authMigration, /grant select, update on table public\.organization_invitations to service_role/);
+  assert.match(authMigration, /grant select on table public\.departments to service_role/);
+  assert.match(authMigration, /grant insert on table public\.audit_logs to service_role/);
+});
+
 test("invitation callbacks support PKCE, legacy links and neutral invalid states", async () => {
   const { parseInvitationCallback, establishInvitationSession } = await loadInvitationModule();
   const pkce = parseInvitationCallback("https://example.test/app/?invitation=1&code=one-time");

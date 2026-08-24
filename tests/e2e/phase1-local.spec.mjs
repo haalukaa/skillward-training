@@ -158,7 +158,7 @@ test("valid login routes single memberships and enforces role navigation", async
 
   await signIn(page, accounts.trainer);
   await expectHeading(page, "PCA Trainer Workspace");
-  await expect(page.getByText("ASSIGNED TRAINEES")).toBeVisible();
+  await expect(page.locator(".eyebrow").getByText("ASSIGNED TRAINEES", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "People" })).toHaveCount(0);
   await capture(page, testInfo, "trainer-dashboard");
 });

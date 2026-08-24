@@ -540,6 +540,21 @@ grant select on table public.authentication_audit_events to authenticated;
 grant all on table public.skillward_feature_flags, public.organization_auth_settings,
   public.authentication_audit_events to service_role;
 
+-- The invitation Edge Function uses the service role only after an authenticated
+-- administrator has passed the caller-side RLS checks. New Supabase projects do
+-- not imply table privileges, so keep its setup surface explicit and minimal.
+grant usage on schema public to service_role;
+grant select, insert, update on table
+  public.user_profiles,
+  public.organization_staff_profiles,
+  public.organization_memberships,
+  public.facility_assignments,
+  public.department_assignments
+to service_role;
+grant select, update on table public.organization_invitations to service_role;
+grant select on table public.departments to service_role;
+grant insert on table public.audit_logs to service_role;
+
 revoke all on table private.legacy_content_mappings, private.migration_validation_counts from public, anon, authenticated;
 
 revoke all on function private.mark_active_profile_onboarded() from public, anon, authenticated;
