@@ -54,7 +54,23 @@ jobs:
         run: bash scripts/scan_secrets.sh
 
       - name: Start the complete isolated local Supabase stack
-        run: supabase start
+        shell: bash
+        run: |
+          set -euo pipefail
+          startup_log="$RUNNER_TEMP/skillward-supabase-start.log"
+          umask 077
+          trap 'rm -f "$startup_log"' EXIT
+          if supabase start > "$startup_log" 2>&1; then
+            echo 'Isolated local Supabase stack started without logging generated keys.'
+            exit 0
+          fi
+          sed -E \
+            -e 's/(│ (Publishable|Secret) Key │ )[^│]+/\1[REDACTED_LOCAL_KEY] /g' \
+            -e 's/eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}/[REDACTED_JWT]/g' \
+            -e 's/(sb_(secret|publishable))_[A-Za-z0-9_-]+/[REDACTED_KEY]/g' \
+            -e 's/[A-Fa-f0-9]{64}/[REDACTED_LOCAL_KEY]/g' \
+            "$startup_log" >&2
+          exit 1
 
       - name: Apply every migration and fictional SQL seed
         run: supabase db reset

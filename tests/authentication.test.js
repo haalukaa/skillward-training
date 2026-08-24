@@ -211,6 +211,19 @@ test("Pages workflow uses repository path, validates only public config and gate
   assert.doesNotMatch(runtime + read("src/supabase-client.js"), /service.role|service_role|postgres(?:ql)?:\/\//i);
 });
 
+test("local Supabase workflows suppress generated keys and redact failure output", () => {
+  const workflows = [
+    read(".github/workflows/phase1-local-browser-verification.yml"),
+    read(".github/workflows/supabase-database.yml")
+  ];
+  for (const workflow of workflows) {
+    assert.doesNotMatch(workflow, /run:\s*supabase start/);
+    assert.match(workflow, /supabase start > "\$startup_log" 2>&1/);
+    assert.match(workflow, /REDACTED_LOCAL_KEY/);
+    assert.match(workflow, /REDACTED_JWT/);
+  }
+});
+
 test("invitation UI uses a protected Edge Function boundary rather than browser Admin Auth", () => {
   assert.match(app + database, /invite-organization-member/);
   assert.match(invitationFunction, /callerClient\.auth\.getUser/);
