@@ -27,7 +27,8 @@ create table public.learning_assignments (
   unique(id,organization_id),
   unique(organization_id,pathway_version_id,worker_user_id),
   foreign key(pathway_id,organization_id) references public.learning_pathways(id,organization_id),
-  foreign key(pathway_version_id,organization_id) references public.learning_pathway_versions(id,organization_id)
+  foreign key(pathway_version_id,pathway_id,organization_id)
+    references public.learning_pathway_versions(id,pathway_id,organization_id)
 );
 
 create table public.learning_item_progress (
@@ -76,7 +77,8 @@ create table public.competency_awards (
   created_at timestamptz not null default now(),
   foreign key(assignment_id,organization_id) references public.learning_assignments(id,organization_id),
   foreign key(pathway_id,organization_id) references public.learning_pathways(id,organization_id),
-  foreign key(pathway_version_id,organization_id) references public.learning_pathway_versions(id,organization_id)
+  foreign key(pathway_version_id,pathway_id,organization_id)
+    references public.learning_pathway_versions(id,pathway_id,organization_id)
 );
 
 create table public.competency_workflow_events (
