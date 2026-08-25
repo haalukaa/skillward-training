@@ -20,7 +20,7 @@ begin
  where assignment_id=a.id and item_id=i.id returning * into p;
  select count(*),count(*) filter(where status='Completed') into total,done from public.learning_item_progress where assignment_id=a.id;
  old_status:=a.status;
- update public.learning_assignments set progress_percent=case when total=0 then 0 else round(done*100.0/total,2) end,status=case when total>0 and done=total then 'Ready for Trainer' else 'In Progress' end,started_at=coalesce(started_at,now()),learning_completed_at=case when total>0 and done=total then now() else learning_completed_at end,updated_at=now() where id=a.id returning * into a;
+ update public.learning_assignments set progress_percent=case when total=0 then 0 else round(done*100.0/total,2) end,status=case when total>0 and done=total then 'Ready for Trainer'::public.learning_assignment_status else 'In Progress'::public.learning_assignment_status end,started_at=coalesce(started_at,now()),learning_completed_at=case when total>0 and done=total then now() else learning_completed_at end,updated_at=now() where id=a.id returning * into a;
  perform private.write_competency_event(a,'learning_item_completed',old_status,jsonb_build_object('item_id',i.id,'score',v_score));
  return jsonb_build_object('status',p.status,'score',p.score,'progress',a.progress_percent,'assignment_status',a.status);
 end $f$;
@@ -57,10 +57,10 @@ begin
  elsif exists(select 1 from public.competency_criterion_results where assessment_id=a.id and rating='Needs Development') then overall:='Needs Development';
  elsif exists(select 1 from public.competency_criterion_results where assessment_id=a.id and rating='Not Observed') then overall:='Not Observed'; else overall:='Competent'; end if;
  if overall<>'Competent' and nullif(trim(submit_competency_assessment.development_plan),'') is null then raise exception using errcode='23514',message='A development plan is required'; end if;
- update public.competency_assessments set status=case when r.worker_acknowledgement_required then 'Submitted'::public.competency_assessment_status else 'Management Review'::public.competency_assessment_status end,location=nullif(trim(assessment_location),''),context=nullif(trim(assessment_context),''),personally_observed=true,overall_rating=overall,recommendation=case when overall='Competent' then 'Competent' else 'Reassessment Required' end,development_plan=nullif(trim(submit_competency_assessment.development_plan),''),submitted_at=now(),updated_at=now() where id=a.id;
+ update public.competency_assessments set status=case when r.worker_acknowledgement_required then 'Submitted'::public.competency_assessment_status else 'Management Review'::public.competency_assessment_status end,location=nullif(trim(assessment_location),''),context=nullif(trim(assessment_context),''),personally_observed=true,overall_rating=overall,recommendation=case when overall='Competent' then 'Competent'::public.competency_decision else 'Reassessment Required'::public.competency_decision end,development_plan=nullif(trim(submit_competency_assessment.development_plan),''),submitted_at=now(),updated_at=now() where id=a.id;
  select * into la from public.learning_assignments where id=a.assignment_id for update;
  old_status:=la.status;
- update public.learning_assignments set status=case when r.worker_acknowledgement_required then 'Trainer Review' else 'Sent to Management' end,updated_at=now() where id=la.id returning * into la;
+ update public.learning_assignments set status=case when r.worker_acknowledgement_required then 'Trainer Review'::public.learning_assignment_status else 'Sent to Management'::public.learning_assignment_status end,updated_at=now() where id=la.id returning * into la;
  perform private.write_competency_event(la,'criterion_assessment_submitted',old_status,jsonb_build_object('assessment_id',a.id,'rating',overall,'rubric_version',a.rubric_version));
 end $f$;
 
