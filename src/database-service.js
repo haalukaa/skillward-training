@@ -84,7 +84,8 @@ export class SkillWardDatabaseService {
         trainingAssignments: [], moduleProgress: [], competencyRecords: [], practicalObservations: [],
         signoffRecommendations: [], notifications: [], organizationStaff: [], assignmentBatches: [],
         assignmentBatchMembers: [], workTasks: [], calendarEvents: [], notificationPreferences: [],
-        userNotifications: [], announcements: [], announcementReceipts: [], operationalAuditEvents: []
+        userNotifications: [], announcements: [], announcementReceipts: [], operationalAuditEvents: [],
+        reportExportEvents: []
       };
     }
 
@@ -185,6 +186,8 @@ export class SkillWardDatabaseService {
     const announcementIds = announcements.map(item => item.id);
     const announcementReceipts = announcementIds.length ? await this.optionalQuery("announcement_receipts", q => q.in("announcement_id", announcementIds).eq("user_id", user.id)) : [];
     const operationalAuditEvents = await this.optionalQuery("operational_audit_events", q => q.eq("organization_id", organizationId).order("created_at", { ascending:false }));
+    const reportExportEvents = ["SkillWard Super Administrator","Organisation Administrator","Facility Administrator","Department Manager"].includes(membership.role)
+      ? await this.optionalQuery("report_export_events", q => q.eq("organization_id", organizationId).order("generated_at", { ascending:false })) : [];
 
     return {
       user, profile, platformAdministrator, memberships, membership, organization,
@@ -200,7 +203,7 @@ export class SkillWardDatabaseService {
       competencyWorkerAcknowledgements, competencyManagementReviews,
       assignmentBatches, assignmentBatchMembers, workTasks, calendarEvents,
       notificationPreferences, userNotifications, announcements, announcementReceipts,
-      operationalAuditEvents,
+      operationalAuditEvents, reportExportEvents,
       authSettings, featureFlags
     };
   }
@@ -312,6 +315,8 @@ export class SkillWardDatabaseService {
   publishAnnouncement(organizationId, input) { return this.rpc("publish_announcement", { target_organization:organizationId, announcement_title:input.title, announcement_message:input.message, target_scope:input.scope || "Organisation", target_facility:input.facilityId || null, target_department:input.departmentId || null, target_role:input.roleGroup || null, announcement_priority:input.priority || "Normal", announcement_expires_at:input.expiresAt || null }); }
   markAnnouncementRead(announcementId) { return this.rpc("mark_announcement_read", { target_announcement:announcementId }); }
   refreshOperationalDeadlines(organizationId) { return this.rpc("refresh_operational_deadlines", { target_organization:organizationId }); }
+  getReportingSnapshot(organizationId, filters = {}) { return this.rpc("get_reporting_snapshot", { target_organization:organizationId, report_filters:filters }); }
+  recordReportExport(organizationId, input) { return this.rpc("record_report_export", { target_organization:organizationId, target_report:input.reportKind, target_format:input.format, report_filters:input.filters || {}, export_row_count:input.rowCount || 0, export_file_name:input.fileName, export_sha256:input.sha256 || null }); }
 
   createOrganization(input) {
     return this.insert("organizations", { name: input.name.trim(), organization_type: input.organizationType, slug: input.slug.trim().toLowerCase(), subscription_plan: input.subscriptionPlan || "Pilot", subscription_status: "Trial" });

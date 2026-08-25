@@ -76,13 +76,13 @@ select ok(
 select is((select count(*)::int from public.skillward_feature_flags),8,'all staged platform feature flags are installed');
 select is(
   (select count(*)::int from public.skillward_feature_flags where state='Enabled'),
-  5,
-  'reviewed authentication, content and competency releases are enabled'
+  6,
+  'reviewed authentication, content, competency, operations and reporting releases are enabled'
 );
 select is(
   (select count(*)::int from public.skillward_feature_flags
-   where feature_key not in ('authentication_entry_v2','content_library_v2','knowledge_assessments_v2','practical_competency_v2','assignments_notifications_v2') and state='Disabled'),
-  3,
+   where feature_key not in ('authentication_entry_v2','content_library_v2','knowledge_assessments_v2','practical_competency_v2','assignments_notifications_v2','reporting_exports_v2') and state='Disabled'),
+  2,
   'future delivery phases remain disabled'
 );
 select is((select count(*)::int from public.organization_auth_settings),2,'existing organisations receive default authentication policy');

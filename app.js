@@ -5,6 +5,8 @@ const defaultState = {
   selectedDepartment: null,
   activeOrganizationId: null,
   activeWorkspaceView: "home",
+  phase6ReportKind: "Competency Matrix",
+  phase6Filters: {},
   organizationSetupStep: "identity",
   selectedLearningPathwayId: null,
   selectedLearningVersionId: null,
@@ -296,6 +298,9 @@ function departmentIcon(departmentId) {
 let state = loadState();
 let currentModuleId = null;
 let currentAreaId = null;
+let phase6ReportingSnapshot = null;
+let phase6ReportingLoading = false;
+let phase6ReportingError = "";
 
 function loadState() {
   try {
@@ -995,6 +1000,7 @@ function renderAuthenticatedWorkspace() {
         : `${role} ${trainer ? "Workspace" : "Training Workspace"}`;
 
   if (state.activeWorkspaceView === "work") return renderPhase5Operations(c);
+  if (state.activeWorkspaceView === "reports" && ["Organisation Administrator", "Facility Administrator", "Department Manager"].includes(role)) return renderPhase6Reports(c);
   if (role === "Organisation Administrator") return renderOrganizationAdministration(c);
   if (role === "Content Administrator/Educator") return renderEducatorWorkspace(c);
 
@@ -1050,7 +1056,7 @@ function renderEducatorWorkspace(context) {
   const content = view === "pathways"
     ? pathwayAuthoringHtml(context, workspaceHero)
     : view === "reports"
-      ? `<section class="card"><span class="eyebrow">CONTENT GOVERNANCE</span><h3>Publication control is active</h3><p>Published versions are immutable, content actions are audited and organisation copies remain tenant-scoped.</p></section>`
+      ? `<div class="stats-grid"><div class="stat-card"><span>Pathways</span><strong>${pathways.length}</strong></div><div class="stat-card"><span>Published versions</span><strong>${(context.learningPathwayVersions||[]).filter(item=>item.lifecycle==="Published").length}</strong></div><div class="stat-card"><span>Draft versions</span><strong>${(context.learningPathwayVersions||[]).filter(item=>item.lifecycle==="Draft").length}</strong></div></div><section class="card"><span class="eyebrow">CONTENT GOVERNANCE</span><h3>Privacy-safe publication assurance</h3><p>Published versions are immutable, content actions are audited and organisation copies remain tenant-scoped. Workforce identities, assessment outcomes and access-security events are excluded from the educator reporting surface.</p><div class="table-wrap"><table><thead><tr><th>Pathway</th><th>Versions</th><th>Published</th></tr></thead><tbody>${pathways.map(pathway=>{const versions=(context.learningPathwayVersions||[]).filter(item=>item.pathway_id===pathway.id);return `<tr><td>${escapeHtml(pathway.title)}</td><td>${versions.length}</td><td>${versions.filter(item=>item.lifecycle==="Published").length}</td></tr>`;}).join("")}</tbody></table></div></section>`
       : `<div class="stats-grid"><div class="stat-card"><span>Organisation pathways</span><strong>${pathways.length}</strong></div><div class="stat-card"><span>Builder release</span><strong>${enabled ? "Open" : "Protected"}</strong></div><div class="stat-card"><span>Workspace</span><strong>Educator</strong></div></div><section class="card"><span class="eyebrow">NEXT ACTION</span><h3>Review organisation content</h3><p>Use Pathways to see existing organisation-owned content. New authoring remains hidden until the Phase 2 release is complete.</p></section>`;
   renderShell(view === "pathways" ? content : `${workspaceHero("CONTENT ADMINISTRATION", view === "reports" ? "Content assurance" : "Educator Home", `Welcome, ${escapeHtml(context.profile.full_name)}. Create and govern only content owned by ${escapeHtml(context.organization.name)}.`)}${content}`);
   bindAuthenticatedWorkspace(context);
@@ -1069,6 +1075,8 @@ function bindAuthenticatedWorkspace(context) {
     event.target.disabled = true;
     state.activeOrganizationId = event.target.value;
     state.selectedDepartment = null;
+    phase6ReportingSnapshot = null;
+    phase6ReportingError = "";
     saveState();
     authenticatedContext = await authService.switchOrganization(event.target.value);
     renderAuthenticatedWorkspace();
@@ -1212,6 +1220,141 @@ function bindPhase5Operations(context) {
   document.querySelectorAll(".read-phase5-notification").forEach(button=>button.addEventListener("click",async()=>{await authService.database.markUserNotificationRead(button.dataset.notification);authenticatedContext=await authService.restore(state.activeOrganizationId);renderAuthenticatedWorkspace();}));
   document.querySelectorAll(".read-phase5-announcement").forEach(button=>button.addEventListener("click",async()=>{await authService.database.markAnnouncementRead(button.dataset.announcement);authenticatedContext=await authService.restore(state.activeOrganizationId);renderAuthenticatedWorkspace();}));
   document.getElementById("phase5RefreshDeadlines")?.addEventListener("click",async event=>{event.currentTarget.disabled=true;await authService.database.refreshOperationalDeadlines(context.organization.id);authenticatedContext=await authService.restore(state.activeOrganizationId);renderAuthenticatedWorkspace();});
+}
+
+const PHASE6_REPORTS = {
+  "Competency Matrix": ["worker_name","employee_id","worker_role","facility_name","department_name","pathway_title","version_number","report_status","due_at","renewal_due_at"],
+  "Training History": ["worker_name","employee_id","pathway_title","version_number","assigned_at","started_at","completed_at","completion_hours","report_status"],
+  "Quiz and Practical Outcomes": ["worker_name","pathway_title","quiz_score","quiz_attempts","first_attempt_pass","practical_outcome","report_status"],
+  "Approvals and Renewal": ["worker_name","pathway_title","trainer_name","manager_name","approval_turnaround_hours","renewal_due_at","report_status"],
+  "Workload and Readiness": ["department_name","worker_name","pathway_title","progress_percent","due_at","report_status"],
+  "Content Version Usage": ["pathway_title","version_number","lifecycle","assignments","completions"],
+  "Audit History": ["event_name","record_type","record_id","actor_user_id","created_at","details"],
+  "Access Security": ["event_name","user_id","created_at","metadata"]
+};
+
+function phase6Rows(snapshot, kind) {
+  if (kind === "Content Version Usage") return snapshot?.content_version_usage || [];
+  if (kind === "Audit History") return snapshot?.audit_events || [];
+  if (kind === "Access Security") return snapshot?.security_events || [];
+  return snapshot?.matrix || [];
+}
+
+function phase6Label(value) {
+  return String(value).replaceAll("_", " ").replace(/\b\w/g, letter => letter.toUpperCase());
+}
+
+function phase6Display(value) {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "object") return JSON.stringify(value);
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (/(_at|_date)$/.test(String(value.key || ""))) return value;
+  return String(value);
+}
+
+function phase6Csv(metadata, rows, columns) {
+  const quote = value => `"${phase6Display(value).replaceAll('"','""')}"`;
+  const lines = [
+    ["Organisation", metadata.organization], ["Report", metadata.report],
+    ["Generated by", metadata.generatedBy], ["Generated at", metadata.generatedAt],
+    ["Filters", JSON.stringify(metadata.filters)]
+  ].map(row => row.map(quote).join(","));
+  lines.push("", columns.map(column => quote(phase6Label(column))).join(","));
+  rows.forEach(row => lines.push(columns.map(column => quote(row[column])).join(",")));
+  return `\ufeff${lines.join("\r\n")}`;
+}
+
+function phase6Pdf(metadata, rows, columns) {
+  const clean = value => phase6Display(value).normalize("NFKD").replace(/[^\x20-\x7e]/g," ").replace(/[\\()]/g,"\\$&");
+  const lines = ["SkillWard Phase 6 Report", `${metadata.report} | ${metadata.organization}`, `Generated by ${metadata.generatedBy} | ${metadata.generatedAt}`, `Filters: ${JSON.stringify(metadata.filters)}`, "", columns.map(phase6Label).join(" | ")];
+  rows.forEach(row => lines.push(columns.map(column => clean(row[column])).join(" | ")));
+  const pages = [];
+  for (let start=0; start<lines.length; start+=42) pages.push(lines.slice(start,start+42));
+  const objects = ["<< /Type /Catalog /Pages 2 0 R >>", "", "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"];
+  const pageRefs=[];
+  pages.forEach(page => {
+    const pageId=objects.length+1, contentId=pageId+1;
+    const stream=`BT /F1 8 Tf 36 806 Td 11 TL ${page.map((line,index)=>`${index?"T* ":""}(${clean(line).slice(0,145)}) Tj`).join(" ")} ET`;
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents ${contentId} 0 R >>`);
+    objects.push(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
+    pageRefs.push(`${pageId} 0 R`);
+  });
+  objects[1]=`<< /Type /Pages /Kids [${pageRefs.join(" ")}] /Count ${pages.length} >>`;
+  let pdf="%PDF-1.4\n", offsets=[0];
+  objects.forEach((object,index)=>{offsets.push(new TextEncoder().encode(pdf).length);pdf+=`${index+1} 0 obj\n${object}\nendobj\n`;});
+  const xref=new TextEncoder().encode(pdf).length;
+  pdf+=`xref\n0 ${objects.length+1}\n0000000000 65535 f \n${offsets.slice(1).map(offset=>`${String(offset).padStart(10,"0")} 00000 n `).join("\n")}\ntrailer << /Size ${objects.length+1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return new Blob([pdf],{type:"application/pdf"});
+}
+
+function phase6Crc32(bytes) {
+  let crc=-1;
+  for (const byte of bytes) { crc^=byte; for(let bit=0;bit<8;bit++) crc=(crc>>>1)^((crc&1)?0xedb88320:0); }
+  return (crc^-1)>>>0;
+}
+
+function phase6Zip(files) {
+  const encoder=new TextEncoder(), parts=[], central=[]; let offset=0;
+  const u16=value=>new Uint8Array([value&255,(value>>>8)&255]);
+  const u32=value=>new Uint8Array([value&255,(value>>>8)&255,(value>>>16)&255,(value>>>24)&255]);
+  files.forEach(file=>{const name=encoder.encode(file.name),data=typeof file.content==="string"?encoder.encode(file.content):file.content,crc=phase6Crc32(data);
+    const local=new Blob([u32(0x04034b50),u16(20),u16(0),u16(0),u16(0),u16(0),u32(crc),u32(data.length),u32(data.length),u16(name.length),u16(0),name,data]); parts.push(local);
+    central.push(new Blob([u32(0x02014b50),u16(20),u16(20),u16(0),u16(0),u16(0),u16(0),u32(crc),u32(data.length),u32(data.length),u16(name.length),u16(0),u16(0),u16(0),u16(0),u32(0),u32(offset),name])); offset+=local.size;
+  });
+  const centralSize=central.reduce((total,item)=>total+item.size,0);
+  return new Blob([...parts,...central,u32(0x06054b50),u16(0),u16(0),u16(files.length),u16(files.length),u32(centralSize),u32(offset),u16(0)],{type:"application/zip"});
+}
+
+async function phase6Digest(blob) {
+  if (!globalThis.crypto?.subtle) return null;
+  const digest=await crypto.subtle.digest("SHA-256",await blob.arrayBuffer());
+  return [...new Uint8Array(digest)].map(byte=>byte.toString(16).padStart(2,"0")).join("");
+}
+
+function phase6Download(blob,fileName) {
+  const link=document.createElement("a"),url=URL.createObjectURL(blob); link.href=url;link.download=fileName;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+function renderPhase6Reports(context) {
+  const snapshot=phase6ReportingSnapshot, filters=state.phase6Filters||{}, kind=state.phase6ReportKind||"Competency Matrix", role=context.membership.role;
+  const profiles=new Map((context.organizationStaff||[]).map(item=>[item.user_id,item.user_profiles||{}])), memberships=context.organizationMemberships||[];
+  const person=id=>profiles.get(id)?.full_name||id;
+  const option=(value,label,current)=>`<option value="${escapeHtml(value)}" ${String(value)===String(current||"")?"selected":""}>${escapeHtml(label)}</option>`;
+  const staffOptions=(roles,current)=>memberships.filter(item=>roles(item.role)).map(item=>option(item.user_id,person(item.user_id),current)).join("");
+  const reportOptions=Object.keys(PHASE6_REPORTS).filter(item=>item!=="Access Security"||role==="Organisation Administrator").map(item=>option(item,item,kind)).join("");
+  const metrics=snapshot?.metrics||{}, rows=phase6Rows(snapshot,kind), columns=PHASE6_REPORTS[kind]||[];
+  const body=rows.slice(0,250).map(row=>`<tr>${columns.map(column=>`<td>${escapeHtml(phase6Display(row[column]))}</td>`).join("")}</tr>`).join("");
+  const comparisons=(snapshot?.department_comparisons||[]).map(item=>`<tr><td>${escapeHtml(item.department)}</td><td>${Number(item.assigned||0)}</td><td>${Number(item.current||0)}</td><td>${Number(item.at_risk||0)}</td></tr>`).join("");
+  renderShell(`${organizationSwitcher(context)}<section class="dashboard-hero workspace-page-hero"><div class="dashboard-welcome"><span class="eyebrow">REPORTING · ANALYTICS · AUDIT PACKS</span><h2>Workforce readiness</h2><p>Live, tenant-scoped evidence for ${escapeHtml(context.organization.name)}. Empty values remain empty—SkillWard never invents metrics.</p></div><span class="status-chip ${snapshot?"status-success":"status-warning"}">${snapshot?`Generated ${escapeHtml(new Date(snapshot.generated_at).toLocaleString("en-AU"))}`:phase6ReportingError?"Report unavailable":"Loading secure report"}</span></section>
+  <form class="card phase6-filters" id="phase6FilterForm"><div class="section-heading"><div><span class="eyebrow">AUTHORISED SCOPE</span><h3>Report filters</h3></div><button class="link-button" type="button" id="phase6ClearFilters">Clear filters</button></div><div class="phase6-filter-grid">
+  <label>Organisation<input value="${escapeHtml(context.organization.name)}" disabled></label><label>Facility<select name="facility_id"><option value="">All permitted facilities</option>${(context.facilities||[]).map(item=>option(item.id,item.name,filters.facility_id)).join("")}</select></label><label>Department<select name="department_id"><option value="">All permitted departments</option>${(context.departmentDetails||[]).map(item=>option(item.id,item.name,filters.department_id)).join("")}</select></label><label>Sector<select name="sector"><option value="">All sectors</option>${["Hospital","Aged Care","Disability Support"].map(item=>option(item,item,filters.sector)).join("")}</select></label>
+  <label>Worker role<select name="role"><option value="">All worker roles</option>${["PCA","Cleaner","Support Worker"].map(item=>option(item,item,filters.role)).join("")}</select></label><label>Pathway<select name="pathway_id"><option value="">All pathways</option>${(context.learningPathways||[]).map(item=>option(item.id,item.title,filters.pathway_id)).join("")}</select></label><label>Trainer<select name="trainer_user_id"><option value="">All trainers</option>${staffOptions(value=>value?.includes("Trainer"),filters.trainer_user_id)}</select></label><label>Manager<select name="manager_user_id"><option value="">All managers</option>${staffOptions(value=>["Organisation Administrator","Facility Administrator","Department Manager"].includes(value),filters.manager_user_id)}</select></label>
+  <label>Status<select name="status"><option value="">All statuses</option>${["Not assigned","Assigned","In progress","Learning complete","Trainer review","Pending approval","Current","Reassessment required","Expired","Cancelled","Overdue"].map(item=>option(item,item,filters.status)).join("")}</select></label><label>Due from<input type="date" name="due_from" value="${escapeHtml(filters.due_from||"")}"></label><label>Due to<input type="date" name="due_to" value="${escapeHtml(filters.due_to||"")}"></label><label>Renewal from<input type="date" name="renewal_from" value="${escapeHtml(filters.renewal_from||"")}"></label><label>Renewal to<input type="date" name="renewal_to" value="${escapeHtml(filters.renewal_to||"")}"></label></div><button class="btn" type="submit" ${phase6ReportingLoading?"disabled":""}>${phase6ReportingLoading?"Loading…":"Apply filters"}</button><p class="auth-status" id="phase6Status" role="status"></p></form>
+  ${snapshot?`<div class="stats-grid workspace-stats"><div class="stat-card"><span>Active users</span><strong>${Number(metrics.active_users||0)}</strong></div><div class="stat-card"><span>Assigned / current</span><strong>${Number(metrics.assigned||0)} / ${Number(metrics.completed||0)}</strong></div><div class="stat-card"><span>First-attempt pass</span><strong>${metrics.first_attempt_pass_rate==null?"—":`${metrics.first_attempt_pass_rate}%`}</strong></div><div class="stat-card"><span>Expiry risk · 30 days</span><strong>${Number(metrics.expiry_risk||0)}</strong></div></div>
+  <section class="card phase6-report"><div class="section-heading"><div><span class="eyebrow">LIVE REPORT</span><h3>${escapeHtml(kind)}</h3><small>${rows.length} rows · displaying up to 250</small></div><div class="phase6-export-actions"><select id="phase6ReportKind" aria-label="Report type">${reportOptions}</select><button class="btn btn-secondary phase6-export" data-format="CSV">CSV</button><button class="btn btn-secondary phase6-export" data-format="PDF">PDF</button><button class="btn phase6-export" data-format="Audit Pack ZIP">Audit pack</button></div></div><div class="table-wrap"><table><thead><tr>${columns.map(column=>`<th>${escapeHtml(phase6Label(column))}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>${rows.length?"":'<p class="empty-state">No authorised records match these filters.</p>'}</section>
+  <section class="card phase6-comparisons"><span class="eyebrow">DEPARTMENT COMPARISON</span><h3>Readiness by department</h3><div class="table-wrap"><table><thead><tr><th>Department</th><th>Assigned</th><th>Current</th><th>At risk</th></tr></thead><tbody>${comparisons}</tbody></table></div>${comparisons?"":'<p class="empty-state">No comparable department data is available.</p>'}</section>
+  <section class="card"><span class="eyebrow">EXPORT REGISTER</span><h3>Recent generated evidence</h3><div class="phase6-export-register">${(context.reportExportEvents||[]).slice(0,10).map(item=>`<article><div><strong>${escapeHtml(item.report_kind)} · ${escapeHtml(item.export_format)}</strong><small>${escapeHtml(item.file_name)} · ${Number(item.row_count)} rows</small></div><small>${escapeHtml(new Date(item.generated_at).toLocaleString("en-AU"))}</small></article>`).join("")||'<p class="empty-state">No report exports have been generated.</p>'}</div></section>`:`<section class="card"><h3>${phase6ReportingError?"Reporting data could not be loaded":"Loading authorised reporting data…"}</h3><p>${phase6ReportingError?"No report or export has been produced. Check your authorised scope and try again.":"SkillWard is applying your organisation, facility and department permissions at the database boundary."}</p>${phase6ReportingError?'<button class="btn" id="phase6Retry">Try again</button>':""}</section>`}`);
+  bindAuthenticatedWorkspace(context); bindPhase6Reports(context);
+  document.getElementById("phase6Retry")?.addEventListener("click",()=>{phase6ReportingError="";renderPhase6Reports(context);});
+  if (!snapshot&&!phase6ReportingLoading&&!phase6ReportingError) loadPhase6Report(context);
+}
+
+async function loadPhase6Report(context) {
+  phase6ReportingLoading=true; phase6ReportingError="";
+  try { phase6ReportingSnapshot=await authService.database.getReportingSnapshot(context.organization.id,state.phase6Filters||{}); }
+  catch(error) { phase6ReportingSnapshot=null; phase6ReportingError=error.message||"REPORTING_UNAVAILABLE"; }
+  finally { phase6ReportingLoading=false; renderPhase6Reports(context); }
+}
+
+function bindPhase6Reports(context) {
+  document.getElementById("phase6FilterForm")?.addEventListener("submit",event=>{event.preventDefault();const values=new FormData(event.currentTarget),filters={};for(const [key,value] of values)if(value)filters[key]=value;state.phase6Filters=filters;phase6ReportingSnapshot=null;phase6ReportingError="";saveState();renderPhase6Reports(context);});
+  document.getElementById("phase6ClearFilters")?.addEventListener("click",()=>{state.phase6Filters={};phase6ReportingSnapshot=null;phase6ReportingError="";saveState();renderPhase6Reports(context);});
+  document.getElementById("phase6ReportKind")?.addEventListener("change",event=>{state.phase6ReportKind=event.target.value;saveState();renderPhase6Reports(context);});
+  document.querySelectorAll(".phase6-export").forEach(button=>button.addEventListener("click",async event=>{event.preventDefault();const status=document.getElementById("phase6Status"),format=button.dataset.format,kind=state.phase6ReportKind||"Competency Matrix",rows=phase6Rows(phase6ReportingSnapshot,kind),columns=PHASE6_REPORTS[kind],generatedAt=new Date().toISOString(),metadata={organization:context.organization.name,report:kind,generatedBy:context.profile.full_name,generatedAt,filters:state.phase6Filters||{}},slug=context.organization.name.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"skillward",stamp=generatedAt.slice(0,10);button.disabled=true;status.textContent="Building secure export…";
+    try { let blob,fileName;if(format==="CSV"){fileName=`${slug}-${kind.toLowerCase().replace(/[^a-z0-9]+/g,"-")}-${stamp}.csv`;blob=new Blob([phase6Csv(metadata,rows,columns)],{type:"text/csv;charset=utf-8"});}else if(format==="PDF"){fileName=`${slug}-${kind.toLowerCase().replace(/[^a-z0-9]+/g,"-")}-${stamp}.pdf`;blob=phase6Pdf(metadata,rows,columns);}else{fileName=`${slug}-audit-pack-${stamp}.zip`;const files=[{name:"manifest.json",content:JSON.stringify({...metadata,reports:Object.keys(PHASE6_REPORTS),scopeRole:phase6ReportingSnapshot.scope_role},null,2)}];Object.keys(PHASE6_REPORTS).filter(name=>name!=="Access Security"||context.membership.role==="Organisation Administrator").forEach(name=>files.push({name:`${name.toLowerCase().replace(/[^a-z0-9]+/g,"-")}.csv`,content:phase6Csv({...metadata,report:name},phase6Rows(phase6ReportingSnapshot,name),PHASE6_REPORTS[name])}));files.push({name:"executive-summary.pdf",content:new Uint8Array(await phase6Pdf({...metadata,report:"Workload and Readiness"},phase6Rows(phase6ReportingSnapshot,"Workload and Readiness"),PHASE6_REPORTS["Workload and Readiness"]).arrayBuffer())});blob=phase6Zip(files);}
+      const sha256=await phase6Digest(blob);phase6Download(blob,fileName);await authService.database.recordReportExport(context.organization.id,{reportKind:kind,format,filters:state.phase6Filters||{},rowCount:rows.length,fileName,sha256});status.textContent=`${format} generated and entered in the audit register.`;
+    }catch(error){status.textContent="The export could not be generated or audited.";}finally{button.disabled=false;}
+  }));
 }
 
 function renderOrganizationAdministration(context) {
