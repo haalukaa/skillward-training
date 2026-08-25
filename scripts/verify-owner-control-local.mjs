@@ -46,7 +46,10 @@ const ownerBrowser = createClient(endpoint, anonKey, { auth: { persistSession: f
 const ownerSignIn = await ownerBrowser.auth.signInWithPassword({ email: ownerEmail, password });
 if (ownerSignIn.error || !ownerSignIn.data.session) throw new Error("LOCAL_OWNER_SIGN_IN_FAILED");
 const aal1 = await invoke(ownerSignIn.data.session.access_token);
-if (aal1.status !== 403 || aal1.body.error !== "STRONG_MFA_REQUIRED") throw new Error("LOCAL_AAL1_DENIAL_FAILED");
+if (aal1.status !== 403 || aal1.body.error !== "STRONG_MFA_REQUIRED") {
+  const safeCode = String(aal1.body?.error || "UNKNOWN").replace(/[^A-Z0-9_-]/gi, "").slice(0, 80);
+  throw new Error(`LOCAL_AAL1_DENIAL_FAILED:${aal1.status}:${safeCode}`);
+}
 const ownerEnrollment = await ownerBrowser.auth.mfa.enroll({ factorType: "totp", friendlyName: "Fictional owner-control CI" });
 if (ownerEnrollment.error) throw new Error("LOCAL_OWNER_MFA_ENROLL_FAILED");
 const ownerChallenge = await ownerBrowser.auth.mfa.challengeAndVerify({ factorId: ownerEnrollment.data.id, code: totp(ownerEnrollment.data.totp.secret) });
