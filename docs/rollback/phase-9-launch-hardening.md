@@ -1,6 +1,6 @@
 # Phase 9 rollback and recovery
 
-Phase 9 is schema-free and does not mutate hosted production data. Rollback replaces only the reviewed web artifact.
+Phase 9 contains one additive, data-preserving stored-function migration. It changes no function signature, grant or record and should remain applied during an application rollback. Rollback replaces only the reviewed web artifact.
 
 1. Preserve failing workflow logs, browser screenshots and the deployed commit identifier.
 2. Revert the Phase 9 merge through a new protected pull request; do not rewrite `main`.

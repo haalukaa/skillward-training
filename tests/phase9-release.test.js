@@ -23,10 +23,10 @@ test("Phase 9 migration compatibility runs from the shared-domain baseline witho
   assert.doesNotMatch(fixture,/skillwardtraining\.com/);
 });
 
-test("Phase 9 keeps the existing ordered migration chain schema-free",async()=>{
+test("Phase 9 adds one ordered, data-preserving function-hardening migration",async()=>{
   const migrations=(await readdir("supabase/migrations")).filter(name=>name.endsWith(".sql")).sort();
-  assert.equal(migrations.length,18);
-  assert.equal(migrations.at(-1),"20260825080000_phase_7_fk_index_hardening.sql");
+  assert.equal(migrations.length,19);
+  assert.equal(migrations.at(-1),"20260825140338_phase_9_function_lint_hardening.sql");
 });
 
 test("protected database CI executes upgrade, clean reset, lint and pgTAP",async()=>{

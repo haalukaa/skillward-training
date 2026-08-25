@@ -5,6 +5,7 @@ Release marker: `20260825-phase9-launch-hardening-1`
 ## Delivered
 
 - Production-shaped upgrade verification from the shared-domain baseline through every Phase 2–7 migration.
+- One additive function-hardening migration resolving all error-level database lint findings without changing signatures, grants or records.
 - Before/after counts and checksums for tenant, identity, membership, content, assignment, evidence, approval, renewal and audit records.
 - Clean-database reset, database lint, full pgTAP, JavaScript build and browser suites in protected CI.
 - Browser verification for Hospital, Aged Care and Disability Support demo entry, critical public routes, desktop and 390×844 mobile operation, safe PWA caching and the Learn → Validate → Observe → Approve → Renew lifecycle.
@@ -17,4 +18,4 @@ Phase 9 completes the planned software roadmap for a controlled, authorised pilo
 
 ## Required release evidence
 
-The release is complete only after the protected pull request passes both required CI gates, merges to `main`, the exact merged commit deploys, any required hosted migration is confirmed, and production smoke passes with no console errors. Until that evidence exists, this document describes a release candidate.
+The release is complete only after the protected pull request passes both required CI gates, merges to `main`, the exact merged commit deploys, the single Phase 9 function-hardening migration is confirmed on the SkillWard production project, and production smoke passes with no console errors. Until that evidence exists, this document describes a release candidate.

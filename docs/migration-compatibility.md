@@ -1,6 +1,6 @@
 # Migration compatibility and record preservation
 
-Phase 9 introduces no production schema change. It proves that the existing ordered migration chain can upgrade a production-shaped database without losing or changing legacy records.
+Phase 9 adds one data-preserving migration that replaces six stored-function bodies to remove PL/pgSQL ambiguity and enum-inference errors. Function signatures, grants and authorization checks remain unchanged. The phase also proves that the complete ordered migration chain can upgrade a production-shaped database without losing or changing legacy records.
 
 ## Compatibility boundary
 
