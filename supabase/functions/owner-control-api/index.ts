@@ -36,6 +36,7 @@ const safeFailure = (status: number, code: string, origin: string) => respond(st
 Deno.serve(async request => {
   const requestOrigin = request.headers.get("origin") || "";
   const origin = allowedOrigins.has(requestOrigin) ? requestOrigin : configuredOrigin;
+  let stage = "request";
   try {
   if (request.method === "OPTIONS") return allowedOrigins.has(requestOrigin) ? respond(200, { ok: true }, origin) : safeFailure(403, "ACCESS_DENIED", origin);
   if (request.method !== "POST") return safeFailure(405, "METHOD_NOT_ALLOWED", origin);
@@ -50,8 +51,10 @@ Deno.serve(async request => {
 
   const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("cf-connecting-ip") || "unknown";
   const agent = clean(request.headers.get("user-agent"), 512) || "unknown";
+  stage = "rate_limit_hash";
   const subjectHash = await digest(`${rateSalt}:${forwarded}:${agent}`);
   const service = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
+  stage = "rate_limit_rpc";
   const { data: limit, error: limitError } = await service.rpc("owner_control_consume_rate_limit", { p_subject_hash: subjectHash, p_bucket_name: "control_api", p_maximum_attempts: 60 });
   if (limitError) return safeFailure(503, "SERVICE_UNAVAILABLE", origin);
   if (!limit?.allowed) return new Response(JSON.stringify({ error: "RATE_LIMITED" }), { status: 429, headers: { ...responseHeaders(origin), "Retry-After": String(limit?.retry_after_seconds || 60) } });
@@ -60,6 +63,7 @@ Deno.serve(async request => {
   const token = authorization.replace(/^Bearer\s+/i, "");
   if (!token || token === authorization) return safeFailure(401, "AUTHENTICATION_REQUIRED", origin);
   const caller = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: `Bearer ${token}` } }, auth: { persistSession: false, autoRefreshToken: false } });
+  stage = "auth_user";
   const { data: authResult, error: authError } = await caller.auth.getUser(token);
   if (authError || !authResult.user) return safeFailure(401, "AUTHENTICATION_REQUIRED", origin);
 
@@ -75,6 +79,7 @@ Deno.serve(async request => {
   const recentAuthAt = recentSeconds > 0 ? new Date(recentSeconds * 1000).toISOString() : null;
   const ipHash = await digest(`${rateSalt}:ip:${forwarded}`);
   const agentHash = await digest(`${rateSalt}:agent:${agent}`);
+  stage = "authorize_rpc";
   const { data: authorizationResult, error: authorizationError } = await service.rpc("owner_control_authorize", {
     p_actor_user_id: authResult.user.id,
     p_auth_session_id: sessionId,
@@ -89,11 +94,13 @@ Deno.serve(async request => {
   try { body = await request.json(); } catch { return safeFailure(400, "INVALID_REQUEST", origin); }
   const operation = clean(body.operation, 40);
   if (operation === "snapshot") {
+    stage = "snapshot_rpc";
     const { data, error } = await service.rpc("owner_control_snapshot", { actor_user_id: authResult.user.id });
     if (error) return safeFailure(503, "CONTROL_DATA_UNAVAILABLE", origin);
     return respond(200, { authorization: authorizationResult, data }, origin);
   }
   if (operation === "action") {
+    stage = "action_rpc";
     const actionName = clean(body.action, 80);
     const payload = body.payload && typeof body.payload === "object" && !Array.isArray(body.payload) ? body.payload as Json : {};
     if (!actionName) return safeFailure(400, "INVALID_REQUEST", origin);
@@ -109,7 +116,7 @@ Deno.serve(async request => {
   } catch (error) {
     const failureName = clean(error instanceof Error ? error.name : "UnknownError", 40).replace(/[^A-Z0-9_-]/gi, "");
     const failureCode = clean(error && typeof error === "object" && "code" in error ? (error as { code?: unknown }).code : "unknown", 40).replace(/[^A-Z0-9_-]/gi, "");
-    console.error(`SkillWard owner control runtime failure:${failureName || "UnknownError"}:${failureCode || "unknown"}`);
+    console.error(`SkillWard owner control runtime failure:${stage}:${failureName || "UnknownError"}:${failureCode || "unknown"}`);
     return safeFailure(503, "SERVICE_UNAVAILABLE", origin);
   }
 });
