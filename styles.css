@@ -2403,3 +2403,13 @@ th {
 .phase7-review-item code{overflow-wrap:anywhere;grid-column:1/-1}
 .phase7-retention{margin-top:1rem}
 @media(max-width:800px){.phase7-grid{grid-template-columns:1fr}.phase7-review-item{grid-template-columns:1fr 1fr}.phase7-review-item code,.phase7-review-item small{grid-column:1/-1}}
+
+/* Phase 8 install, connectivity and update controls. */
+.pwa-system-ui{position:fixed;z-index:10000;right:max(16px,env(safe-area-inset-right));bottom:max(16px,env(safe-area-inset-bottom));display:grid;justify-items:end;gap:8px;max-width:min(360px,calc(100vw - 32px));pointer-events:none}
+.pwa-system-ui>*{pointer-events:auto}
+.pwa-offline-status,.pwa-install-help{margin:0;padding:11px 14px;border:1px solid #e4c875;border-radius:12px;color:#5a4511;background:#fff8dc;box-shadow:0 10px 30px rgba(17,47,62,.14);font-size:.78rem;font-weight:750;line-height:1.45}
+.pwa-action{min-width:48px;min-height:48px;padding:11px 16px;border:1px solid rgba(255,255,255,.28);border-radius:999px;color:#fff;background:#0b4051;box-shadow:0 12px 28px rgba(11,64,81,.24);font:inherit;font-size:.8rem;font-weight:850;cursor:pointer}
+.pwa-action:hover{background:#116276}.pwa-action:focus-visible{outline:3px solid #54d3c7;outline-offset:3px}
+button,a,input,select,textarea{-webkit-tap-highlight-color:rgba(32,184,173,.2)}
+@media(max-width:800px){.pwa-system-ui{bottom:calc(82px + env(safe-area-inset-bottom))}.pwa-action{min-height:48px}.bottom-nav .workspace-nav-item,.profile-button,.notification-button{touch-action:manipulation}}
+@media(display-mode:standalone){body{padding-top:env(safe-area-inset-top)}.topbar{padding-top:max(10px,env(safe-area-inset-top))}.pwa-install-action{display:none!important}}

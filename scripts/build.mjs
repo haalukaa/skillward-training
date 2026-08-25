@@ -3,7 +3,7 @@ import { cp, mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { pages } from "../src/public-pages.mjs";
 await rm("dist", { recursive: true, force: true }); await mkdir("dist");
-for (const file of ["index.html","marketing.css","marketing.js","styles.css","app.js","data.js","demo-data.js","management-data.js","management.js","manifest.webmanifest","runtime-config.js","apple-touch-icon.png","icon-192.png","icon-512.png","skillward-app-icon.svg"]) await cp(file, `dist/${file}`);
+for (const file of ["index.html","marketing.css","marketing.js","styles.css","app.js","data.js","demo-data.js","management-data.js","management.js","manifest.webmanifest","service-worker.js","pwa-controller.js","offline.html","runtime-config.js","apple-touch-icon.png","icon-192.png","icon-512.png","skillward-app-icon.svg"]) await cp(file, `dist/${file}`);
 await mkdir("dist/app", { recursive: true }); await cp("app/index.html", "dist/app/index.html");
 for (const page of pages) { const target = `dist/${page.path}`; await mkdir(dirname(target), { recursive: true }); await writeFile(target, page.html); }
 await mkdir("dist/demo", { recursive: true });

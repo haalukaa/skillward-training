@@ -309,14 +309,25 @@ let phase7SecurityError = "";
 function loadState() {
   try {
     const saved = JSON.parse(localStorage.getItem("pcaTrainingWebAppV1"));
-    return { ...defaultState, ...(saved || {}) };
+    if (!saved || typeof saved !== "object") return { ...defaultState };
+    const safeWorkspaceState = {
+      activeOrganizationId: typeof saved.activeOrganizationId === "string" ? saved.activeOrganizationId : null,
+      activeWorkspaceView: typeof saved.activeWorkspaceView === "string" ? saved.activeWorkspaceView : "home"
+    };
+    const demoSession = saved.currentUser && (saved.currentUser.mode === "demo" || !saved.currentUser.mode);
+    return demoSession ? { ...defaultState, ...saved } : { ...defaultState, ...safeWorkspaceState };
   } catch {
     return { ...defaultState };
   }
 }
 
 function saveState() {
-  localStorage.setItem("pcaTrainingWebAppV1", JSON.stringify(state));
+  const safeWorkspaceState = {
+    activeOrganizationId: state.activeOrganizationId,
+    activeWorkspaceView: state.activeWorkspaceView
+  };
+  const demoSession = state.currentUser && (state.currentUser.mode === "demo" || !state.currentUser.mode);
+  localStorage.setItem("pcaTrainingWebAppV1", JSON.stringify(demoSession ? state : safeWorkspaceState));
 }
 
 function getModuleState(id) {
@@ -744,7 +755,7 @@ function renderDeprecatedEntry(message = "") {
 
 function requestedWorkspaceView() {
   const requested = new URLSearchParams(location.search).get("view");
-  return ["home", "training", "staff", "reports", "pathways", "people", "competency", "admin", "leads"].includes(requested)
+  return ["home", "training", "staff", "reports", "pathways", "people", "competency", "work", "security", "admin", "leads"].includes(requested)
     ? requested : null;
 }
 
