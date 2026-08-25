@@ -87,11 +87,14 @@ select set_config('request.jwt.claim.role','authenticated',false);
 insert into public.learning_pathways(id,organization_id,owner_type,sector,code,title,summary)
 values ('90000000-0000-0000-0000-000000000501','90000000-0000-0000-0000-000000000001','Organization','Hospital','P9_SHARED','Shared Migration Pathway','Fictional shared content.');
 insert into public.learning_pathway_versions(id,organization_id,pathway_id,version_number,lifecycle,version_label,approved_at,published_at)
-values ('90000000-0000-0000-0000-000000000502','90000000-0000-0000-0000-000000000001','90000000-0000-0000-0000-000000000501',4,'Published','Preserved v4',now(),now());
+values ('90000000-0000-0000-0000-000000000502','90000000-0000-0000-0000-000000000001','90000000-0000-0000-0000-000000000501',4,'Draft','Preserved v4',null,null);
 insert into public.learning_modules(id,organization_id,pathway_id,pathway_version_id,title,position)
 values ('90000000-0000-0000-0000-000000000503','90000000-0000-0000-0000-000000000001','90000000-0000-0000-0000-000000000501','90000000-0000-0000-0000-000000000502','Shared Module',0);
 insert into public.learning_module_items(id,organization_id,pathway_id,pathway_version_id,module_id,item_type,title,position,completion_requirement,content)
 values ('90000000-0000-0000-0000-000000000504','90000000-0000-0000-0000-000000000001','90000000-0000-0000-0000-000000000501','90000000-0000-0000-0000-000000000502','90000000-0000-0000-0000-000000000503','Page','Shared Item',0,'View','{"body":"Fictional shared item"}');
+update public.learning_pathway_versions
+set lifecycle='Published',approved_at=now(),published_at=now()
+where id='90000000-0000-0000-0000-000000000502';
 update public.learning_pathways set current_version_id='90000000-0000-0000-0000-000000000502' where id='90000000-0000-0000-0000-000000000501';
 select set_config('request.jwt.claim.sub','',false);
 select set_config('request.jwt.claim.role','',false);
