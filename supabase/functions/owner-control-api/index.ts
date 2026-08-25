@@ -51,7 +51,7 @@ Deno.serve(async request => {
   const agent = clean(request.headers.get("user-agent"), 512) || "unknown";
   const subjectHash = await digest(`${rateSalt}:${forwarded}:${agent}`);
   const service = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
-  const { data: limit, error: limitError } = await service.rpc("owner_control_consume_rate_limit", { subject_hash: subjectHash, bucket_name: "control_api", maximum_attempts: 60 });
+  const { data: limit, error: limitError } = await service.rpc("owner_control_consume_rate_limit", { p_subject_hash: subjectHash, p_bucket_name: "control_api", p_maximum_attempts: 60 });
   if (limitError) return safeFailure(503, "SERVICE_UNAVAILABLE", origin);
   if (!limit?.allowed) return new Response(JSON.stringify({ error: "RATE_LIMITED" }), { status: 429, headers: { ...responseHeaders(origin), "Retry-After": String(limit?.retry_after_seconds || 60) } });
 
@@ -75,12 +75,12 @@ Deno.serve(async request => {
   const ipHash = await digest(`${rateSalt}:ip:${forwarded}`);
   const agentHash = await digest(`${rateSalt}:agent:${agent}`);
   const { data: authorizationResult, error: authorizationError } = await service.rpc("owner_control_authorize", {
-    actor_user_id: authResult.user.id,
-    auth_session_id: sessionId,
-    assurance_level: "aal2",
-    reauthenticated_at: recentAuthAt,
-    client_ip_hash: ipHash,
-    client_agent_hash: agentHash
+    p_actor_user_id: authResult.user.id,
+    p_auth_session_id: sessionId,
+    p_assurance_level: "aal2",
+    p_reauthenticated_at: recentAuthAt,
+    p_client_ip_hash: ipHash,
+    p_client_agent_hash: agentHash
   });
   if (authorizationError || !authorizationResult) return safeFailure(403, "ACCESS_DENIED", origin);
 

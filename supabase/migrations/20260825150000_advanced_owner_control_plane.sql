@@ -396,40 +396,40 @@ end $f$;
 revoke all on function private.control_audit(uuid,text,text,uuid,text,text,text,jsonb) from public,anon,authenticated;
 grant execute on function private.control_audit(uuid,text,text,uuid,text,text,text,jsonb) to service_role;
 
-create function public.owner_control_authorize(actor_user_id uuid,auth_session_id uuid,assurance_level text,reauthenticated_at timestamptz,client_ip_hash text,client_agent_hash text) returns jsonb
+create function public.owner_control_authorize(p_actor_user_id uuid,p_auth_session_id uuid,p_assurance_level text,p_reauthenticated_at timestamptz,p_client_ip_hash text,p_client_agent_hash text) returns jsonb
 language plpgsql security invoker set search_path='' as $f$
 declare admin private.platform_administrators; session_row private.owner_control_sessions;
 begin
-  if actor_user_id is null or auth_session_id is null or assurance_level<>'aal2' then raise exception 'CONTROL_MFA_REQUIRED' using errcode='42501'; end if;
-  select * into admin from private.platform_administrators where user_id=actor_user_id and is_active for share;
+  if p_actor_user_id is null or p_auth_session_id is null or p_assurance_level<>'aal2' then raise exception 'CONTROL_MFA_REQUIRED' using errcode='42501'; end if;
+  select * into admin from private.platform_administrators where user_id=p_actor_user_id and is_active for share;
   if admin.user_id is null then raise exception 'CONTROL_ACCESS_DENIED' using errcode='42501'; end if;
-  select * into session_row from private.owner_control_sessions s where s.user_id=$1 and s.auth_session_id=$2 for update;
+  select * into session_row from private.owner_control_sessions s where s.user_id=p_actor_user_id and s.auth_session_id=p_auth_session_id for update;
   if session_row.id is not null and (session_row.revoked_at is not null or session_row.expires_at<=now() or session_row.last_seen_at<now()-interval '20 minutes') then
     raise exception 'CONTROL_SESSION_EXPIRED' using errcode='42501';
   end if;
   insert into private.owner_control_sessions(user_id,auth_session_id,assurance_level,reauthenticated_at,ip_hash,user_agent_hash)
-  values(actor_user_id,auth_session_id,'aal2',reauthenticated_at,client_ip_hash,client_agent_hash)
+  values(p_actor_user_id,p_auth_session_id,'aal2',p_reauthenticated_at,p_client_ip_hash,p_client_agent_hash)
   on conflict(user_id,auth_session_id) do update set last_seen_at=now(), assurance_level='aal2', reauthenticated_at=greatest(private.owner_control_sessions.reauthenticated_at,excluded.reauthenticated_at), ip_hash=excluded.ip_hash,user_agent_hash=excluded.user_agent_hash
   returning * into session_row;
-  return jsonb_build_object('role',admin.platform_role,'permissions',(select coalesce(jsonb_agg(permission_key order by permission_key),'[]'::jsonb) from private.platform_role_permissions where platform_role=admin.platform_role),'session_expires_at',session_row.expires_at,'recent_auth',reauthenticated_at>=now()-interval '10 minutes');
+  return jsonb_build_object('role',admin.platform_role,'permissions',(select coalesce(jsonb_agg(permission_key order by permission_key),'[]'::jsonb) from private.platform_role_permissions where platform_role=admin.platform_role),'session_expires_at',session_row.expires_at,'recent_auth',p_reauthenticated_at>=now()-interval '10 minutes');
 end $f$;
 revoke all on function public.owner_control_authorize(uuid,uuid,text,timestamptz,text,text) from public,anon,authenticated;
 grant execute on function public.owner_control_authorize(uuid,uuid,text,timestamptz,text,text) to service_role;
 
-create function public.owner_control_consume_rate_limit(subject_hash text,bucket_name text,maximum_attempts integer) returns jsonb
+create function public.owner_control_consume_rate_limit(p_subject_hash text,p_bucket_name text,p_maximum_attempts integer) returns jsonb
 language plpgsql security invoker set search_path='' as $f$
 declare current_window timestamptz:=date_trunc('minute',now()); limit_row private.control_rate_limits;
 begin
-  if length(subject_hash)<32 or bucket_name not in ('authenticate','control_api') or maximum_attempts not between 1 and 120 then
+  if length(p_subject_hash)<32 or p_bucket_name not in ('authenticate','control_api') or p_maximum_attempts not between 1 and 120 then
     raise exception 'INVALID_RATE_LIMIT_REQUEST' using errcode='22023';
   end if;
   insert into private.control_rate_limits(subject_hash,bucket,window_started_at,attempt_count)
-  values(subject_hash,bucket_name,current_window,1)
+  values(p_subject_hash,p_bucket_name,current_window,1)
   on conflict(subject_hash,bucket,window_started_at) do update
     set attempt_count=private.control_rate_limits.attempt_count+1,
-        blocked_until=case when private.control_rate_limits.attempt_count+1>maximum_attempts then current_window+interval '1 minute' else private.control_rate_limits.blocked_until end
+        blocked_until=case when private.control_rate_limits.attempt_count+1>p_maximum_attempts then current_window+interval '1 minute' else private.control_rate_limits.blocked_until end
   returning * into limit_row;
-  return jsonb_build_object('allowed',limit_row.attempt_count<=maximum_attempts and coalesce(limit_row.blocked_until<=now(),true),'retry_after_seconds',case when limit_row.blocked_until>now() then greatest(1,ceil(extract(epoch from limit_row.blocked_until-now())))::integer else 0 end);
+  return jsonb_build_object('allowed',limit_row.attempt_count<=p_maximum_attempts and coalesce(limit_row.blocked_until<=now(),true),'retry_after_seconds',case when limit_row.blocked_until>now() then greatest(1,ceil(extract(epoch from limit_row.blocked_until-now())))::integer else 0 end);
 end $f$;
 revoke all on function public.owner_control_consume_rate_limit(text,text,integer) from public,anon,authenticated;
 grant execute on function public.owner_control_consume_rate_limit(text,text,integer) to service_role;
