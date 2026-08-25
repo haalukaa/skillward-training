@@ -49,16 +49,6 @@ Deno.serve(async request => {
   const rateSalt = Deno.env.get("CONTROL_PLANE_RATE_LIMIT_SALT");
   if (!supabaseUrl || !anonKey || !serviceKey || !rateSalt) return safeFailure(503, "SERVICE_UNAVAILABLE", origin);
 
-  const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("cf-connecting-ip") || "unknown";
-  const agent = clean(request.headers.get("user-agent"), 512) || "unknown";
-  stage = "rate_limit_hash";
-  const subjectHash = await digest(`${rateSalt}:${forwarded}:${agent}`);
-  const service = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
-  stage = "rate_limit_rpc";
-  const { data: limit, error: limitError } = await service.rpc("owner_control_consume_rate_limit", { p_subject_hash: subjectHash, p_bucket_name: "control_api", p_maximum_attempts: 60 });
-  if (limitError) return safeFailure(503, "SERVICE_UNAVAILABLE", origin);
-  if (!limit?.allowed) return new Response(JSON.stringify({ error: "RATE_LIMITED" }), { status: 429, headers: { ...responseHeaders(origin), "Retry-After": String(limit?.retry_after_seconds || 60) } });
-
   const authorization = request.headers.get("authorization") || "";
   const token = authorization.replace(/^Bearer\s+/i, "");
   if (!token || token === authorization) return safeFailure(401, "AUTHENTICATION_REQUIRED", origin);
@@ -73,6 +63,16 @@ Deno.serve(async request => {
   if (!uuid.test(sessionId) || claims.aal !== "aal2" || !verifiedMfa) {
     return safeFailure(403, "STRONG_MFA_REQUIRED", origin);
   }
+  const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("cf-connecting-ip") || "unknown";
+  const agent = clean(request.headers.get("user-agent"), 512) || "unknown";
+  stage = "rate_limit_hash";
+  const subjectHash = await digest(`${rateSalt}:${forwarded}:${agent}`);
+  const service = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
+  stage = "rate_limit_rpc";
+  const { data: limit, error: limitError } = await service.rpc("owner_control_consume_rate_limit", { p_subject_hash: subjectHash, p_bucket_name: "control_api", p_maximum_attempts: 60 });
+  if (limitError) return safeFailure(503, "SERVICE_UNAVAILABLE", origin);
+  if (!limit?.allowed) return new Response(JSON.stringify({ error: "RATE_LIMITED" }), { status: 429, headers: { ...responseHeaders(origin), "Retry-After": String(limit?.retry_after_seconds || 60) } });
+
   const recentSeconds = Array.isArray(claims.amr)
     ? claims.amr.filter(entry => ["password", "totp", "webauthn"].includes(clean(entry.method, 24))).map(entry => Number(entry.timestamp || 0)).filter(Number.isFinite).sort((a, b) => b - a)[0] || 0
     : 0;
