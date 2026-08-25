@@ -2,7 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests/e2e",
-  testMatch: "phase1-local.spec.mjs",
+  testMatch: ["phase1-local.spec.mjs", "phase6-reporting.spec.mjs"],
   fullyParallel: false,
   workers: 1,
   retries: 0,
@@ -18,12 +18,13 @@ export default defineConfig({
   projects: [
     {
       name: "desktop",
-      use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } }
+      use: { ...devices["Desktop Chrome"], ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ? { launchOptions:{ executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE } } : {}), viewport: { width: 1440, height: 900 } }
     },
     {
       name: "mobile",
       use: {
         browserName: "chromium",
+        ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ? { launchOptions:{ executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE } } : {}),
         viewport: { width: 390, height: 844 },
         screen: { width: 390, height: 844 },
         isMobile: true,
