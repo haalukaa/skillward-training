@@ -350,6 +350,19 @@ do $do$ declare t text; begin
   end loop;
 end $do$;
 
+grant usage on schema public to service_role;
+grant select on table
+  public.organizations,
+  public.user_profiles,
+  public.organization_memberships,
+  public.facilities,
+  public.departments,
+  public.learning_assignments,
+  public.competency_awards,
+  public.learning_pathways
+to service_role;
+grant insert,update on table public.organizations,public.organization_memberships to service_role;
+
 insert into private.platform_plans(plan_key,limits,entitlements,support_level) values
 ('Pilot','{"users":50,"active_memberships":50,"facilities":2,"departments":8,"storage_gb":5,"training_pathways":10,"administrators":3,"reports":5}'::jsonb,'{"sector_templates":true,"integrations":false,"advanced_reports":false}'::jsonb,'Standard'),
 ('Small','{"users":100,"active_memberships":100,"facilities":3,"departments":15,"storage_gb":20,"training_pathways":25,"administrators":5,"reports":20}'::jsonb,'{"sector_templates":true,"integrations":false,"advanced_reports":true}'::jsonb,'Standard'),
