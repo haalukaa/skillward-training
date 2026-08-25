@@ -7,6 +7,7 @@ const defaultState = {
   activeWorkspaceView: "home",
   phase6ReportKind: "Competency Matrix",
   phase6Filters: {},
+  phase7OrganizationId: null,
   organizationSetupStep: "identity",
   selectedLearningPathwayId: null,
   selectedLearningVersionId: null,
@@ -103,8 +104,8 @@ function demoNavigation(role) {
 }
 
 const AUTHENTICATED_NAV_ITEMS = {
-  "SkillWard Super Administrator": [["home", "Home", "⌂"], ["leads", "Demo requests", "◇"]],
-  "Organisation Administrator": [["home", "Home", "⌂"], ["pathways", "Pathways", "▷"], ["people", "People", "♙"], ["competency", "Competency", "✓"], ["work", "Work", "◫"], ["reports", "Reports", "▥"], ["admin", "Admin", "⚙"]],
+  "SkillWard Super Administrator": [["home", "Home", "⌂"], ["security", "Security", "⌾"], ["leads", "Demo requests", "◇"]],
+  "Organisation Administrator": [["home", "Home", "⌂"], ["pathways", "Pathways", "▷"], ["people", "People", "♙"], ["competency", "Competency", "✓"], ["work", "Work", "◫"], ["reports", "Reports", "▥"], ["security", "Security", "⌾"], ["admin", "Admin", "⚙"]],
   "Facility Administrator": [["home", "Management Home", "⌂"], ["training", "Training", "▷"], ["staff", "Staff", "♙"], ["work", "Work", "◫"], ["reports", "Reports", "▥"]],
   "Department Manager": [["home", "Management Home", "⌂"], ["training", "Training", "▷"], ["staff", "Staff", "♙"], ["work", "Work", "◫"], ["reports", "Reports", "▥"]],
   "Content Administrator/Educator": [["home", "Content Home", "⌂"], ["pathways", "Pathways", "▷"], ["reports", "Reports", "▥"]],
@@ -301,6 +302,9 @@ let currentAreaId = null;
 let phase6ReportingSnapshot = null;
 let phase6ReportingLoading = false;
 let phase6ReportingError = "";
+let phase7SecuritySnapshot = null;
+let phase7SecurityLoading = false;
+let phase7SecurityError = "";
 
 function loadState() {
   try {
@@ -986,6 +990,7 @@ function renderAuthenticatedWorkspace() {
   const departments = c.departmentDetails;
   const role = c.membership.role;
   const unrestrictedRoles = new Set(["Organisation Administrator", "Content Administrator/Educator"]);
+  if (state.activeWorkspaceView === "security" && role === "Organisation Administrator") return renderPhase7SecurityOperations(c, c.organization.id);
   if (!unrestrictedRoles.has(role) && !departments.length) {
     return renderShell(`${organizationSwitcher(c)}<section class="card access-blocked"><h2>No assigned department</h2><p>Contact your Organisation Administrator to request authorised department access.</p></section>`);
   }
@@ -1100,6 +1105,7 @@ function bindAuthenticatedWorkspace(context) {
 function renderPlatformAdministration(context) {
   const organizations = context.organizations || [];
   const usage = new Map((context.organizationUsage || []).map(item => [item.organization_id, item]));
+  if (state.activeWorkspaceView === "security") return renderPhase7SecurityOperations(context, state.phase7OrganizationId || null);
   if (state.activeWorkspaceView === "leads") {
     const requests = context.demoRequests || [];
     renderShell(`<section class="dashboard-hero"><div class="dashboard-welcome"><span class="eyebrow">SKILLWARD SALES</span><h2>Demo requests</h2><p>Business enquiries are visible only to active SkillWard Super Administrators.</p></div></section><section class="card"><div class="section-heading"><div><span class="eyebrow">PROTECTED LEADS</span><h3>Recent requests</h3></div><span class="count-badge">${requests.length}</span></div><div class="organization-register">${requests.map(item => `<article><div><strong>${escapeHtml(item.full_name)} · ${escapeHtml(item.organization_name)}</strong><small>${escapeHtml(item.work_email)} · ${escapeHtml(item.organization_type)} · ${escapeHtml(item.job_role)}</small><small>${escapeHtml(item.primary_interest)} · ${escapeHtml(item.staff_range)} staff · ${escapeHtml(new Date(item.submitted_at).toLocaleString("en-AU"))}</small>${item.message ? `<small>${escapeHtml(item.message)}</small>` : ""}</div><span class="status-chip status-${item.status === "New" ? "warning" : "success"}">${escapeHtml(item.status)}</span></article>`).join("") || '<p class="empty-state">No demo requests have been submitted.</p>'}</div></section>`);
@@ -1356,6 +1362,41 @@ function bindPhase6Reports(context) {
     }catch(error){status.textContent="The export could not be generated or audited.";}finally{button.disabled=false;}
   }));
 }
+
+function phase7Tone(value) {
+  if (["Operating","Completed","Resolved","Closed","Retain"].includes(value)) return "success";
+  if (["Critical","High","Open","Investigating","Pending","Verify externally"].includes(value)) return "warning";
+  return "neutral";
+}
+
+function renderPhase7SecurityOperations(context, organizationId) {
+  const snapshot=phase7SecuritySnapshot, metrics=snapshot?.metrics||{}, platform=context.membership.role==="SkillWard Super Administrator", canManage=!platform&&context.membership.role==="Organisation Administrator";
+  const organizations=context.organizations||[], organization=platform?organizations.find(item=>item.id===organizationId):context.organization;
+  const selector=platform?`<label class="phase7-scope">Security scope<select id="phase7Organization"><option value="">All organisations</option>${organizations.map(item=>`<option value="${escapeHtml(item.id)}" ${item.id===organizationId?"selected":""}>${escapeHtml(item.name)}</option>`).join("")}</select></label>`:"";
+  const incidentRows=(snapshot?.incidents||[]).map(item=>`<article><div><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.severity)} · detected ${escapeHtml(new Date(item.detected_at).toLocaleString("en-AU"))}</small><p>${escapeHtml(item.summary)}</p></div><span class="status-chip status-${phase7Tone(item.status)}">${escapeHtml(item.status)}</span>${canManage&&!['Resolved','Closed'].includes(item.status)?`<button class="link-button phase7-resolve" data-incident="${escapeHtml(item.id)}">Resolve</button>`:""}</article>`).join("");
+  const reviewRows=(snapshot?.access_reviews||[]).map(campaign=>{const items=(snapshot.review_items||[]).filter(item=>item.campaign_id===campaign.id),pending=items.filter(item=>item.decision==="Pending").length;return `<article><div><strong>${escapeHtml(campaign.title)}</strong><small>Due ${escapeHtml(new Date(campaign.due_at).toLocaleString("en-AU"))} · ${pending}/${items.length} pending</small></div><span class="status-chip status-${phase7Tone(campaign.status)}">${escapeHtml(campaign.status)}</span></article>${canManage?items.filter(item=>item.decision==="Pending").map(item=>`<div class="phase7-review-item"><code>${escapeHtml(item.subject_user_id)}</code><small>${escapeHtml(item.role_snapshot)}</small><button class="link-button phase7-review" data-item="${escapeHtml(item.id)}" data-decision="Retain">Retain</button><button class="link-button phase7-review" data-item="${escapeHtml(item.id)}" data-decision="Suspend">Flag suspension</button></div>`).join(""):""}`}).join("");
+  const requestRows=(snapshot?.data_requests||[]).map(item=>`<article><div><strong>${escapeHtml(item.request_kind)} request</strong><small>Subject ${escapeHtml(item.subject_user_id)} · ${escapeHtml(new Date(item.created_at).toLocaleString("en-AU"))}</small></div><span class="status-chip status-${phase7Tone(item.status)}">${escapeHtml(item.status)}</span></article>`).join("");
+  const policy=(snapshot?.retention_policies||[])[0];
+  renderShell(`${platform?"":organizationSwitcher(context)}<section class="dashboard-hero workspace-page-hero"><div class="dashboard-welcome"><span class="eyebrow">SECURITY · ACCESS · OPERATIONS</span><h2>Production assurance</h2><p>Live security registers and governed controls${organization?` for ${escapeHtml(organization.name)}`:" across SkillWard"}. Provider-managed controls remain explicitly marked for external verification.</p></div>${selector}</section>
+  ${snapshot?`<div class="stats-grid phase7-metrics"><div class="stat-card"><span>Open incidents</span><strong>${Number(metrics.open_incidents||0)}</strong></div><div class="stat-card"><span>Critical</span><strong>${Number(metrics.critical_incidents||0)}</strong></div><div class="stat-card"><span>Access reviews</span><strong>${Number(metrics.open_access_reviews||0)}</strong></div><div class="stat-card"><span>Review decisions</span><strong>${Number(metrics.pending_review_items||0)}</strong></div><div class="stat-card"><span>Data requests</span><strong>${Number(metrics.open_data_requests||0)}</strong></div><div class="stat-card"><span>Support sessions</span><strong>${Number(metrics.active_support_sessions||0)}</strong></div></div>
+  <section class="phase7-grid"><section class="card"><span class="eyebrow">CONTROL STATUS</span><h3>Production controls</h3><div class="organization-register">${(snapshot.controls||[]).map(item=>`<article><div><strong>${escapeHtml(item.name)}</strong><small>Owner: ${escapeHtml(item.owner)}</small></div><span class="status-chip status-${phase7Tone(item.status)}">${escapeHtml(item.status)}</span></article>`).join("")}</div></section><section class="card"><span class="eyebrow">INCIDENT REGISTER</span><h3>Security incidents</h3>${canManage?`<form class="setup-form" id="phase7IncidentForm"><label>Severity<select name="severity"><option>Low</option><option>Medium</option><option>High</option><option>Critical</option></select></label><label>Title<input name="title" minlength="5" required></label><label>Summary<textarea name="summary" minlength="10" required></textarea></label><button class="btn">Open incident</button><p class="auth-status"></p></form>`:""}<div class="organization-register">${incidentRows||'<p class="empty-state">No security incidents recorded.</p>'}</div></section>
+  <section class="card"><span class="eyebrow">ACCESS ASSURANCE</span><h3>Permission reviews</h3>${canManage?`<form class="setup-form" id="phase7ReviewForm"><label>Review title<input name="title" value="Quarterly access review" minlength="5" required></label><label>Due date<input type="date" name="dueAt" required></label><button class="btn">Start review</button><p class="auth-status"></p></form>`:""}<div class="organization-register">${reviewRows||'<p class="empty-state">No access review campaigns recorded.</p>'}</div></section><section class="card"><span class="eyebrow">DATA GOVERNANCE</span><h3>Lifecycle requests</h3>${canManage?`<form class="setup-form" id="phase7DataForm"><label>Subject user<select name="subjectUserId">${(context.organizationMemberships||[]).map(item=>`<option value="${escapeHtml(item.user_id)}">${escapeHtml(item.user_id)} · ${escapeHtml(item.role)}</option>`).join("")}</select></label><label>Request<select name="kind"><option>Access</option><option>Correction</option><option>Export</option><option>Deletion</option></select></label><label>Reason<textarea name="reason" minlength="10" required></textarea></label><button class="btn">Register request</button><p class="auth-status"></p></form>`:""}<div class="organization-register">${requestRows||'<p class="empty-state">No data-lifecycle requests recorded.</p>'}</div></section></section>
+  ${canManage?`<form class="card setup-form phase7-retention" id="phase7RetentionForm"><span class="eyebrow">RETENTION &amp; LEGAL HOLD</span><h3>Approved retention policy</h3><div class="phase6-filter-grid"><label>Audit days<input type="number" name="auditDays" min="365" max="3650" value="${Number(policy?.audit_retention_days||2555)}"></label><label>Authentication days<input type="number" name="authenticationDays" min="90" max="2555" value="${Number(policy?.authentication_retention_days||365)}"></label><label>Evidence days<input type="number" name="evidenceDays" min="365" max="3650" value="${Number(policy?.evidence_retention_days||2555)}"></label><label>Export metadata days<input type="number" name="exportDays" min="365" max="3650" value="${Number(policy?.export_metadata_retention_days||2555)}"></label></div><label class="checkbox-label"><input type="checkbox" name="legalHold" ${policy?.legal_hold_enabled!==false?"checked":""}> Legal-hold protection enabled</label><button class="btn">Save policy</button><p class="auth-status"></p></form>`:""}`:`<section class="card"><h3>${phase7SecurityError?"Security operations could not be loaded":"Loading security operations…"}</h3><p>${phase7SecurityError?"No control state has been inferred. Check the authorised scope and retry.":"SkillWard is evaluating the protected operational registers."}</p>${phase7SecurityError?'<button class="btn" id="phase7Retry">Try again</button>':""}</section>`}`);
+  bindAuthenticatedWorkspace(context);
+  document.getElementById("phase7Organization")?.addEventListener("change",event=>{state.phase7OrganizationId=event.target.value||null;phase7SecuritySnapshot=null;phase7SecurityError="";saveState();renderPhase7SecurityOperations(context,state.phase7OrganizationId);});
+  document.getElementById("phase7Retry")?.addEventListener("click",()=>{phase7SecurityError="";renderPhase7SecurityOperations(context,organizationId);});
+  if(!snapshot&&!phase7SecurityLoading&&!phase7SecurityError)return loadPhase7Security(context,organizationId);
+  const refresh=async action=>{await action();phase7SecuritySnapshot=null;await loadPhase7Security(context,organizationId);};
+  bindPhase7Form("phase7IncidentForm",values=>refresh(()=>authService.database.createSecurityIncident(organizationId,{severity:values.get("severity"),title:values.get("title"),summary:values.get("summary")})));
+  bindPhase7Form("phase7ReviewForm",values=>refresh(()=>authService.database.startAccessReview(organizationId,{title:values.get("title"),dueAt:new Date(`${values.get("dueAt")}T23:59:59Z`).toISOString()})));
+  bindPhase7Form("phase7DataForm",values=>refresh(()=>authService.database.submitDataLifecycleRequest(organizationId,{subjectUserId:values.get("subjectUserId"),kind:values.get("kind"),reason:values.get("reason")})));
+  bindPhase7Form("phase7RetentionForm",values=>refresh(()=>authService.database.saveRetentionPolicy(organizationId,{auditDays:values.get("auditDays"),authenticationDays:values.get("authenticationDays"),evidenceDays:values.get("evidenceDays"),exportDays:values.get("exportDays"),legalHoldEnabled:values.get("legalHold")==="on"})));
+  document.querySelectorAll(".phase7-review").forEach(button=>button.addEventListener("click",()=>refresh(()=>authService.database.recordAccessReviewDecision(button.dataset.item,button.dataset.decision,"Reviewed by organisation administrator in Phase 7 assurance workflow."))));
+  document.querySelectorAll(".phase7-resolve").forEach(button=>button.addEventListener("click",()=>{const resolution=prompt("Record the resolution (minimum 10 characters):");if(resolution)refresh(()=>authService.database.transitionSecurityIncident(button.dataset.incident,"Resolved",resolution));}));
+}
+
+async function loadPhase7Security(context,organizationId) { phase7SecurityLoading=true;phase7SecurityError="";try{phase7SecuritySnapshot=await authService.database.getSecurityOperationsSnapshot(organizationId);}catch(error){phase7SecuritySnapshot=null;phase7SecurityError=error.message||"SECURITY_OPERATIONS_UNAVAILABLE";}finally{phase7SecurityLoading=false;renderPhase7SecurityOperations(context,organizationId);} }
+function bindPhase7Form(id,submit){document.getElementById(id)?.addEventListener("submit",async event=>{event.preventDefault();const form=event.currentTarget,status=form.querySelector(".auth-status");status.textContent="Saving audited change…";try{await submit(new FormData(form));}catch{status.textContent="The security operation was not authorised or failed validation.";}});}
 
 function renderOrganizationAdministration(context) {
   const facilities = context.facilities || [], departments = context.departmentDetails || [], settings = context.organization.branding_settings || {};

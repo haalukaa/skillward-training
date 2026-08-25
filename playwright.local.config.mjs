@@ -2,7 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests/e2e",
-  testMatch: ["phase1-local.spec.mjs", "phase6-reporting.spec.mjs"],
+  testMatch: ["phase1-local.spec.mjs", "phase6-reporting.spec.mjs", "phase7-security-operations.spec.mjs"],
   fullyParallel: false,
   workers: 1,
   retries: 0,

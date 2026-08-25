@@ -150,6 +150,6 @@ test("Canvas workspace assets use a production cache version", () => {
   const appIndexSource = fs.readFileSync(path.join(root, "app", "index.html"), "utf8");
   assert.match(indexSource, /marketing\.css\?v=20260824-canvas-production-1/);
   assert.match(indexSource, /marketing\.js\?v=20260824-canvas-production-1/);
-  assert.match(appIndexSource, /\.\.\/styles\.css\?v=20260825-phase6-reporting-1/);
-  assert.match(appIndexSource, /\.\.\/app\.js\?v=20260825-phase6-reporting-1/);
+  assert.match(appIndexSource, /\.\.\/styles\.css\?v=20260825-phase7-security-ops-1/);
+  assert.match(appIndexSource, /\.\.\/app\.js\?v=20260825-phase7-security-ops-1/);
 });

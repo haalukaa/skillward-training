@@ -317,6 +317,14 @@ export class SkillWardDatabaseService {
   refreshOperationalDeadlines(organizationId) { return this.rpc("refresh_operational_deadlines", { target_organization:organizationId }); }
   getReportingSnapshot(organizationId, filters = {}) { return this.rpc("get_reporting_snapshot", { target_organization:organizationId, report_filters:filters }); }
   recordReportExport(organizationId, input) { return this.rpc("record_report_export", { target_organization:organizationId, target_report:input.reportKind, target_format:input.format, report_filters:input.filters || {}, export_row_count:input.rowCount || 0, export_file_name:input.fileName, export_sha256:input.sha256 || null }); }
+  getSecurityOperationsSnapshot(organizationId = null) { return this.rpc("get_security_operations_snapshot", { target_organization:organizationId }); }
+  createSecurityIncident(organizationId, input) { return this.rpc("create_security_incident", { target_organization:organizationId, incident_severity:input.severity, incident_title:input.title, incident_summary:input.summary }); }
+  transitionSecurityIncident(incidentId, status, resolution = null) { return this.rpc("transition_security_incident", { target_incident:incidentId, requested_status:status, resolution_notes:resolution }); }
+  startAccessReview(organizationId, input) { return this.rpc("start_access_review", { target_organization:organizationId, review_title:input.title, review_due_at:input.dueAt }); }
+  recordAccessReviewDecision(itemId, decision, notes = null) { return this.rpc("record_access_review_decision", { target_item:itemId, requested_decision:decision, decision_notes:notes }); }
+  submitDataLifecycleRequest(organizationId, input) { return this.rpc("submit_data_lifecycle_request", { target_organization:organizationId, target_subject:input.subjectUserId, requested_kind:input.kind, request_reason:input.reason }); }
+  decideDataLifecycleRequest(requestId, status, notes, legalHold = false) { return this.rpc("decide_data_lifecycle_request", { target_request:requestId, requested_status:status, decision_notes:notes, apply_legal_hold:Boolean(legalHold) }); }
+  saveRetentionPolicy(organizationId, input) { return this.rpc("save_organization_retention_policy", { target_organization:organizationId, audit_days:Number(input.auditDays), authentication_days:Number(input.authenticationDays), evidence_days:Number(input.evidenceDays), export_days:Number(input.exportDays), legal_hold_enabled:Boolean(input.legalHoldEnabled) }); }
 
   createOrganization(input) {
     return this.insert("organizations", { name: input.name.trim(), organization_type: input.organizationType, slug: input.slug.trim().toLowerCase(), subscription_plan: input.subscriptionPlan || "Pilot", subscription_status: "Trial" });
@@ -327,12 +335,11 @@ export class SkillWardDatabaseService {
   }
 
   activateSupportSession(sessionId) {
-    return this.update("support_access_sessions", sessionId, { status: "Active", starts_at: new Date().toISOString() });
+    return this.rpc("activate_support_session_v2", { target_session:sessionId });
   }
 
   authorizeSupportAccess(context, input) {
-    const hours = Math.min(24, Math.max(1, Number(input.hours) || 1));
-    return this.insert("support_access_sessions", { organization_id: context.organization.id, support_user_id: input.supportUserId, authorized_by: context.user.id, reason: input.reason.trim(), expires_at: new Date(Date.now() + hours * 3600000).toISOString() });
+    return this.rpc("authorize_support_access_v2", { target_organization:context.organization.id, target_support_user:input.supportUserId, support_reason:input.reason.trim(), duration_hours:Number(input.hours) || 1 });
   }
 
   updateOrganizationBranding(context, input) {
