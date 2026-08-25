@@ -14,8 +14,21 @@ const decodeClaims = (token: string): JwtClaims => {
   try {
     const encoded = token.split(".")[1];
     if (!encoded) return {};
-    const normalized = encoded.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(encoded.length / 4) * 4, "=");
-    return JSON.parse(atob(normalized));
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    const bytes: number[] = [];
+    let accumulator = 0;
+    let bitCount = 0;
+    for (const character of encoded) {
+      const value = alphabet.indexOf(character);
+      if (value < 0) return {};
+      accumulator = (accumulator << 6) | value;
+      bitCount += 6;
+      if (bitCount >= 8) {
+        bitCount -= 8;
+        bytes.push((accumulator >> bitCount) & 255);
+      }
+    }
+    return JSON.parse(new TextDecoder().decode(new Uint8Array(bytes)));
   } catch { return {}; }
 };
 const responseHeaders = (origin: string) => ({
