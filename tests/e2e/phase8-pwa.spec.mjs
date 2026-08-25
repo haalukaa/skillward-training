@@ -15,8 +15,8 @@ test("Phase 8 installs a safe service worker and provides a non-sensitive offlin
     return { scope:registration.scope, release:globalThis.SkillWardPWA.release, cacheNames, cachedUrls };
   });
   expect(pwa.scope).toMatch(/\/$/);
-  expect(pwa.release).toBe("20260825-phase8-mobile-pwa-1");
-  expect(pwa.cacheNames).toEqual(["skillward-safe-shell-20260825-phase8-mobile-pwa-1"]);
+  expect(pwa.release).toBe("20260825-phase9-launch-hardening-1");
+  expect(pwa.cacheNames).toEqual(["skillward-safe-shell-20260825-phase9-launch-hardening-1"]);
   expect(pwa.cachedUrls).toContain("/offline.html");
   for (const forbidden of ["/app/", "/runtime-config.js", "/app.js", "/auth-bundle.js"]) expect(pwa.cachedUrls).not.toContain(forbidden);
 

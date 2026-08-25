@@ -148,8 +148,8 @@ test("authenticated organisation administration uses separated Canvas-style dest
 test("Canvas workspace assets use a production cache version", () => {
   const indexSource = fs.readFileSync(path.join(root, "index.html"), "utf8");
   const appIndexSource = fs.readFileSync(path.join(root, "app", "index.html"), "utf8");
-  assert.match(indexSource, /marketing\.css\?v=20260825-phase8-mobile-pwa-1/);
-  assert.match(indexSource, /marketing\.js\?v=20260825-phase8-mobile-pwa-1/);
-  assert.match(appIndexSource, /\.\.\/styles\.css\?v=20260825-phase8-mobile-pwa-1/);
-  assert.match(appIndexSource, /\.\.\/app\.js\?v=20260825-phase8-mobile-pwa-1/);
+  assert.match(indexSource, /marketing\.css\?v=20260825-phase9-launch-hardening-1/);
+  assert.match(indexSource, /marketing\.js\?v=20260825-phase9-launch-hardening-1/);
+  assert.match(appIndexSource, /\.\.\/styles\.css\?v=20260825-phase9-launch-hardening-1/);
+  assert.match(appIndexSource, /\.\.\/app\.js\?v=20260825-phase9-launch-hardening-1/);
 });

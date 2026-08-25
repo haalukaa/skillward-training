@@ -41,22 +41,24 @@ WHAT IS INCLUDED
 IMPORTANT LIMITATIONS
 - Demo Mode is a front-end preview and saves sample progress only in the browser.
 - Authenticated workspaces use Supabase Auth, PostgreSQL RLS and organisation-scoped records.
-- The Phase 1 multi-organisation foundation is not yet approved for production hospital use.
-- There are no hospital integrations.
+- Phase 9 completes the planned software roadmap for a controlled, authorised pilot; it is not automatic approval for unrestricted production use.
+- Provider-dependent email, push, SSO, provisioning and external reporting integrations remain disabled until configured and accepted.
+- The installable PWA is not yet distributed through the Apple App Store or Google Play.
 - Preview procedures must not be treated as final clinical or workplace instructions.
 - All content must be reviewed and approved by the hospital, infection-control team, education team and relevant managers.
 
-NEXT DEVELOPMENT STAGE
-1. Confirm the complete module list with the trainer.
-2. Replace preview text with approved procedures.
-3. Add approved photos and videos.
-4. Review and stabilise the Phase 1 organisation/security migration.
-5. Build the Phase 2 pathway authoring and clinical approval workflow.
-6. Add certificates, refresher dates and reporting.
-7. Pilot with a small number of staff.
+CONTROLLED PILOT READINESS
+1. Obtain approved customer content, pilot scope and success/exit criteria.
+2. Complete privacy, security, legal, insurance and data-processing approvals.
+3. Configure named operational owners, monitoring, support and tested backup recovery.
+4. Enable only approved provider integrations and production communication channels.
+5. Pilot with a small authorised group before wider rollout.
 
 DATABASE FOUNDATION
 See docs/database.md and docs/multi-organization-foundation.md for the version-controlled Supabase schema, permission model, tests and setup. Demo Mode remains deliberately independent of Supabase.
+
+PHASE 9 LAUNCH HARDENING
+See docs/migration-compatibility.md, docs/releases/phase-9-launch-hardening.md, docs/rollback/phase-9-launch-hardening.md and docs/commercial-pilot-readiness.md for migration preservation, protected release evidence, recovery and external approval boundaries.
 
 SUPABASE AUTHENTICATION DEVELOPMENT INTEGRATION
 See docs/authentication.md for the authentication architecture, Demo Mode separation, GitHub Pages configuration, exact redirect URLs, invitation limitation, troubleshooting, and production requirements. Public sign-up is not provided. Authenticated role and department access come only from RLS-protected database records.
