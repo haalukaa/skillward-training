@@ -1,5 +1,7 @@
 import { test, expect } from "@playwright/test";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
+
+const controlApplication = await readFile(new URL("../../control/control.js", import.meta.url), "utf8");
 
 const mockControlClient = `
 Object.defineProperty(window,'SkillWardControl',{value:{
@@ -13,8 +15,8 @@ Object.defineProperty(window,'SkillWardControl',{value:{
 },writable:false,configurable:false});`;
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(mockControlClient);
-  await page.route(/\/control\/control-bundle\.js(?:\?.*)?$/, route => route.fulfill({ status: 200, contentType: "application/javascript", body: mockControlClient }));
+  await page.route("**/control/control-bundle.js", route => route.fulfill({ status: 200, contentType: "application/javascript", body: "" }));
+  await page.route("**/control/control.js", route => route.fulfill({ status: 200, contentType: "application/javascript", body: `${mockControlClient}\n${controlApplication}` }));
 });
 
 test("private command centre is accessible, role-aware and free of browser failures", async ({ page }, testInfo) => {
