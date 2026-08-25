@@ -13,7 +13,8 @@ window.SkillWardControl={
 };`;
 
 test.beforeEach(async ({ page }) => {
-  await page.route("**/control/control-bundle.js", route => route.fulfill({ status: 200, contentType: "application/javascript", body: mockControlClient }));
+  await page.addInitScript(mockControlClient);
+  await page.route(/\/control\/control-bundle\.js(?:\?.*)?$/, route => route.fulfill({ status: 200, contentType: "application/javascript", body: mockControlClient }));
 });
 
 test("private command centre is accessible, role-aware and free of browser failures", async ({ page }, testInfo) => {
