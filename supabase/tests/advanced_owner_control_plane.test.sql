@@ -1,7 +1,7 @@
 begin;
 create extension if not exists pgtap;
 set local role postgres;
-select plan(49);
+select plan(50);
 
 select has_table('private','platform_administrators','internal administrators are private');
 select has_table('private','owner_control_sessions','control sessions are private');
@@ -47,7 +47,9 @@ select ok((select relrowsecurity and relforcerowsecurity from pg_class c join pg
 
 insert into auth.users(id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,created_at,updated_at)
 values('90000000-0000-4000-8000-000000000001','00000000-0000-0000-0000-000000000000','authenticated','authenticated','owner-control-pgtap@example.invalid','',now(),now(),now());
-insert into private.platform_administrators(user_id,platform_role,created_by) values('90000000-0000-4000-8000-000000000001','Owner','90000000-0000-4000-8000-000000000001');
+set local role service_role;
+select lives_ok($$select public.owner_control_bootstrap_first_owner('90000000-0000-4000-8000-000000000001','Fictional pgTAP owner bootstrap verification')$$,'service role can bootstrap the first Owner exactly once');
+reset role; set local role postgres;
 
 set local role service_role;
 select throws_ok($$select public.owner_control_authorize('90000000-0000-4000-8000-000000000001','91000000-0000-4000-8000-000000000001','aal1',now(),'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')$$,'42501','CONTROL_MFA_REQUIRED','AAL1 is rejected');

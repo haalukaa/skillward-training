@@ -41,7 +41,7 @@ const ownerEmail = `owner-control-${crypto.randomUUID()}@example.invalid`;
 const ownerCreated = await admin.auth.admin.createUser({ email: ownerEmail, password, email_confirm: true });
 if (ownerCreated.error || !ownerCreated.data.user) throw new Error("LOCAL_OWNER_CREATE_FAILED");
 const bootstrap = await admin.rpc("owner_control_bootstrap_first_owner", { target_user_id: ownerCreated.data.user.id, bootstrap_reason: "Fictional local-only protected CI bootstrap" });
-if (bootstrap.error) throw new Error("LOCAL_OWNER_BOOTSTRAP_FAILED");
+if (bootstrap.error) throw new Error(`LOCAL_OWNER_BOOTSTRAP_FAILED:${String(bootstrap.error.code || "unknown").replace(/[^A-Z0-9_-]/gi, "")}:${String(bootstrap.error.message || "unknown").replace(/[^A-Z0-9 _:-]/gi, "").slice(0, 160)}`);
 const ownerBrowser = createClient(endpoint, anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
 const ownerSignIn = await ownerBrowser.auth.signInWithPassword({ email: ownerEmail, password });
 if (ownerSignIn.error || !ownerSignIn.data.session) throw new Error("LOCAL_OWNER_SIGN_IN_FAILED");
