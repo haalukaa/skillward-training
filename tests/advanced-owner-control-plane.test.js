@@ -8,6 +8,7 @@ const html = await readFile("control/index.html", "utf8");
 const css = await readFile("control/control.css", "utf8");
 const browser = await readFile("control/control.js", "utf8");
 const build = await readFile("scripts/build.mjs", "utf8");
+const netlify = await readFile("netlify.toml", "utf8");
 
 test("control-plane records live in a non-exposed forced-RLS schema", () => {
   assert.match(migration, /create schema if not exists private/);
@@ -59,6 +60,12 @@ test("private entrance is noindex, absent from sitemap and denied on the public 
   assert.match(browser, /control\.skillwardtraining\.com/);
   assert.match(build, /Disallow: \/control\//);
   assert.doesNotMatch(build, /publicUrls[^\n]*control/);
+  assert.doesNotMatch(html, /frame-ancestors/);
+  for (const deployment of [build, netlify]) {
+    assert.match(deployment, /\/control\/\*/);
+    assert.match(deployment, /frame-ancestors 'none'/);
+    assert.match(deployment, /X-Robots-Tag/);
+  }
 });
 
 test("interface covers every owner-control area and exact phone containment", () => {

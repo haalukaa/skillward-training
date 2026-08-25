@@ -14,6 +14,13 @@ await writeFile("dist/robots.txt", "User-agent: *\nAllow: /\nDisallow: /app/\nDi
 const publicUrls = ["/", ...pages.filter(page => !page.path.includes("404")).map(page => `/${page.path.replace(/index\.html$/, "")}`)];
 await writeFile("dist/sitemap.xml", `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${publicUrls.map(path => `<url><loc>https://skillwardtraining.com${path}</loc></url>`).join("")}</urlset>`);
 await writeFile("dist/_redirects", "/legal.html /legal/privacy/ 301\n/skillward-training/* /app/:splat 302\n/* /404.html 404\n");
+await writeFile("dist/_headers", `/control/*
+  Cache-Control: no-store
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet
+  X-Frame-Options: DENY
+  Cross-Origin-Opener-Policy: same-origin
+  Content-Security-Policy: default-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co; img-src 'self' data:; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
+`);
 await build({ entryPoints:["src/auth-service.js"], bundle:true, minify:true, format:"iife", outfile:"dist/auth-bundle.js", target:"es2020" });
 await build({ entryPoints:["src/control-client.js"], bundle:true, minify:true, format:"iife", outfile:"dist/control/control-bundle.js", target:"es2020" });
 
