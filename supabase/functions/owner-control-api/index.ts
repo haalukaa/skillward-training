@@ -54,7 +54,7 @@ Deno.serve(async request => {
   if (!token || token === authorization) return safeFailure(401, "AUTHENTICATION_REQUIRED", origin);
   const caller = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: `Bearer ${token}` } }, auth: { persistSession: false, autoRefreshToken: false } });
   stage = "auth_user";
-  const { data: authResult, error: authError } = await caller.auth.getUser(token);
+  const { data: authResult, error: authError } = await caller.auth.getUser();
   if (authError || !authResult.user) return safeFailure(401, "AUTHENTICATION_REQUIRED", origin);
 
   const claims = decodeClaims(token);
