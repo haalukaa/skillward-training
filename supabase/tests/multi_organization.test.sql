@@ -113,21 +113,23 @@ reset role; set local role postgres;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select set_config('request.jwt.claim.role','authenticated',true);
 set local role authenticated;
-insert into public.support_access_sessions(
-  id, organization_id, support_user_id, authorized_by, reason, expires_at
-) values (
-  'cc000000-0000-0000-0000-000000000001','b0000000-0000-0000-0000-000000000001',
-  '10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001',
-  'Authorised tenant-isolation support test',now()+interval '1 hour'
+select set_config(
+  'skillward.test_support_session',
+  public.authorize_support_access_v2(
+    'b0000000-0000-0000-0000-000000000001',
+    '10000000-0000-0000-0000-000000000001',
+    'Authorised tenant-isolation support test',1
+  )::text,
+  true
 );
-select is((select status from public.support_access_sessions where id='cc000000-0000-0000-0000-000000000001'),'Pending'::public.support_access_status,'organisation administrator creates only pending support access');
+select is((select status from public.support_access_sessions where id=current_setting('skillward.test_support_session')::uuid),'Pending'::public.support_access_status,'organisation administrator creates only pending support access through the guarded RPC');
 
 reset role; set local role postgres;
 select set_config('request.jwt.claim.sub','',true); select set_config('request.jwt.claim.role','',true);
 select pg_temp.as_user('10000000-0000-0000-0000-000000000001');
-update public.support_access_sessions set status='Active',starts_at=now() where id='cc000000-0000-0000-0000-000000000001';
+select public.activate_support_session_v2(current_setting('skillward.test_support_session')::uuid);
 select is((select count(*)::int from public.departments),2,'active explicit support session opens the authorised organisation');
-select ok((select count(*) from public.audit_logs where organization_id='b0000000-0000-0000-0000-000000000001' and record_type='support_access_sessions') >= 2,'support authorization and activation are audited');
+select ok((select count(*) from public.operational_audit_events where organization_id='b0000000-0000-0000-0000-000000000001' and record_type='support_access_session' and event_type in ('support_access_authorized','support_access_activated'))=2,'support authorization and activation are immutably audited');
 
 reset role; set local role postgres;
 select throws_ok(
