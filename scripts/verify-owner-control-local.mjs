@@ -70,7 +70,10 @@ const ownerChallenge = await ownerBrowser.auth.mfa.challengeAndVerify({ factorId
 if (ownerChallenge.error) throw new Error("LOCAL_OWNER_MFA_VERIFY_FAILED");
 const ownerSession = await ownerBrowser.auth.getSession();
 const ownerResult = await invoke(ownerSession.data.session?.access_token || "");
-if (ownerResult.status !== 200 || ownerResult.body.authorization?.role !== "Owner" || !Array.isArray(ownerResult.body.data?.organizations)) throw new Error("LOCAL_OWNER_CONTROL_SNAPSHOT_FAILED");
+if (ownerResult.status !== 200 || ownerResult.body.authorization?.role !== "Owner" || !Array.isArray(ownerResult.body.data?.organizations)) {
+  const safeCode=String(ownerResult.body?.error||ownerResult.body?.code||ownerResult.body?.message||"UNKNOWN").replace(/[^A-Z0-9_ -]/gi,"").slice(0,120);
+  throw new Error(`LOCAL_OWNER_CONTROL_SNAPSHOT_FAILED:${ownerResult.status}:${safeCode}`);
+}
 
 const customer = await createAal2(`customer-control-denial-${crypto.randomUUID()}@example.invalid`);
 const customerResult = await invoke(customer.accessToken);
