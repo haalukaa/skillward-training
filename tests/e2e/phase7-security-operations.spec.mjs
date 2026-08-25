@@ -3,6 +3,7 @@ import { test, expect } from "@playwright/test";
 test("Phase 7 security operations load and create an audited incident at desktop and exact mobile width",async({page},testInfo)=>{
   const errors=[];page.on("pageerror",error=>errors.push(error.message));
   await page.goto("/app/");
+  await expect(page.getByRole("heading",{name:"Sign in to your SkillWard workspace"})).toBeVisible();
   await page.evaluate(()=>{
     const org="a0000000-0000-0000-0000-000000000001",admin="10000000-0000-0000-0000-000000000001",worker="10000000-0000-0000-0000-000000000003";
     globalThis.__phase7Incidents=[];
