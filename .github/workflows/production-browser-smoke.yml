@@ -9,6 +9,12 @@ on:
       - demo-data.js
       - styles.css
       - app/**
+      - marketing.css
+      - manifest.webmanifest
+      - service-worker.js
+      - pwa-controller.js
+      - offline.html
+      - scripts/build.mjs
       - scripts/production-smoke.mjs
       - .github/workflows/production-browser-smoke.yml
 

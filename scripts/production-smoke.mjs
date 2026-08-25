@@ -3,7 +3,7 @@ import { mkdir } from "node:fs/promises";
 import { chromium } from "playwright";
 
 const baseUrl = process.env.SKILLWARD_PRODUCTION_URL || "https://skillwardtraining.com";
-const expectedAssetVersion = process.env.SKILLWARD_EXPECTED_RELEASE || "20260825-phase7-security-ops-1";
+const expectedAssetVersion = process.env.SKILLWARD_EXPECTED_RELEASE || "20260825-phase8-mobile-pwa-1";
 const artifactsDirectory = "artifacts";
 
 const delay = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
@@ -16,6 +16,23 @@ async function waitForRelease() {
     if (attempt < 20) await delay(15_000);
   }
   throw new Error(`Production did not serve ${expectedAssetVersion} within five minutes.`);
+}
+
+async function verifyInstallableMetadata() {
+  const [manifestResponse, workerResponse] = await Promise.all([
+    fetch(`${baseUrl}/manifest.webmanifest?release-check=${Date.now()}`, { cache:"no-store" }),
+    fetch(`${baseUrl}/service-worker.js?release-check=${Date.now()}`, { cache:"no-store" })
+  ]);
+  assert.equal(manifestResponse.ok, true, "Production manifest must be available");
+  assert.equal(workerResponse.ok, true, "Production service worker must be available");
+  const manifest = await manifestResponse.json();
+  const worker = await workerResponse.text();
+  assert.equal(manifest.id, "/app/");
+  assert.equal(manifest.start_url, "/app/");
+  assert.equal(manifest.display, "standalone");
+  assert.ok(manifest.icons.some(icon => icon.sizes === "512x512" && icon.purpose.includes("maskable")));
+  assert.match(worker, new RegExp(expectedAssetVersion));
+  assert.doesNotMatch(worker, /runtime-config|auth-bundle|app\.js|\/rest\/v1|\/auth\/v1/);
 }
 
 async function assertNoHorizontalOverflow(page, label) {
@@ -60,6 +77,10 @@ async function verifyDesktop(browser) {
   page.on("pageerror", error => errors.push(error.message));
 
   await enterManagementDemo(page);
+  await page.evaluate(() => globalThis.SkillWardPWA.ready);
+  await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
+  const pwaRelease = await page.evaluate(() => globalThis.SkillWardPWA.release);
+  assert.equal(pwaRelease, expectedAssetVersion);
   const destinations = [];
   for (const [view, title] of [
     ["home", "Home"],
@@ -148,6 +169,7 @@ async function verifyMobile(browser) {
 
 await mkdir(artifactsDirectory, { recursive: true });
 await waitForRelease();
+await verifyInstallableMetadata();
 const browser = await chromium.launch({ headless: true });
 try {
   await verifyDesktop(browser);
