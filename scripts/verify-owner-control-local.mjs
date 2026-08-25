@@ -34,7 +34,18 @@ const createAal2 = async email => {
 };
 const invoke = async accessToken => {
   const response = await fetch(`${endpoint}/functions/v1/owner-control-api`, { method: "POST", headers: { apikey: anonKey, authorization: `Bearer ${accessToken}`, origin: "http://127.0.0.1:4173", "content-type": "application/json" }, body: JSON.stringify({ operation: "snapshot" }) });
-  return { status: response.status, body: await response.json() };
+  const text = await response.text();
+  let body = {};
+  try { body = JSON.parse(text); } catch { body = { error: "EDGE_RUNTIME_STARTING" }; }
+  return { status: response.status, body };
+};
+const invokeAfterRuntimeReady = async accessToken => {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const result = await invoke(accessToken);
+    if (![502, 503].includes(result.status)) return result;
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  return invoke(accessToken);
 };
 
 const ownerEmail = `owner-control-${crypto.randomUUID()}@example.invalid`;
@@ -45,7 +56,7 @@ if (bootstrap.error) throw new Error(`LOCAL_OWNER_BOOTSTRAP_FAILED:${String(boot
 const ownerBrowser = createClient(endpoint, anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
 const ownerSignIn = await ownerBrowser.auth.signInWithPassword({ email: ownerEmail, password });
 if (ownerSignIn.error || !ownerSignIn.data.session) throw new Error("LOCAL_OWNER_SIGN_IN_FAILED");
-const aal1 = await invoke(ownerSignIn.data.session.access_token);
+const aal1 = await invokeAfterRuntimeReady(ownerSignIn.data.session.access_token);
 if (aal1.status !== 403 || aal1.body.error !== "STRONG_MFA_REQUIRED") {
   const safeCode = String(aal1.body?.error || aal1.body?.code || aal1.body?.message || "UNKNOWN").replace(/[^A-Z0-9_ -]/gi, "").slice(0, 120);
   throw new Error(`LOCAL_AAL1_DENIAL_FAILED:${aal1.status}:${safeCode}`);
