@@ -19,6 +19,12 @@ on:
       - "scripts/scan_secrets.sh"
       - "scripts/bootstrap-development-admin.sql"
       - "scripts/bootstrap-skillward-super-admin.sql"
+      - "scripts/phase9-*.sql"
+      - "scripts/verify-migration-compatibility.sh"
+      - "docs/migration-compatibility.md"
+      - "docs/releases/phase-9-launch-hardening.md"
+      - "docs/rollback/phase-9-launch-hardening.md"
+      - "docs/commercial-pilot-readiness.md"
       - "docs/development-admin-bootstrap.md"
       - ".github/workflows/supabase-database.yml"
   workflow_dispatch:
@@ -72,8 +78,14 @@ jobs:
             "$startup_log" >&2
           exit 1
 
+      - name: Prove the production-shaped legacy upgrade preserves records
+        run: bash scripts/verify-migration-compatibility.sh
+
       - name: Apply clean migrations and test-only development seed
         run: supabase db reset
+
+      - name: Reject database lint errors
+        run: supabase db lint --local --schema public,private --level error --fail-on error
 
       - name: Run all database assertions
         run: supabase test db

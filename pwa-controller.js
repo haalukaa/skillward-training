@@ -1,6 +1,6 @@
 (() => {
   "use strict";
-  const RELEASE = "20260825-phase8-mobile-pwa-1";
+  const RELEASE = "20260825-phase9-launch-hardening-1";
   const supported = "serviceWorker" in navigator && location.protocol !== "file:";
   let deferredInstall = null;
   let registration = null;

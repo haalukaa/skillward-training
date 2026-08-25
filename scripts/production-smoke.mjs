@@ -3,8 +3,17 @@ import { mkdir } from "node:fs/promises";
 import { chromium } from "playwright";
 
 const baseUrl = process.env.SKILLWARD_PRODUCTION_URL || "https://skillwardtraining.com";
-const expectedAssetVersion = process.env.SKILLWARD_EXPECTED_RELEASE || "20260825-phase8-mobile-pwa-1";
+const expectedAssetVersion = process.env.SKILLWARD_EXPECTED_RELEASE || "20260825-phase9-launch-hardening-1";
 const artifactsDirectory = "artifacts";
+const sectorWorkspaces = [
+  { button:/Hospital/, organization:"Perth Metro Hospital Network" },
+  { button:/Aged Care/, organization:"Harbourview Aged Care" },
+  { button:/Disability Support/, organization:"Pathways Community Support" }
+];
+const criticalRoutes = [
+  "/", "/platform/", "/solutions/hospitals/", "/solutions/aged-care/",
+  "/solutions/disability-support/", "/security/", "/contact/", "/app/", "/demo/"
+];
 
 const delay = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 
@@ -35,6 +44,14 @@ async function verifyInstallableMetadata() {
   assert.doesNotMatch(worker, /runtime-config|auth-bundle|app\.js|\/rest\/v1|\/auth\/v1/);
 }
 
+async function verifyCriticalRoutes() {
+  for (const route of criticalRoutes) {
+    const response = await fetch(`${baseUrl}${route}`, { redirect:"follow", cache:"no-store" });
+    assert.equal(response.ok, true, `${route} must return a successful response`);
+    assert.match(response.headers.get("content-type") || "", /text\/html/, `${route} must serve HTML`);
+  }
+}
+
 async function assertNoHorizontalOverflow(page, label) {
   const dimensions = await page.evaluate(() => ({
     clientWidth: document.documentElement.clientWidth,
@@ -55,18 +72,21 @@ async function switchWorkspace(page, sector, role) {
   await page.waitForFunction(() => document.title.startsWith("Home |"));
 }
 
-async function enterManagementDemo(page) {
+async function enterManagementDemo(page, workspace = sectorWorkspaces[2]) {
   await page.goto(`${baseUrl}/demo/`, { waitUntil: "load" });
   for (const sector of ["Hospital", "Aged Care", "Disability Support"]) {
     const button = page.getByRole("button", { name: new RegExp(sector) });
     await button.waitFor({ state: "visible" });
     assert.equal(await button.isEnabled(), true, `${sector} must be selectable`);
   }
-  await page.getByRole("button", { name: /Disability Support/ }).click();
+  await page.getByRole("button", { name: workspace.button }).click();
   await page.locator("#nameInput").fill("Production QA");
   await page.locator("#roleInput").selectOption("management");
   await page.getByRole("button", { name: "Open Guided Demo", exact: true }).click();
-  await page.waitForFunction(() => document.title === "Home | Pathways Community Support | SkillWard");
+  await page.waitForFunction(
+    expected => document.title === `Home | ${expected} | SkillWard`,
+    workspace.organization
+  );
 }
 
 async function verifyDesktop(browser) {
@@ -76,7 +96,10 @@ async function verifyDesktop(browser) {
   page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
   page.on("pageerror", error => errors.push(error.message));
 
-  await enterManagementDemo(page);
+  for (const workspace of sectorWorkspaces) {
+    await enterManagementDemo(page, workspace);
+    assert.equal(await page.title(), `Home | ${workspace.organization} | SkillWard`);
+  }
   await page.evaluate(() => globalThis.SkillWardPWA.ready);
   await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
   const pwaRelease = await page.evaluate(() => globalThis.SkillWardPWA.release);
@@ -170,6 +193,7 @@ async function verifyMobile(browser) {
 await mkdir(artifactsDirectory, { recursive: true });
 await waitForRelease();
 await verifyInstallableMetadata();
+await verifyCriticalRoutes();
 const browser = await chromium.launch({ headless: true });
 try {
   await verifyDesktop(browser);
@@ -177,7 +201,7 @@ try {
   console.log(JSON.stringify({
     production: baseUrl,
     release: expectedAssetVersion,
-    desktop: "passed",
+    desktop: "passed across Hospital, Aged Care and Disability Support",
     mobile390x844: "passed",
     lifecycle: "Learn → Validate → Observe → Approve → Renew passed"
   }, null, 2));
