@@ -4,6 +4,7 @@ test("Phase 6 management reports load, contain at viewport and export real files
   const errors=[];
   page.on("pageerror",error=>errors.push(error.message));
   await page.goto("/app/");
+  await expect(page.getByRole("heading",{name:"Sign in to your SkillWard workspace"})).toBeVisible();
   await page.evaluate(() => {
     const org="a0000000-0000-0000-0000-000000000001", worker="10000000-0000-0000-0000-000000000003";
     globalThis.__phase6Exports=[];
