@@ -26,7 +26,7 @@ test("all seven platform roles have explicit least-privilege permissions", () =>
 });
 
 test("Edge boundary verifies origin, identity, AAL2, rate limit and service-only RPCs", () => {
-  for (const value of ["control.skillwardtraining.com", "/auth/v1/user", "authResponse.ok", "verifiedMfa", 'claims.aal !== "aal2"', "CONTROL_PLANE_RATE_LIMIT_SALT", "owner_control_consume_rate_limit", "owner_control_authorize", "owner_control_snapshot", "owner_control_action"]) assert.match(edge, new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  for (const value of ["control.skillwardtraining.com", "claims.sub", "claims.session_id", "verifiedMfa", 'claims.aal !== "aal2"', "CONTROL_PLANE_RATE_LIMIT_SALT", "owner_control_consume_rate_limit", "owner_control_authorize", "owner_control_snapshot", "owner_control_action"]) assert.match(edge, new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.doesNotMatch(edge, /serviceKey.*response|console\.log|SUPABASE_SERVICE_ROLE_KEY.*window/i);
   assert.match(migration, /revoke all on function public\.owner_control_(authorize|snapshot|action).*from public,anon,authenticated/g);
 });
