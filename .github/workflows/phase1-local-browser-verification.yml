@@ -127,6 +127,7 @@ jobs:
             'PUBLIC_SITE_ORIGIN=http://127.0.0.1:4173' \
             'PUBLIC_SITE_URL=http://127.0.0.1:4173' \
             'CONTROL_PLANE_ORIGIN=http://127.0.0.1:4173' \
+            'CONTROL_PLANE_TEST_DIAGNOSTICS=enabled' \
             'CONTROL_PLANE_RATE_LIMIT_SALT=fictional-local-ci-rate-limit-salt-not-for-production' > "$function_env"
           nohup stdbuf -oL -eL supabase functions serve \
             --no-verify-jwt \

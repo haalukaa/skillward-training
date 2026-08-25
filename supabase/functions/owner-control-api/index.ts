@@ -104,7 +104,11 @@ Deno.serve(async request => {
   if (operation === "snapshot") {
     stage = "snapshot_rpc";
     const { data, error } = await service.rpc("owner_control_snapshot", { actor_user_id: actorUserId });
-    if (error) return safeFailure(503, "CONTROL_DATA_UNAVAILABLE", origin);
+    if (error) {
+      const safeDatabaseCode = clean(error.code, 16).replace(/[^A-Z0-9_-]/gi, "") || "unknown";
+      const publicCode = Deno.env.get("CONTROL_PLANE_TEST_DIAGNOSTICS") === "enabled" ? `CONTROL_DATA_UNAVAILABLE_${safeDatabaseCode}` : "CONTROL_DATA_UNAVAILABLE";
+      return safeFailure(503, publicCode, origin);
+    }
     return respond(200, { authorization: authorizationResult, data }, origin);
   }
   if (operation === "action") {
