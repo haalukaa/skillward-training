@@ -128,6 +128,7 @@ create policy phase7_campaigns_read on public.access_review_campaigns for select
 create policy phase7_review_items_read on public.access_review_items for select to authenticated using (private.can_manage_security_operations(organization_id));
 create policy phase7_lifecycle_read on public.data_lifecycle_requests for select to authenticated using (private.can_manage_security_operations(organization_id) or subject_user_id=(select auth.uid()));
 create policy phase7_retention_read on public.organization_retention_policies for select to authenticated using (private.can_manage_security_operations(organization_id));
+create policy phase7_support_audit_read on public.operational_audit_events for select to authenticated using (private.has_support_access(organization_id));
 
 create function private.phase7_audit(target_org uuid,event_name text,record_kind text,target_record uuid,event_details jsonb default '{}'::jsonb) returns void
 language sql security definer set search_path='' as $$
