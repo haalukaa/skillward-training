@@ -28,7 +28,7 @@ test("private command centre is accessible, role-aware and free of browser failu
   page.on("response", response => { if (response.status() >= 400) unexpectedResponses.push(`${response.status()} ${response.url()}`); });
   await page.goto("/control/", { waitUntil: "networkidle" });
   await expect(page.getByRole("heading", { name: "Command centre" })).toBeVisible();
-  await expect(page.getByText("SkillWard Control Plane QA — FICTIONAL")).toBeAttached();
+  await expect(page.locator("#organisation-rows strong", { hasText: "SkillWard Control Plane QA — FICTIONAL" })).toBeAttached();
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex,nofollow/);
   await expect(page.getByRole("navigation", { name: "Control plane" })).toBeAttached();
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
@@ -38,8 +38,9 @@ test("private command centre is accessible, role-aware and free of browser failu
   await page.screenshot({ path: `artifacts/control-plane-${testInfo.project.name}-fictional.png`, fullPage: true });
 });
 
-test("organisation workflow exposes clear protected impact and confirmation", async ({ page }) => {
+test("organisation workflow exposes clear protected impact and confirmation", async ({ page }, testInfo) => {
   await page.goto("/control/", { waitUntil: "networkidle" });
+  if (testInfo.project.name === "mobile") await page.getByRole("button", { name: "Open navigation" }).click();
   await page.getByRole("button", { name: "Organisations" }).click();
   await expect(page.getByRole("heading", { name: "Organisation lifecycle" })).toBeVisible();
   await page.getByRole("button", { name: "Manage" }).click();
