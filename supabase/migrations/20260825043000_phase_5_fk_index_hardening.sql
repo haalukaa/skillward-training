@@ -1,0 +1,25 @@
+-- Phase 5 production hardening: cover every new foreign key used for referential checks.
+
+create index phase5_announcement_receipts_user_fk_idx on public.announcement_receipts(user_id);
+create index phase5_announcements_department_org_fk_idx on public.announcements(department_id,organization_id);
+create index phase5_announcements_facility_org_fk_idx on public.announcements(facility_id,organization_id);
+create index phase5_announcements_publisher_fk_idx on public.announcements(published_by);
+create index phase5_batch_members_batch_org_fk_idx on public.assignment_batch_members(assignment_batch_id,organization_id);
+create index phase5_batch_members_assignment_org_fk_idx on public.assignment_batch_members(assignment_id,organization_id);
+create index phase5_batch_members_worker_fk_idx on public.assignment_batch_members(worker_user_id);
+create index phase5_batches_creator_fk_idx on public.assignment_batches(created_by);
+create index phase5_batches_department_org_fk_idx on public.assignment_batches(department_id,organization_id);
+create index phase5_batches_facility_org_fk_idx on public.assignment_batches(facility_id,organization_id);
+create index phase5_batches_manager_fk_idx on public.assignment_batches(manager_user_id);
+create index phase5_batches_pathway_org_fk_idx on public.assignment_batches(pathway_id,organization_id);
+create index phase5_batches_version_pathway_org_fk_idx on public.assignment_batches(pathway_version_id,pathway_id,organization_id);
+create index phase5_batches_trainer_fk_idx on public.assignment_batches(trainer_user_id);
+create index phase5_calendar_assignment_org_fk_idx on public.calendar_events(assignment_id,organization_id);
+create index phase5_calendar_recipient_fk_idx on public.calendar_events(recipient_user_id);
+create index phase5_outbox_organization_fk_idx on public.notification_outbox(organization_id);
+create index phase5_outbox_recipient_fk_idx on public.notification_outbox(recipient_user_id);
+create index phase5_preferences_user_fk_idx on public.notification_preferences(user_id);
+create index phase5_audit_actor_fk_idx on public.operational_audit_events(actor_user_id);
+create index phase5_notifications_recipient_fk_idx on public.user_notifications(recipient_user_id);
+create index phase5_tasks_assignee_fk_idx on public.work_tasks(assigned_to_user_id);
+create index phase5_tasks_assignment_org_fk_idx on public.work_tasks(assignment_id,organization_id);

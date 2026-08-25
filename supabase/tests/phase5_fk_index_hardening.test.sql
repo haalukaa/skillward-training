@@ -1,0 +1,31 @@
+begin;
+create extension if not exists pgtap;
+set local role postgres;
+select plan(23);
+
+select has_index('public','announcement_receipts','phase5_announcement_receipts_user_fk_idx','receipt user foreign key is indexed');
+select has_index('public','announcements','phase5_announcements_department_org_fk_idx','announcement department foreign key is indexed');
+select has_index('public','announcements','phase5_announcements_facility_org_fk_idx','announcement facility foreign key is indexed');
+select has_index('public','announcements','phase5_announcements_publisher_fk_idx','announcement publisher foreign key is indexed');
+select has_index('public','assignment_batch_members','phase5_batch_members_batch_org_fk_idx','batch member batch foreign key is indexed');
+select has_index('public','assignment_batch_members','phase5_batch_members_assignment_org_fk_idx','batch member assignment foreign key is indexed');
+select has_index('public','assignment_batch_members','phase5_batch_members_worker_fk_idx','batch member worker foreign key is indexed');
+select has_index('public','assignment_batches','phase5_batches_creator_fk_idx','batch creator foreign key is indexed');
+select has_index('public','assignment_batches','phase5_batches_department_org_fk_idx','batch department foreign key is indexed');
+select has_index('public','assignment_batches','phase5_batches_facility_org_fk_idx','batch facility foreign key is indexed');
+select has_index('public','assignment_batches','phase5_batches_manager_fk_idx','batch manager foreign key is indexed');
+select has_index('public','assignment_batches','phase5_batches_pathway_org_fk_idx','batch pathway foreign key is indexed');
+select has_index('public','assignment_batches','phase5_batches_version_pathway_org_fk_idx','batch pathway version foreign key is indexed');
+select has_index('public','assignment_batches','phase5_batches_trainer_fk_idx','batch trainer foreign key is indexed');
+select has_index('public','calendar_events','phase5_calendar_assignment_org_fk_idx','calendar assignment foreign key is indexed');
+select has_index('public','calendar_events','phase5_calendar_recipient_fk_idx','calendar recipient foreign key is indexed');
+select has_index('public','notification_outbox','phase5_outbox_organization_fk_idx','outbox organisation foreign key is indexed');
+select has_index('public','notification_outbox','phase5_outbox_recipient_fk_idx','outbox recipient foreign key is indexed');
+select has_index('public','notification_preferences','phase5_preferences_user_fk_idx','preference user foreign key is indexed');
+select has_index('public','operational_audit_events','phase5_audit_actor_fk_idx','audit actor foreign key is indexed');
+select has_index('public','user_notifications','phase5_notifications_recipient_fk_idx','notification recipient foreign key is indexed');
+select has_index('public','work_tasks','phase5_tasks_assignee_fk_idx','task assignee foreign key is indexed');
+select has_index('public','work_tasks','phase5_tasks_assignment_org_fk_idx','task assignment foreign key is indexed');
+
+select * from finish();
+rollback;
