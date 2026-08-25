@@ -20,6 +20,13 @@ site_url = "http://127.0.0.1:4173/app/"
 additional_redirect_urls = ["http://127.0.0.1:4173/**", "http://localhost:4173/**"]
 enable_signup = false
 
+[auth.mfa]
+max_enrolled_factors = 10
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
 [functions.request-demo]
 verify_jwt = false
 

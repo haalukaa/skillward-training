@@ -62,7 +62,10 @@ if (aal1.status !== 403 || aal1.body.error !== "STRONG_MFA_REQUIRED") {
   throw new Error(`LOCAL_AAL1_DENIAL_FAILED:${aal1.status}:${safeCode}`);
 }
 const ownerEnrollment = await ownerBrowser.auth.mfa.enroll({ factorType: "totp", friendlyName: "Fictional owner-control CI" });
-if (ownerEnrollment.error) throw new Error("LOCAL_OWNER_MFA_ENROLL_FAILED");
+if (ownerEnrollment.error) {
+  const safeCode=String(ownerEnrollment.error.code||ownerEnrollment.error.status||"unknown").replace(/[^A-Z0-9_-]/gi,"").slice(0,60);
+  throw new Error(`LOCAL_OWNER_MFA_ENROLL_FAILED:${safeCode}`);
+}
 const ownerChallenge = await ownerBrowser.auth.mfa.challengeAndVerify({ factorId: ownerEnrollment.data.id, code: totp(ownerEnrollment.data.totp.secret) });
 if (ownerChallenge.error) throw new Error("LOCAL_OWNER_MFA_VERIFY_FAILED");
 const ownerSession = await ownerBrowser.auth.getSession();
