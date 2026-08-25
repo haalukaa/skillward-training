@@ -73,15 +73,15 @@ select ok(
   'private organisation-default trigger function has an explicit execute boundary'
 );
 
-select is((select count(*)::int from public.skillward_feature_flags),8,'all staged platform feature flags are installed');
+select is((select count(*)::int from public.skillward_feature_flags),9,'all staged platform feature flags are installed');
 select is(
   (select count(*)::int from public.skillward_feature_flags where state='Enabled'),
-  6,
-  'reviewed authentication, content, competency, operations and reporting releases are enabled'
+  7,
+  'reviewed authentication, content, competency, operations, reporting and security releases are enabled'
 );
 select is(
   (select count(*)::int from public.skillward_feature_flags
-   where feature_key not in ('authentication_entry_v2','content_library_v2','knowledge_assessments_v2','practical_competency_v2','assignments_notifications_v2','reporting_exports_v2') and state='Disabled'),
+   where feature_key not in ('authentication_entry_v2','content_library_v2','knowledge_assessments_v2','practical_competency_v2','assignments_notifications_v2','reporting_exports_v2','security_operations_v2') and state='Disabled'),
   2,
   'future delivery phases remain disabled'
 );
@@ -152,7 +152,7 @@ insert into public.organization_invitations(
   );
 
 select pg_temp.as_user('10000000-0000-0000-0000-000000000003','casey.pca@example.test');
-select is((select count(*)::int from public.skillward_feature_flags),8,'active worker can read platform feature state');
+select is((select count(*)::int from public.skillward_feature_flags),9,'active worker can read platform feature state');
 select is((select count(*)::int from public.organization_auth_settings),1,'worker reads only their organisation authentication policy');
 with changed as (
   update public.organization_auth_settings set idle_timeout_minutes=45
