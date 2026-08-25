@@ -22,7 +22,10 @@ select ok(
 select ok(not (select rolbypassrls from pg_roles where rolname='anon'),'anonymous role cannot bypass RLS');
 select ok(not (select rolbypassrls from pg_roles where rolname='authenticated'),'authenticated role cannot bypass RLS');
 select ok(not has_schema_privilege('anon','private','USAGE'),'anonymous role cannot use the private schema');
-select ok(not has_schema_privilege('authenticated','private','USAGE'),'authenticated role cannot use the private schema');
+select ok(
+  has_schema_privilege('authenticated','private','USAGE'),
+  'authenticated role can resolve explicitly granted private policy helpers'
+);
 select ok(not has_table_privilege('authenticated','private.legacy_content_mappings','SELECT'),'legacy mappings are not browser-readable');
 select ok(not has_table_privilege('authenticated','private.migration_validation_counts','SELECT'),'migration evidence is not browser-readable');
 select is(
