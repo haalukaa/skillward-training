@@ -36,6 +36,7 @@ const safeFailure = (status: number, code: string, origin: string) => respond(st
 Deno.serve(async request => {
   const requestOrigin = request.headers.get("origin") || "";
   const origin = allowedOrigins.has(requestOrigin) ? requestOrigin : configuredOrigin;
+  try {
   if (request.method === "OPTIONS") return allowedOrigins.has(requestOrigin) ? respond(200, { ok: true }, origin) : safeFailure(403, "ACCESS_DENIED", origin);
   if (request.method !== "POST") return safeFailure(405, "METHOD_NOT_ALLOWED", origin);
   if (!requestOrigin || !allowedOrigins.has(requestOrigin)) return safeFailure(403, "ACCESS_DENIED", origin);
@@ -105,4 +106,10 @@ Deno.serve(async request => {
     return respond(200, { authorization: authorizationResult, data }, origin);
   }
   return safeFailure(400, "INVALID_REQUEST", origin);
+  } catch (error) {
+    const failureName = clean(error instanceof Error ? error.name : "UnknownError", 40).replace(/[^A-Z0-9_-]/gi, "");
+    const failureCode = clean(error && typeof error === "object" && "code" in error ? (error as { code?: unknown }).code : "unknown", 40).replace(/[^A-Z0-9_-]/gi, "");
+    console.error(`SkillWard owner control runtime failure:${failureName || "UnknownError"}:${failureCode || "unknown"}`);
+    return safeFailure(503, "SERVICE_UNAVAILABLE", origin);
+  }
 });
