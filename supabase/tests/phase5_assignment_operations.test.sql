@@ -1,7 +1,7 @@
 begin;
 create extension if not exists pgtap;
 set local role postgres;
-select plan(28);
+select plan(29);
 
 select has_table('public','assignment_batches','assignment batch table exists');
 select has_table('public','assignment_batch_members','assignment batch members exist');
@@ -27,6 +27,7 @@ select ok(not has_function_privilege('anon','public.create_assignment_batch(uuid
 select ok(has_function_privilege('authenticated','public.create_assignment_batch(uuid,text,assignment_scope_kind,uuid[],uuid,uuid,organization_role,uuid,uuid,assignment_priority,timestamptz,timestamptz,jsonb)','EXECUTE'),'authenticated guarded assignment execution granted');
 select ok(not has_function_privilege('authenticated','public.claim_notification_outbox(integer)','EXECUTE'),'browser users cannot claim email deliveries');
 select ok(has_function_privilege('service_role','public.claim_notification_outbox(integer)','EXECUTE'),'service worker can claim email deliveries');
+select ok(has_function_privilege('authenticated','private.phase5_member(uuid,uuid)','EXECUTE'),'announcement RLS can evaluate active membership');
 select is((select count(*)::int from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname in ('assignment_batches','assignment_batch_members','work_tasks','calendar_events','notification_preferences','user_notifications','notification_outbox','announcements','announcement_receipts','operational_audit_events') and c.relrowsecurity and c.relforcerowsecurity),10,'all Phase 5 tables force RLS');
 select is((select count(*)::int from pg_policies where schemaname='public' and tablename='notification_outbox'),0,'delivery outbox has no browser RLS policy');
 select is((select state::text from public.skillward_feature_flags where feature_key='assignments_notifications_v2'),'Enabled','Phase 5 feature is enabled');
