@@ -2,6 +2,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.55.0";
 
 type Json = Record<string, unknown>;
 type JwtClaims = { session_id?: unknown; aal?: unknown; amr?: Array<{ method?: unknown; timestamp?: unknown }> };
+type AuthUser = { id?: unknown; factors?: Array<{ status?: unknown; factor_type?: unknown }> };
 
 const productionOrigin = "https://control.skillwardtraining.com";
 const configuredOrigin = Deno.env.get("CONTROL_PLANE_ORIGIN")?.trim() || productionOrigin;
@@ -52,14 +53,17 @@ Deno.serve(async request => {
   const authorization = request.headers.get("authorization") || "";
   const token = authorization.replace(/^Bearer\s+/i, "");
   if (!token || token === authorization) return safeFailure(401, "AUTHENTICATION_REQUIRED", origin);
-  const caller = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: `Bearer ${token}` } }, auth: { persistSession: false, autoRefreshToken: false } });
   stage = "auth_user";
-  const { data: authResult, error: authError } = await caller.auth.getUser();
-  if (authError || !authResult.user) return safeFailure(401, "AUTHENTICATION_REQUIRED", origin);
+  const authResponse = await fetch(`${supabaseUrl.replace(/\/$/, "")}/auth/v1/user`, {
+    headers: { apikey: anonKey, Authorization: `Bearer ${token}` }
+  });
+  if (!authResponse.ok) return safeFailure(401, "AUTHENTICATION_REQUIRED", origin);
+  const authUser = await authResponse.json() as AuthUser;
+  if (!uuid.test(clean(authUser.id, 64))) return safeFailure(401, "AUTHENTICATION_REQUIRED", origin);
 
   const claims = decodeClaims(token);
   const sessionId = clean(claims.session_id, 64);
-  const verifiedMfa = authResult.user.factors?.some(factor => factor.status === "verified" && factor.factor_type === "totp");
+  const verifiedMfa = authUser.factors?.some(factor => factor.status === "verified" && factor.factor_type === "totp");
   if (!uuid.test(sessionId) || claims.aal !== "aal2" || !verifiedMfa) {
     return safeFailure(403, "STRONG_MFA_REQUIRED", origin);
   }
@@ -81,7 +85,7 @@ Deno.serve(async request => {
   const agentHash = await digest(`${rateSalt}:agent:${agent}`);
   stage = "authorize_rpc";
   const { data: authorizationResult, error: authorizationError } = await service.rpc("owner_control_authorize", {
-    p_actor_user_id: authResult.user.id,
+    p_actor_user_id: authUser.id,
     p_auth_session_id: sessionId,
     p_assurance_level: "aal2",
     p_reauthenticated_at: recentAuthAt,
@@ -95,7 +99,7 @@ Deno.serve(async request => {
   const operation = clean(body.operation, 40);
   if (operation === "snapshot") {
     stage = "snapshot_rpc";
-    const { data, error } = await service.rpc("owner_control_snapshot", { actor_user_id: authResult.user.id });
+    const { data, error } = await service.rpc("owner_control_snapshot", { actor_user_id: authUser.id });
     if (error) return safeFailure(503, "CONTROL_DATA_UNAVAILABLE", origin);
     return respond(200, { authorization: authorizationResult, data }, origin);
   }
@@ -104,7 +108,7 @@ Deno.serve(async request => {
     const actionName = clean(body.action, 80);
     const payload = body.payload && typeof body.payload === "object" && !Array.isArray(body.payload) ? body.payload as Json : {};
     if (!actionName) return safeFailure(400, "INVALID_REQUEST", origin);
-    const { data, error } = await service.rpc("owner_control_action", { actor_user_id: authResult.user.id, action_name: actionName, payload, recent_auth_at: recentAuthAt });
+    const { data, error } = await service.rpc("owner_control_action", { actor_user_id: authUser.id, action_name: actionName, payload, recent_auth_at: recentAuthAt });
     if (error) {
       const known = new Set(["CONTROL_RECENT_AUTH_REQUIRED", "CONTROL_REASON_REQUIRED", "CONTROL_CONFIRMATION_REQUIRED", "INVALID_LIFECYCLE_TRANSITION", "LAST_OWNER_PROTECTED", "CLINICAL_REVIEW_REQUIRED"]);
       const code = known.has(error.message) ? error.message : error.code === "42501" ? "ACCESS_DENIED" : "ACTION_REJECTED";
