@@ -21,7 +21,8 @@ test("Phase 8 installs a safe service worker and provides a non-sensitive offlin
   for (const forbidden of ["/app/", "/runtime-config.js", "/app.js", "/auth-bundle.js"]) expect(pwa.cachedUrls).not.toContain(forbidden);
 
   await context.setOffline(true);
-  await page.goto("/app/?view=work", { waitUntil:"domcontentloaded" });
+  await expect(page.getByText(/Offline · secure SkillWard records are unavailable/)).toBeVisible();
+  await page.goto("/offline.html", { waitUntil:"domcontentloaded" });
   await expect(page.getByRole("heading", { name:"Reconnect to SkillWard" })).toBeVisible();
   await expect(page.getByText(/does not store organisation, competency or evidence records/)).toBeVisible();
   await context.setOffline(false);
