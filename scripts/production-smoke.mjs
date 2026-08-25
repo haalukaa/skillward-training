@@ -46,10 +46,9 @@ async function enterManagementDemo(page) {
     assert.equal(await button.isEnabled(), true, `${sector} must be selectable`);
   }
   await page.getByRole("button", { name: /Disability Support/ }).click();
-  await page.getByRole("button", { name: /Explore Demo Mode/ }).click();
-  await page.getByPlaceholder("e.g. Alex Smith").fill("Production QA");
+  await page.locator("#nameInput").fill("Production QA");
   await page.locator("#roleInput").selectOption("management");
-  await page.getByRole("button", { name: /Continue in Demo Mode/ }).click();
+  await page.getByRole("button", { name: "Open Guided Demo", exact: true }).click();
   await page.waitForFunction(() => document.title === "Home | Pathways Community Support | SkillWard");
 }
 
