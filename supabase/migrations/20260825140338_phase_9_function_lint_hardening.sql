@@ -14,7 +14,7 @@ begin
   q:=i.content->'questions'->0; correct:=(q->>'correctOption')::int; chosen:=coalesce((answer->>'selectedOption')::int,-1); v_score:=case when chosen=correct then 100 else 0 end;
  end if;
  update public.learning_item_progress
- set status=case when v_score is null or v_score>=coalesce((i.configuration->>'passMark')::numeric,0) then 'Completed' else 'Failed' end,
+ set status=case when v_score is null or v_score>=coalesce((i.configuration->>'passMark')::numeric,0) then 'Completed'::public.learning_item_progress_status else 'Failed'::public.learning_item_progress_status end,
      score=v_score,attempts=attempts+1,response=answer,started_at=coalesce(started_at,now()),
      completed_at=case when v_score is null or v_score>=coalesce((i.configuration->>'passMark')::numeric,0) then now() else null end,updated_at=now()
  where assignment_id=a.id and item_id=i.id returning * into p;
@@ -57,7 +57,7 @@ begin
  elsif exists(select 1 from public.competency_criterion_results where assessment_id=a.id and rating='Needs Development') then overall:='Needs Development';
  elsif exists(select 1 from public.competency_criterion_results where assessment_id=a.id and rating='Not Observed') then overall:='Not Observed'; else overall:='Competent'; end if;
  if overall<>'Competent' and nullif(trim(submit_competency_assessment.development_plan),'') is null then raise exception using errcode='23514',message='A development plan is required'; end if;
- update public.competency_assessments set status=case when r.worker_acknowledgement_required then 'Submitted' else 'Management Review' end,location=nullif(trim(assessment_location),''),context=nullif(trim(assessment_context),''),personally_observed=true,overall_rating=overall,recommendation=case when overall='Competent' then 'Competent' else 'Reassessment Required' end,development_plan=nullif(trim(submit_competency_assessment.development_plan),''),submitted_at=now(),updated_at=now() where id=a.id;
+ update public.competency_assessments set status=case when r.worker_acknowledgement_required then 'Submitted'::public.competency_assessment_status else 'Management Review'::public.competency_assessment_status end,location=nullif(trim(assessment_location),''),context=nullif(trim(assessment_context),''),personally_observed=true,overall_rating=overall,recommendation=case when overall='Competent' then 'Competent' else 'Reassessment Required' end,development_plan=nullif(trim(submit_competency_assessment.development_plan),''),submitted_at=now(),updated_at=now() where id=a.id;
  select * into la from public.learning_assignments where id=a.assignment_id for update;
  old_status:=la.status;
  update public.learning_assignments set status=case when r.worker_acknowledgement_required then 'Trainer Review' else 'Sent to Management' end,updated_at=now() where id=la.id returning * into la;
