@@ -82,7 +82,9 @@ export class SkillWardDatabaseService {
         organization: null, facilities: [], departments: [], departmentDetails: [],
         departmentAssignments: [], facilityAssignments: [], trainerAssignments: [], traineeProfiles: [],
         trainingAssignments: [], moduleProgress: [], competencyRecords: [], practicalObservations: [],
-        signoffRecommendations: [], notifications: [], organizationStaff: []
+        signoffRecommendations: [], notifications: [], organizationStaff: [], assignmentBatches: [],
+        assignmentBatchMembers: [], workTasks: [], calendarEvents: [], notificationPreferences: [],
+        userNotifications: [], announcements: [], announcementReceipts: [], operationalAuditEvents: []
       };
     }
 
@@ -129,11 +131,11 @@ export class SkillWardDatabaseService {
     const featureFlags = await this.optionalQuery("skillward_feature_flags", q => q.order("feature_key", { ascending: true }));
     const organizationStaff = ["SkillWard Super Administrator", "Organisation Administrator"].includes(membership.role)
       ? await this.query("organization_staff_profiles", q => q.eq("organization_id", organizationId), "*, user_profiles!organization_staff_profiles_user_id_fkey(*)") : [];
-    const organizationMemberships = ["SkillWard Super Administrator", "Organisation Administrator", "Department Manager"].includes(membership.role)
+    const organizationMemberships = ["SkillWard Super Administrator", "Organisation Administrator", "Facility Administrator", "Department Manager"].includes(membership.role)
       ? await this.optionalQuery("organization_memberships", q => q.eq("organization_id", organizationId).eq("membership_status", "Active")) : [];
     const organizationInvitations = membership.role === "Organisation Administrator"
       ? await this.optionalQuery("organization_invitations", q => q.eq("organization_id", organizationId).order("created_at", { ascending: false })) : [];
-    let learningPathways = administrative
+    let learningPathways = administrative || ["Facility Administrator", "Department Manager"].includes(membership.role)
       ? await this.optionalQuery("learning_pathways", q => q.eq("organization_id", organizationId).order("updated_at", { ascending: false })) : [];
     let learningPathwayIds = learningPathways.map(item => item.id);
     let learningPathwayVersions = learningPathwayIds.length
@@ -172,6 +174,17 @@ export class SkillWardDatabaseService {
     const competencyEvidenceFiles = assessmentIds.length ? await this.optionalQuery("competency_evidence_files", q => q.in("assessment_id", assessmentIds)) : [];
     const competencyWorkerAcknowledgements = assessmentIds.length ? await this.optionalQuery("competency_worker_acknowledgements", q => q.in("assessment_id", assessmentIds)) : [];
     const competencyManagementReviews = assessmentIds.length ? await this.optionalQuery("competency_management_reviews", q => q.in("assessment_id", assessmentIds).order("reviewed_at", { ascending: false })) : [];
+    const assignmentBatches = await this.optionalQuery("assignment_batches", q => q.eq("organization_id", organizationId).order("created_at", { ascending:false }));
+    const assignmentBatchIds = assignmentBatches.map(item => item.id);
+    const assignmentBatchMembers = assignmentBatchIds.length ? await this.optionalQuery("assignment_batch_members", q => q.in("assignment_batch_id", assignmentBatchIds)) : [];
+    const workTasks = await this.optionalQuery("work_tasks", q => q.eq("organization_id", organizationId).order("due_at", { ascending:true, nullsFirst:false }));
+    const calendarEvents = await this.optionalQuery("calendar_events", q => q.eq("organization_id", organizationId).order("starts_at", { ascending:true }));
+    const notificationPreferences = await this.optionalQuery("notification_preferences", q => q.eq("organization_id", organizationId).eq("user_id", user.id));
+    const userNotifications = await this.optionalQuery("user_notifications", q => q.eq("organization_id", organizationId).eq("recipient_user_id", user.id).order("created_at", { ascending:false }));
+    const announcements = await this.optionalQuery("announcements", q => q.eq("organization_id", organizationId).order("published_at", { ascending:false }));
+    const announcementIds = announcements.map(item => item.id);
+    const announcementReceipts = announcementIds.length ? await this.optionalQuery("announcement_receipts", q => q.in("announcement_id", announcementIds).eq("user_id", user.id)) : [];
+    const operationalAuditEvents = await this.optionalQuery("operational_audit_events", q => q.eq("organization_id", organizationId).order("created_at", { ascending:false }));
 
     return {
       user, profile, platformAdministrator, memberships, membership, organization,
@@ -185,6 +198,9 @@ export class SkillWardDatabaseService {
       competencyRubrics, competencyRubricSections, competencyRubricCriteria,
       competencyAssessments, competencyCriterionResults, competencyEvidenceFiles,
       competencyWorkerAcknowledgements, competencyManagementReviews,
+      assignmentBatches, assignmentBatchMembers, workTasks, calendarEvents,
+      notificationPreferences, userNotifications, announcements, announcementReceipts,
+      operationalAuditEvents,
       authSettings, featureFlags
     };
   }
@@ -289,6 +305,13 @@ export class SkillWardDatabaseService {
   submitCompetencyAssessment(input) { return this.rpc("submit_competency_assessment", { target_assessment:input.assessmentId, assessment_location:input.location || null, assessment_context:input.context || null, personally_observed:Boolean(input.personallyObserved), development_plan:input.developmentPlan || null }); }
   acknowledgeCompetencyAssessment(assessmentId, acknowledged, comment = null) { return this.rpc("acknowledge_competency_assessment", { target_assessment:assessmentId, acknowledged:Boolean(acknowledged), worker_comment:comment }); }
   reviewCompetencyAssessment(input) { return this.rpc("review_competency_assessment", { target_assessment:input.assessmentId, review_decision:input.decision, review_reason:input.reason, validity_days:input.validityDays || null }); }
+
+  createAssignmentBatch(input) { return this.rpc("create_assignment_batch", { target_version:input.versionId, assignment_title:input.title, target_scope:input.scope, selected_users:input.selectedUsers || [], target_facility:input.facilityId || null, target_department:input.departmentId || null, target_role:input.roleGroup || null, target_trainer:input.trainerUserId || null, target_manager:input.managerUserId || null, assignment_priority:input.priority || "Normal", assignment_starts_at:input.startsAt, assignment_due_at:input.dueAt || null, renewal_rule:input.renewalRule || {} }); }
+  saveNotificationPreferences(organizationId, input) { return this.rpc("save_notification_preferences", { target_organization:organizationId, target_digest:input.digest, email_delivery:Boolean(input.emailEnabled), assignment_alerts:Boolean(input.assignmentNotifications), deadline_alerts:Boolean(input.deadlineNotifications), competency_alerts:Boolean(input.competencyNotifications), announcement_alerts:Boolean(input.announcementNotifications) }); }
+  markUserNotificationRead(notificationId) { return this.rpc("mark_user_notification_read", { target_notification:notificationId }); }
+  publishAnnouncement(organizationId, input) { return this.rpc("publish_announcement", { target_organization:organizationId, announcement_title:input.title, announcement_message:input.message, target_scope:input.scope || "Organisation", target_facility:input.facilityId || null, target_department:input.departmentId || null, target_role:input.roleGroup || null, announcement_priority:input.priority || "Normal", announcement_expires_at:input.expiresAt || null }); }
+  markAnnouncementRead(announcementId) { return this.rpc("mark_announcement_read", { target_announcement:announcementId }); }
+  refreshOperationalDeadlines(organizationId) { return this.rpc("refresh_operational_deadlines", { target_organization:organizationId }); }
 
   createOrganization(input) {
     return this.insert("organizations", { name: input.name.trim(), organization_type: input.organizationType, slug: input.slug.trim().toLowerCase(), subscription_plan: input.subscriptionPlan || "Pilot", subscription_status: "Trial" });
