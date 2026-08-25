@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 
 const mockControlClient = `
-window.SkillWardControl={
+Object.defineProperty(window,'SkillWardControl',{value:{
   session:async()=>({access_token:'fictional-local-token',user:{email:'owner@control-plane-qa.invalid'}}),
   assurance:async()=>({data:{currentLevel:'aal2',nextLevel:'aal2'},error:null}),
   factors:async()=>({data:{totp:[]},error:null}),
@@ -10,7 +10,7 @@ window.SkillWardControl={
   verifyTotp:async()=>({data:{},error:null}),reauthenticate:async()=>({data:{},error:null}),
   onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),
   invoke:async body=>body.operation==='snapshot'?{error:null,data:{authorization:{role:'Owner',permissions:['dashboard.read','organizations.read','organizations.write','plans.read','billing.read','onboarding.read','support.read','support.enter','health.read','security.read','content.read','release.read','recovery.read','exports.read','analytics.read']},data:{metrics:{organizations:1,active_organizations:0,suspended_organizations:0,expiring_pilots:1,users:1,active_memberships:1,facilities:1,departments:1,assignments:3,competencies:2,overdue_renewals:1,open_support:0,failed_jobs:0,security_alerts:0,revenue_indicators:0},organizations:[{id:'a0000000-0000-4000-8000-000000000001',name:'SkillWard Control Plane QA — FICTIONAL',sector:'Hospital',status:'pilot',plan:'Pilot',pilot_expires_at:'2026-09-20T00:00:00Z'}],health:[{component:'Web application',summary:'Fictional QA health signal',severity:'Info',status:'operational',observed_at:'2026-08-25T00:00:00Z'}],recent_high_risk:[],plans:[{plan_key:'Pilot',support_level:'Standard',limits:{users:50,storage_gb:5},entitlements:{integrations:false}},{plan_key:'Enterprise',support_level:'Dedicated',limits:{users:-1,storage_gb:-1},entitlements:{integrations:true}}],onboarding:[{organization_id:'a0000000-0000-4000-8000-000000000001',total:15,complete:2,blocked:0}],releases:[{release_marker:'20260825-phase9-launch-hardening-1',commit_sha:'6f82f159ffb6fd41bf040124f2e593e927afeedd',release_ring:'general release',validation_status:'passed'}],incidents:[],recovery:null}}:{error:null,data:{data:{ok:true,id:'f0000000-0000-4000-8000-000000000001'}}}
-};`;
+},writable:false,configurable:false});`;
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(mockControlClient);
