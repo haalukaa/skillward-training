@@ -990,6 +990,7 @@ function renderAuthenticatedWorkspace() {
   const departments = c.departmentDetails;
   const role = c.membership.role;
   const unrestrictedRoles = new Set(["Organisation Administrator", "Content Administrator/Educator"]);
+  if (state.activeWorkspaceView === "security" && role === "Organisation Administrator") return renderPhase7SecurityOperations(c, c.organization.id);
   if (!unrestrictedRoles.has(role) && !departments.length) {
     return renderShell(`${organizationSwitcher(c)}<section class="card access-blocked"><h2>No assigned department</h2><p>Contact your Organisation Administrator to request authorised department access.</p></section>`);
   }
@@ -1005,7 +1006,6 @@ function renderAuthenticatedWorkspace() {
 
   if (state.activeWorkspaceView === "work") return renderPhase5Operations(c);
   if (state.activeWorkspaceView === "reports" && ["Organisation Administrator", "Facility Administrator", "Department Manager"].includes(role)) return renderPhase6Reports(c);
-  if (state.activeWorkspaceView === "security" && role === "Organisation Administrator") return renderPhase7SecurityOperations(c, c.organization.id);
   if (role === "Organisation Administrator") return renderOrganizationAdministration(c);
   if (role === "Content Administrator/Educator") return renderEducatorWorkspace(c);
 
