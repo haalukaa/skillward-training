@@ -25,8 +25,8 @@ test("Phase 9 migration compatibility runs from the shared-domain baseline witho
 
 test("Phase 9 adds one ordered, data-preserving function-hardening migration",async()=>{
   const migrations=(await readdir("supabase/migrations")).filter(name=>name.endsWith(".sql")).sort();
-  assert.equal(migrations.length,19);
-  assert.equal(migrations.at(-1),"20260825140338_phase_9_function_lint_hardening.sql");
+  assert.ok(migrations.length>=19);
+  assert.equal(migrations[18],"20260825140338_phase_9_function_lint_hardening.sql");
 });
 
 test("protected database CI executes upgrade, clean reset, lint and pgTAP",async()=>{

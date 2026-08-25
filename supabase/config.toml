@@ -22,3 +22,6 @@ enable_signup = false
 
 [functions.request-demo]
 verify_jwt = false
+
+[functions.owner-control-api]
+verify_jwt = true

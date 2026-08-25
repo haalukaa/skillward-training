@@ -21,6 +21,7 @@ jobs:
         with: { node-version: 22 }
       - run: npm install --ignore-scripts
       - run: npm test
+      - run: npm audit --audit-level=high
       - run: python3 scripts/validate_database_foundation.py
       - run: bash scripts/scan_secrets.sh
       - run: npm run build
