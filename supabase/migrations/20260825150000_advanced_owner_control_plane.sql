@@ -448,7 +448,7 @@ begin
       'suspended_organizations',(select count(*) from private.organization_control_profiles where lifecycle_status='suspended'),
       'expiring_pilots',(select count(*) from private.organization_control_profiles where lifecycle_status='pilot' and pilot_expires_at<now()+interval '30 days'),
       'expiring_grace_periods',(select count(*) from private.organization_control_profiles where lifecycle_status='grace_period' and grace_expires_at<now()+interval '30 days'),
-      'users',(select count(*) from auth.users),
+      'users',(select count(*) from public.user_profiles),
       'active_memberships',(select count(*) from public.organization_memberships where membership_status='Active'),
       'facilities',(select count(*) from public.facilities),
       'departments',(select count(*) from public.departments),
