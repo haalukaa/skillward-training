@@ -9,9 +9,6 @@ values ('90000000-0000-0000-0000-000000000001','Phase 9 Migration QA','Hospital'
 insert into public.facilities(id,organization_id,name,location)
 values ('90000000-0000-0000-0000-000000000001','90000000-0000-0000-0000-000000000001','Migration QA Facility','Fictional');
 
-insert into public.hospitals(id,organization_id,name)
-values ('90000000-0000-0000-0000-000000000001','90000000-0000-0000-0000-000000000001','Phase 9 Migration QA');
-
 insert into public.departments(id,hospital_id,organization_id,facility_id,code,name)
 values ('90000000-0000-0000-0000-000000000010','90000000-0000-0000-0000-000000000001','90000000-0000-0000-0000-000000000001','90000000-0000-0000-0000-000000000001','P9-QA','Phase 9 QA Department');
 
