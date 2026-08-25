@@ -162,6 +162,16 @@ export class SkillWardDatabaseService {
     const competencyRecommendations = phase3AssignmentIds.length ? await this.optionalQuery("competency_recommendations", q => q.in("assignment_id", phase3AssignmentIds).order("submitted_at", { ascending: false })) : [];
     const competencyAwards = phase3AssignmentIds.length ? await this.optionalQuery("competency_awards", q => q.in("assignment_id", phase3AssignmentIds).order("decided_at", { ascending: false })) : [];
     const competencyWorkflowEvents = phase3AssignmentIds.length ? await this.optionalQuery("competency_workflow_events", q => q.in("assignment_id", phase3AssignmentIds).order("created_at", { ascending: false })) : [];
+    const competencyRubrics = learningVersionIds.length ? await this.optionalQuery("competency_rubrics", q => q.in("pathway_version_id", learningVersionIds).order("version_number", { ascending: false })) : [];
+    const rubricIds = competencyRubrics.map(item => item.id);
+    const competencyRubricSections = rubricIds.length ? await this.optionalQuery("competency_rubric_sections", q => q.in("rubric_id", rubricIds).order("position", { ascending: true })) : [];
+    const competencyRubricCriteria = rubricIds.length ? await this.optionalQuery("competency_rubric_criteria", q => q.in("rubric_id", rubricIds).order("position", { ascending: true })) : [];
+    const competencyAssessments = phase3AssignmentIds.length ? await this.optionalQuery("competency_assessments", q => q.in("assignment_id", phase3AssignmentIds).order("created_at", { ascending: false })) : [];
+    const assessmentIds = competencyAssessments.map(item => item.id);
+    const competencyCriterionResults = assessmentIds.length ? await this.optionalQuery("competency_criterion_results", q => q.in("assessment_id", assessmentIds)) : [];
+    const competencyEvidenceFiles = assessmentIds.length ? await this.optionalQuery("competency_evidence_files", q => q.in("assessment_id", assessmentIds)) : [];
+    const competencyWorkerAcknowledgements = assessmentIds.length ? await this.optionalQuery("competency_worker_acknowledgements", q => q.in("assessment_id", assessmentIds)) : [];
+    const competencyManagementReviews = assessmentIds.length ? await this.optionalQuery("competency_management_reviews", q => q.in("assessment_id", assessmentIds).order("reviewed_at", { ascending: false })) : [];
 
     return {
       user, profile, platformAdministrator, memberships, membership, organization,
@@ -172,6 +182,9 @@ export class SkillWardDatabaseService {
       learningPathways, learningPathwayVersions, learningModules, learningModuleItems,
       learningAssignments, learningItemProgress, competencyObservations,
       competencyRecommendations, competencyAwards, competencyWorkflowEvents,
+      competencyRubrics, competencyRubricSections, competencyRubricCriteria,
+      competencyAssessments, competencyCriterionResults, competencyEvidenceFiles,
+      competencyWorkerAcknowledgements, competencyManagementReviews,
       authSettings, featureFlags
     };
   }
@@ -266,6 +279,16 @@ export class SkillWardDatabaseService {
   decideCompetency(assignmentId, decision, notes = null) {
     return this.rpc("decide_competency", { target_assignment:assignmentId, decision, notes });
   }
+
+  createCompetencyRubric(input) { return this.rpc("create_competency_rubric", { target_version:input.versionId, rubric_title:input.title, assessor_guidance:input.assessorGuidance || null, worker_guidance:input.workerGuidance || null, worker_ack_required:Boolean(input.workerAcknowledgementRequired) }); }
+  addCompetencyRubricSection(rubricId, title, guidance = null) { return this.rpc("add_competency_rubric_section", { target_rubric:rubricId, section_title:title, section_guidance:guidance }); }
+  addCompetencyRubricCriterion(input) { return this.rpc("add_competency_rubric_criterion", { target_section:input.sectionId, criterion_text:input.criterion, safety_critical:Boolean(input.safetyCritical), comments_required:Boolean(input.commentsRequired), evidence_required:Boolean(input.evidenceRequired), assessor_guidance:input.assessorGuidance || null, worker_guidance:input.workerGuidance || null }); }
+  publishCompetencyRubric(rubricId) { return this.rpc("publish_competency_rubric", { target_rubric:rubricId }); }
+  startCompetencyAssessment(assignmentId) { return this.rpc("start_competency_assessment", { target_assignment:assignmentId }); }
+  saveCompetencyCriterion(assessmentId, criterionId, rating, comments = null) { return this.rpc("save_competency_criterion", { target_assessment:assessmentId, target_criterion:criterionId, result_rating:rating, result_comments:comments }); }
+  submitCompetencyAssessment(input) { return this.rpc("submit_competency_assessment", { target_assessment:input.assessmentId, assessment_location:input.location || null, assessment_context:input.context || null, personally_observed:Boolean(input.personallyObserved), development_plan:input.developmentPlan || null }); }
+  acknowledgeCompetencyAssessment(assessmentId, acknowledged, comment = null) { return this.rpc("acknowledge_competency_assessment", { target_assessment:assessmentId, acknowledged:Boolean(acknowledged), worker_comment:comment }); }
+  reviewCompetencyAssessment(input) { return this.rpc("review_competency_assessment", { target_assessment:input.assessmentId, review_decision:input.decision, review_reason:input.reason, validity_days:input.validityDays || null }); }
 
   createOrganization(input) {
     return this.insert("organizations", { name: input.name.trim(), organization_type: input.organizationType, slug: input.slug.trim().toLowerCase(), subscription_plan: input.subscriptionPlan || "Pilot", subscription_status: "Trial" });
