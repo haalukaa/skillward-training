@@ -632,7 +632,7 @@ create function public.owner_control_bootstrap_first_owner(target_user_id uuid,b
 language plpgsql security invoker set search_path='' as $f$
 begin
   if exists(select 1 from private.platform_administrators) then raise exception 'OWNER_ALREADY_BOOTSTRAPPED' using errcode='42501'; end if;
-  if not exists(select 1 from auth.users where id=target_user_id) or length(trim(bootstrap_reason))<20 then raise exception 'INVALID_OWNER_BOOTSTRAP' using errcode='23514'; end if;
+  if target_user_id is null or length(trim(bootstrap_reason))<20 then raise exception 'INVALID_OWNER_BOOTSTRAP' using errcode='23514'; end if;
   insert into private.platform_administrators(user_id,platform_role,created_by) values(target_user_id,'Owner',target_user_id);
   perform private.control_audit(target_user_id,'bootstrap_first_owner','Critical',null,'platform_administrator',target_user_id::text,bootstrap_reason);
 end $f$;
