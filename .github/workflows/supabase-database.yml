@@ -9,6 +9,7 @@ on:
       - "src/database-service.js"
       - "src/supabase-client.js"
       - "app/**"
+      - "control/**"
       - "app.js"
       - "manifest.webmanifest"
       - "service-worker.js"
@@ -25,6 +26,8 @@ on:
       - "docs/releases/phase-9-launch-hardening.md"
       - "docs/rollback/phase-9-launch-hardening.md"
       - "docs/commercial-pilot-readiness.md"
+      - "docs/advanced-owner-control-plane.md"
+      - "docs/runbooks/owner-control-recovery.md"
       - "docs/development-admin-bootstrap.md"
       - ".github/workflows/supabase-database.yml"
   workflow_dispatch:
@@ -58,6 +61,9 @@ jobs:
 
       - name: Scan tracked files for committed secrets
         run: bash scripts/scan_secrets.sh
+
+      - name: Reject high-severity dependency advisories
+        run: npm audit --audit-level=high
 
       - name: Start local Supabase services
         shell: bash

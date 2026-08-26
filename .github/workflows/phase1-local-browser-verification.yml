@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "app/**"
+      - "control/**"
       - "src/**"
       - "supabase/**"
       - "tests/**"
@@ -104,6 +105,7 @@ jobs:
           {
             echo "LOCAL_API_ENDPOINT=$local_api_url"
             echo "LOCAL_PUBLIC_KEY=$local_anon_key"
+            echo "LOCAL_SERVICE_KEY=$local_service_key"
           } >> "$GITHUB_ENV"
           unset SERVICE_ROLE_KEY SECRET_KEY local_service_key
           rm -f "$status_file"
@@ -114,7 +116,7 @@ jobs:
           SKILLWARD_LOCAL_PUBLIC_KEY: ${{ env.LOCAL_PUBLIC_KEY }}
         run: node scripts/verify-local-auth-logout.mjs
 
-      - name: Serve the authenticated invitation function locally
+      - name: Serve all authenticated Edge Functions locally
         shell: bash
         run: |
           set -euo pipefail
@@ -123,20 +125,36 @@ jobs:
           umask 077
           printf '%s\n' \
             'PUBLIC_SITE_ORIGIN=http://127.0.0.1:4173' \
-            'PUBLIC_SITE_URL=http://127.0.0.1:4173' > "$function_env"
-          nohup supabase functions serve invite-organization-member \
+            'PUBLIC_SITE_URL=http://127.0.0.1:4173' \
+            'CONTROL_PLANE_ORIGIN=http://127.0.0.1:4173' \
+            'CONTROL_PLANE_TEST_DIAGNOSTICS=enabled' \
+            'CONTROL_PLANE_RATE_LIMIT_SALT=fictional-local-ci-rate-limit-salt-not-for-production' > "$function_env"
+          nohup stdbuf -oL -eL supabase functions serve \
+            --no-verify-jwt \
             --env-file "$function_env" > "$function_log" 2>&1 &
           for attempt in $(seq 1 60); do
             if curl --silent --fail --request OPTIONS \
               --header 'Origin: http://127.0.0.1:4173' \
               --header 'Access-Control-Request-Method: POST' \
-              "$LOCAL_API_ENDPOINT/functions/v1/invite-organization-member" >/dev/null; then
+              "$LOCAL_API_ENDPOINT/functions/v1/invite-organization-member" >/dev/null \
+              && curl --silent --fail --request OPTIONS \
+                --header 'Origin: http://127.0.0.1:4173' \
+                --header 'Access-Control-Request-Method: POST' \
+                "$LOCAL_API_ENDPOINT/functions/v1/owner-control-api" >/dev/null; then
               exit 0
             fi
             sleep 1
           done
-          echo 'Local invitation function did not become healthy.' >&2
+          echo 'Local authenticated Edge Functions did not become healthy.' >&2
+          sed -E 's/eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}/[REDACTED_JWT]/g; s/(sb_secret|sb_publishable)_[A-Za-z0-9_-]+/[REDACTED_KEY]/g' "$function_log" >&2
           exit 1
+
+      - name: Verify real MFA and customer denial through the control API
+        env:
+          SKILLWARD_LOCAL_API_ENDPOINT: ${{ env.LOCAL_API_ENDPOINT }}
+          SKILLWARD_LOCAL_PUBLIC_KEY: ${{ env.LOCAL_PUBLIC_KEY }}
+          SKILLWARD_LOCAL_SETUP_KEY: ${{ env.LOCAL_SERVICE_KEY }}
+        run: node scripts/verify-owner-control-local.mjs
 
       - name: Run all application tests
         run: npm test
@@ -182,6 +200,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$(find artifacts/phase1-local -maxdepth 1 -name '*.png' | wc -l)" -ge 20
+          test "$(find artifacts -maxdepth 1 -name 'control-plane-*-fictional.png' | wc -l)" -eq 2
           if rg -i -l 'skillwardtraining\.com|supabase\.co' artifacts/phase1-local; then
             echo 'Unexpected hosted or production text found in screenshot artifacts.' >&2
             exit 1
@@ -194,6 +213,7 @@ jobs:
           name: skillward-phase-1-local-browser-screenshots
           path: |
             artifacts/phase1-local/*.png
+            artifacts/control-plane-*-fictional.png
             test-results/**/*.png
             test-results/**/error-context.md
           if-no-files-found: warn

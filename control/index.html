@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="robots" content="noindex,nofollow,noarchive,nosnippet">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co http://127.0.0.1:54321 ws://127.0.0.1:54321; img-src 'self' data:; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'self'">
+  <title>SkillWard Control</title>
+  <link rel="stylesheet" href="/control/control.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+  <main id="access-boundary" class="access-shell" aria-labelledby="access-title">
+    <section class="access-card">
+      <div class="brand-mark" aria-hidden="true">SW</div>
+      <p class="eyebrow">Restricted internal system</p>
+      <h1 id="access-title">SkillWard Control</h1>
+      <p>Authorised platform administrators only. Access and actions are monitored and audited.</p>
+      <form id="sign-in-form" autocomplete="on">
+        <label>Work email<input id="email" name="email" type="email" autocomplete="username" required></label>
+        <label>Password<input id="password" name="password" type="password" autocomplete="current-password" required></label>
+        <button type="submit">Continue securely</button>
+      </form>
+      <form id="mfa-form" class="hidden" autocomplete="one-time-code">
+        <div id="mfa-enrollment" class="hidden">
+          <p><strong>MFA enrolment required</strong></p>
+          <img id="mfa-qr" alt="Scan this QR code with your authenticator app">
+          <p class="secret-wrap">Manual key: <code id="mfa-secret"></code></p>
+        </div>
+        <label>Authenticator code<input id="mfa-code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required></label>
+        <button type="submit">Verify MFA</button>
+      </form>
+      <p id="access-message" class="status-message" role="status" aria-live="polite"></p>
+    </section>
+  </main>
+
+  <div id="control-plane" class="control-layout hidden">
+    <header class="topbar">
+      <button id="menu-button" class="icon-button" aria-expanded="false" aria-controls="control-nav" aria-label="Open navigation">☰</button>
+      <div><strong>SkillWard Control</strong><span id="role-badge" class="role-badge"></span></div>
+      <div class="top-actions"><span id="release-marker" class="release-marker"></span><button id="sign-out" class="secondary">Sign out</button></div>
+    </header>
+    <div id="support-banner" class="support-banner hidden" role="status"><strong>Support Mode</strong><span id="support-banner-text"></span><button id="exit-support" class="secondary">Exit</button></div>
+    <nav id="control-nav" class="side-nav" aria-label="Control plane">
+      <button data-section="command" class="active">Command centre</button>
+      <button data-section="organisations">Organisations</button>
+      <button data-section="plans">Plans &amp; limits</button>
+      <button data-section="commercial">Commercial</button>
+      <button data-section="onboarding">Onboarding</button>
+      <button data-section="support">Support Mode</button>
+      <button data-section="health">Platform health</button>
+      <button data-section="security">Security &amp; audit</button>
+      <button data-section="templates">Template governance</button>
+      <button data-section="releases">Releases &amp; features</button>
+      <button data-section="recovery">Recovery</button>
+      <button data-section="offboarding">Offboarding</button>
+      <button data-section="incidents">Support &amp; incidents</button>
+      <button data-section="analytics">Analytics</button>
+    </nav>
+    <main id="main" class="workspace" tabindex="-1">
+      <div class="workspace-heading"><div><p class="eyebrow">Internal operations</p><h1 id="section-title">Command centre</h1></div><button id="refresh" class="secondary">Refresh</button></div>
+      <p id="control-message" class="status-message" role="status" aria-live="polite"></p>
+
+      <section id="section-command" class="panel-section active" aria-labelledby="section-title">
+        <div id="metric-grid" class="metric-grid"></div>
+        <div class="split-grid"><article class="panel"><h2>Operational attention</h2><div id="attention-list" class="list"></div></article><article class="panel"><h2>Recent high-risk actions</h2><div id="risk-list" class="list"></div></article></div>
+      </section>
+
+      <section id="section-organisations" class="panel-section">
+        <div class="section-intro"><div><h2>Organisation lifecycle</h2><p>Prospect → setup → pilot → active → grace period → suspended → archived → offboarded.</p></div><button data-open-dialog="create-organisation">Create organisation</button></div>
+        <div class="table-wrap"><table><caption class="sr-only">Organisations</caption><thead><tr><th>Name</th><th>Sector</th><th>Status</th><th>Plan</th><th>Pilot expiry</th><th>Action</th></tr></thead><tbody id="organisation-rows"></tbody></table></div>
+      </section>
+
+      <section id="section-plans" class="panel-section"><div class="section-intro"><div><h2>Plans, limits and entitlements</h2><p>Usage warnings and temporary overrides never remove customer data.</p></div></div><div id="plan-grid" class="card-grid"></div></section>
+      <section id="section-commercial" class="panel-section"><div class="section-intro"><div><h2>Commercial records</h2><p>Contract and billing records only. Financial transactions remain in approved external systems.</p></div><button data-open-dialog="save_commercial">Record commercial terms</button></div><div id="commercial-list" class="list"></div></section>
+      <section id="section-onboarding" class="panel-section"><div class="section-intro"><div><h2>Customer onboarding</h2><p>Mandatory checks must all pass before go-live.</p></div></div><div id="onboarding-grid" class="card-grid"></div></section>
+      <section id="section-support" class="panel-section"><div class="section-intro"><div><h2>Explicit audited Support Mode</h2><p>Read-only by default, time limited, visible, and page-audited.</p></div></div><form id="support-form" class="panel form-grid"><label>Organisation<select id="support-organisation" required></select></label><label>Duration<select id="support-duration"><option value="30">30 minutes</option><option value="60">1 hour</option><option value="120">2 hours</option></select></label><label class="wide">Reason<textarea id="support-reason" minlength="12" required></textarea></label><label>Re-enter password<input id="support-password" type="password" autocomplete="current-password" required></label><label>Current MFA code<input id="support-mfa" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required></label><button type="submit">Enter Support Mode</button></form></section>
+      <section id="section-health" class="panel-section"><div class="section-intro"><div><h2>Platform health</h2><p>Safe operational summaries; logs never contain secrets or customer payloads.</p></div></div><div id="health-list" class="list"></div></section>
+      <section id="section-security" class="panel-section"><div class="section-intro"><div><h2>Security and audit centre</h2><p>MFA, sessions, alerts and immutable high-risk activity.</p></div><button data-open-dialog="create_admin">Add internal administrator</button></div><div id="security-list" class="list"></div></section>
+      <section id="section-templates" class="panel-section"><div class="section-intro"><div><h2>Template and content governance</h2><p>Functionality is distinct from clinically reviewed and approved training content.</p></div><button data-open-dialog="govern_template">Record template version</button></div><div class="lifecycle-strip">Draft <span>→</span> Clinical review <span>→</span> Approved <span>→</span> Published <span>→</span> Superseded / Withdrawn</div><div id="template-list" class="list"></div></section>
+      <section id="section-releases" class="panel-section"><div class="section-intro"><div><h2>Release and feature management</h2><p>Internal QA → fictional QA → selected pilots → general release.</p></div><button data-open-dialog="set_feature_flag">Change feature flag</button></div><div id="release-list" class="list"></div><h3>Feature scopes</h3><div id="feature-list" class="list"></div></section>
+      <section id="section-recovery" class="panel-section"><div class="section-intro"><div><h2>Backup, rollback and disaster recovery</h2><p>Recovery is a manually verified procedure—there is no destructive browser restore.</p></div><button data-open-dialog="record_recovery">Record verified recovery state</button></div><div id="recovery-card" class="panel"></div><div class="runbook-grid"><article><h3>Frontend rollback</h3><p>Promote the last verified deployment after incident approval.</p></article><article><h3>Migration failure</h3><p>Stop writes, preserve evidence, and apply a reviewed forward repair.</p></article><article><h3>Authentication outage</h3><p>Confirm provider health, restrict changes, and publish status updates.</p></article><article><h3>Email outage</h3><p>Pause retries, preserve queue state, and use approved communications.</p></article></div></section>
+      <section id="section-offboarding" class="panel-section"><div class="section-intro"><div><h2>Customer export and offboarding</h2><p>Staged, auditable and recoverable. No immediate irreversible deletion.</p></div><button data-open-dialog="start_offboarding">Start controlled offboarding</button></div><div id="offboarding-list" class="list"></div></section>
+      <section id="section-incidents" class="panel-section"><div class="section-intro"><div><h2>Support and incident management</h2><p>Detected → investigating → contained → resolved → reviewed.</p></div><div><button data-open-dialog="create_support_case" class="secondary">New support case</button> <button data-open-dialog="create_incident">Declare incident</button></div></div><div id="incident-list" class="list"></div></section>
+      <section id="section-analytics" class="panel-section"><div class="section-intro"><div><h2>Privacy-safe analytics</h2><p>Aggregate operational and commercial trends are shown by default.</p></div></div><div id="analytics-grid" class="metric-grid"></div></section>
+    </main>
+  </div>
+
+  <dialog id="action-dialog" aria-labelledby="dialog-title">
+    <form id="action-form" method="dialog">
+      <div class="dialog-heading"><div><p class="eyebrow">Protected action</p><h2 id="dialog-title"></h2></div><button type="button" id="close-dialog" class="icon-button" aria-label="Close">×</button></div>
+      <p id="dialog-impact" class="impact"></p><div id="dialog-fields" class="form-grid"></div>
+      <label>Written reason<textarea id="action-reason" minlength="12" required></textarea></label>
+      <label>Type <strong id="confirmation-label">CONFIRM</strong><input id="action-confirmation" autocomplete="off" required></label>
+      <div class="form-grid"><label>Re-enter password<input id="action-password" type="password" autocomplete="current-password" required></label><label>Current MFA code<input id="action-mfa" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required></label></div>
+      <div class="dialog-actions"><button type="button" id="cancel-dialog" class="secondary">Cancel</button><button id="confirm-action" value="confirm">Confirm protected action</button></div>
+    </form>
+  </dialog>
+  <script src="/runtime-config.js"></script><script src="/control/control-bundle.js"></script><script src="/control/control.js"></script>
+</body>
+</html>
