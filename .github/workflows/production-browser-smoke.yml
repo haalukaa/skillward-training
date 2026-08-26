@@ -34,10 +34,13 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install pinned browser test runtime
-        run: npm install --no-save --ignore-scripts playwright@1.55.0
+      - name: Install locked browser test runtime
+        run: npm ci --ignore-scripts
 
-      - name: Install Chromium
+      - name: Reject high-severity dependency advisories
+        run: npm audit --audit-level=high
+
+      - name: Install Chromium for the locked Playwright runtime
         run: npx playwright install --with-deps chromium
 
       - name: Test live desktop and mobile production
