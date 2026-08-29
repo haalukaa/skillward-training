@@ -1,12 +1,12 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "skillward-control",
+  "name": "skillward-training",
   "compatibility_date": "2026-08-29",
   "main": "cloudflare/control-worker.mjs",
   "workers_dev": false,
   "preview_urls": false,
   "assets": {
-    "directory": "./dist",
+    "directory": "./dist-control",
     "binding": "ASSETS",
     "run_worker_first": true
   }
