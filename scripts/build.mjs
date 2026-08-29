@@ -33,3 +33,11 @@ await writeFile(
   "dist/runtime-config.js",
   `window.SKILLWARD_CONFIG = Object.freeze(${JSON.stringify(browserConfig)});\n`
 );
+
+// Keep the private control deployment physically separate from the public site build.
+// This prevents public marketing/app assets and Pages-only redirect rules from being
+// uploaded to the dedicated Cloudflare Worker serving control.skillwardtraining.com.
+await rm("dist-control", { recursive: true, force: true });
+await mkdir("dist-control/control", { recursive: true });
+await cp("dist/runtime-config.js", "dist-control/runtime-config.js");
+await cp("dist/control", "dist-control/control", { recursive: true });
